@@ -2,22 +2,21 @@ import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
  
 export const useStopwatchStore = defineStore('stopwatch', () => {
-  const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || []);
- 
+  const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
+  const presetTimers = ref([1,5,10])
   watch(stopwatches, (val) => {
     localStorage.setItem('timers', JSON.stringify(val));
   }, { deep: true });
  
   // ─── Tick ────────────────────────────────────────────────────────────────
   let tickInterval = null;
- 
+  
   const startTick = () => {
     if (tickInterval) return;
     tickInterval = setInterval(() => {
       const now = Date.now();
       stopwatches.value.forEach(timer => {
         if (timer.status !== 'running') return;
- 
         const elapsed = timer.accumulatedTime + (now - timer.startTime);
  
         if (timer.type === 'up') {
@@ -136,6 +135,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
  
   return {
     stopwatches,
+    presetTimers,
     addTimer,
     startTimer,
     pauseTimer,

@@ -52,7 +52,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
         </svg>
       </button>
-      <span :class="['text-sm font-semibold', cardStyle.deleteTxt]">Delete</span>
+     
     </div>
   </div>
  
@@ -67,7 +67,12 @@
     ]"
   >
     <div class="flex justify-between items-start mb-4">
-      <h3 :class="['text-lg font-bold leading-tight', cardStyle.title]">{{ timer.name }}</h3>
+      <div>
+        <h3 :class="['text-lg font-bold leading-tight', cardStyle.title]">{{ timer.name }}</h3>
+        <p v-if="timer.targetMinutes" :class="['text-sm mt-0.5', cardStyle.subtitle]">
+           From: {{ String(timer.targetMinutes).padStart(2, '0') }}:00
+        </p>
+      </div>  
       <span :class="['text-xs font-black px-3 py-1.5 rounded-lg', cardStyle.badge]">
         {{ statusLabel }}
       </span>
@@ -86,11 +91,6 @@
     <div :class="['w-full h-px my-4', cardStyle.divider]"></div>
  
     <div class="flex items-center gap-3">
-      <button @click="store.deleteTimer(timer.id)" :class="['w-10 h-10 flex items-center justify-center transition-colors', cardStyle.deleteBtn]">
-        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      </button>
       <button
         v-if="timer.status !== 'expired'"
         @click="toggleTimer"
@@ -104,7 +104,12 @@
         </svg>
         {{ timer.status === 'running' ? 'Pause' : 'Start' }}
       </button>
-      <div v-else class="flex-1"></div>
+      
+      <button @click="store.deleteTimer(timer.id)" :class="['w-10 h-10 flex items-center justify-center transition-colors', cardStyle.deleteBtn]">
+        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
     </div>
   </div>
 </template>

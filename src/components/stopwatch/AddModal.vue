@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref,computed } from 'vue';
 import { useStopwatchStore } from '@/stores/stopwatchStore';
  
 const props = defineProps(['isOpen', 'defaultType']);
@@ -8,8 +8,8 @@ const store = useStopwatchStore();
  
 const name = ref('');
 const duration = ref(25);
-const presets = [5, 25, 60];
- 
+const presets = store.presetTimers
+
 const selectPreset = (val) => {
   duration.value = val;
 };
@@ -31,7 +31,9 @@ const save = () => {
   });
   name.value = '';
   duration.value = 25;
-  emit('close');
+  emit('close')
+  const createdTimerId = store.stopwatches[store.stopwatches.length-1].id
+  store.startTimer(createdTimerId)
 };
 </script>
  

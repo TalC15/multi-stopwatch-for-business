@@ -22,7 +22,7 @@ onMounted(() => themeStore.applyTheme());
 </script>
  
 <template>
-  <div :class="['min-h-screen bg-[var(--color-surface)] transition-colors duration-300', themeStore.isDark ? 'dark' : '']">
+  <div :class="['min-h-screen bg-[var(--color-surface)] transition-colors duration-300']">
  
     <!-- Navbar -->
     <Navbar @open-menu="isDrawerOpen = true" />
@@ -38,14 +38,16 @@ onMounted(() => themeStore.applyTheme());
         <h2 class="text-2xl font-black text-[var(--color-text-primary)]">
           {{ activeTab === 'up' ? 'Active Timers' : 'Active Countdowns' }}
         </h2>
-        <button
+       <button
           v-if="activeTab === 'up'"
           class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-          </svg>
-          Filter
+          >
+          <span class="flex flex-col items-center gap-[3px]">
+          <span class="block h-[2px] w-4 rounded-full bg-current"></span>
+          <span class="block h-[2px] w-3 rounded-full bg-current"></span>
+          <span class="block h-[2px] w-2 rounded-full bg-current"></span>
+          </span>
+           Filter
         </button>
       </div>
  
@@ -64,8 +66,15 @@ onMounted(() => themeStore.applyTheme());
           class="flex flex-col items-center justify-center py-20 text-center"
         >
           <div class="w-16 h-16 rounded-2xl bg-indigo-50 dark:bg-indigo-950/30 flex items-center justify-center mb-4">
-            <svg class="w-8 h-8 text-indigo-300 dark:text-indigo-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <svg class="w-8 h-8 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <!-- Üst düğme -->
+              <path d="M10 3h4" />
+              <!-- Sağdaki küçük çıkıntı -->
+              <path d="M19 6l1-1" />
+              <!-- Kronometre gövdesi (daire) -->
+              <circle cx="12" cy="13" r="7" />
+              <!-- Ortadaki ibre (aşağı doğru) -->
+              <line x1="12" y1="10" x2="12" y2="13" />
             </svg>
           </div>
           <p class="text-sm font-semibold text-[var(--color-text-muted)]">
@@ -79,10 +88,13 @@ onMounted(() => themeStore.applyTheme());
     <!-- FAB Button -->
     <button
       @click="isModalOpen = true"
-      class="fixed bottom-24 right-5 w-14 h-14 bg-indigo-700 text-white rounded-2xl fab-shadow flex items-center justify-center text-3xl font-light hover:bg-indigo-800 active:scale-90 transition-all z-40"
+      class="fixed bottom-24 right-5 w-14 h-14 bg-indigo-700 text-white rounded-2xl fab-shadow flex items-center justify-center hover:bg-indigo-800 active:scale-90 transition-all z-40"
       aria-label="Yeni ekle"
     >
-      +
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="12" y1="5" x2="12" y2="19"/>
+        <line x1="5" y1="12" x2="19" y2="12"/>
+      </svg>
     </button>
  
     <!-- Bottom Tab Bar -->
@@ -100,8 +112,15 @@ onMounted(() => themeStore.applyTheme());
           ]"
         >
           <!-- Stopwatch icon with number -->
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- Üst düğme -->
+            <path d="M10 3h4" />
+            <!-- Sağdaki küçük çıkıntı -->
+            <path d="M19 6l1-1" />
+            <!-- Kronometre gövdesi -->
+            <circle cx="12" cy="13" r="7" />
+            <!-- "10" yazısı -->
+            <text x="11.7" y="15.6" text-anchor="middle" font-size="8" font-weight="bold" stroke="none" fill="currentColor">10</text>
           </svg>
           <span class="text-[10px] font-black tracking-wider uppercase">Count-Up</span>
         </button>
@@ -116,15 +135,18 @@ onMounted(() => themeStore.applyTheme());
               : 'text-[var(--color-text-muted)]'
           ]"
         >
-          <!-- Hourglass icon -->
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <span class="text-[10px] font-black tracking-wider uppercase">Countdown</span>
+        <!-- Lucide: hourglass -->
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+          d="M6 2h12M6 22h12
+          M8 2v4c0 2.5 4 4 4 6s-4 3.5-4 6v4
+          M16 2v4c0 2.5-4 4-4 6s4 3.5 4 6v4" />
+      </svg>
+        <span class="text-[10px] font-black tracking-wider uppercase">Countdown</span>
         </button>
  
       </div>
-    </nav>
+    </nav> 
  
     <!-- Add Modal -->
     <AddModal
