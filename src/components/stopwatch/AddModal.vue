@@ -7,12 +7,17 @@ const emit = defineEmits(['close']);
 const store = useStopwatchStore();
  
 const name = ref('');
-const duration = ref(25);
-const presets = store.presetTimes
+const duration = ref(5);
+const presetTimes = store.presetTimes
+const presetNames = store.presetNames
 
-const selectPreset = (val) => {
+const selectPresetTime = (val) => {
   duration.value = val;
 };
+
+const selectPresetName = (val) => {
+  name.value = val;
+}
  
 const decrement = () => {
   if (duration.value > 1) duration.value--;
@@ -75,6 +80,22 @@ const save = () => {
             class="w-full px-4 py-3.5 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 border-none outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700 text-base font-medium transition-all"
           />
         </div>
+        <!-- Quick presetNames -->
+        <div class="flex gap-3">
+          <button
+            v-for="presetName in presetNames"
+            :key="presetName"
+            @click="selectPresetName(presetName)"
+            :class="[
+              'flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 border',
+              name === presetName
+                ? 'bg-indigo-700 text-white border-indigo-700'
+                : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
+            ]"
+          >
+            {{ presetName }}
+          </button>
+        </div>
  
         <!-- Duration Stepper -->
         <div>
@@ -114,20 +135,20 @@ const save = () => {
           </div>
         </div>
  
-        <!-- Quick Presets -->
+        <!-- Quick presetTimes -->
         <div class="flex gap-3">
           <button
-            v-for="preset in presets"
-            :key="preset"
-            @click="selectPreset(preset)"
+            v-for="presetTime in presetTimes"
+            :key="presetTime"
+            @click="selectPresetTime(presetTime)"
             :class="[
               'flex-1 py-2.5 rounded-xl text-sm font-bold transition-all active:scale-95 border',
-              duration === preset
+              duration === presetTime
                 ? 'bg-indigo-700 text-white border-indigo-700'
                 : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:border-indigo-300'
             ]"
           >
-            {{ preset }} MIN
+            {{ presetTime }} MIN
           </button>
         </div>
  
