@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
  
 export const useStopwatchStore = defineStore('stopwatch', () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
-  const presetTimers = ref([1,5,10])
+  const presetTimes = ref(JSON.parse(localStorage.getItem('presetTimes')) || [])
   watch(stopwatches, (val) => {
     localStorage.setItem('timers', JSON.stringify(val));
   }, { deep: true });
@@ -135,7 +135,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
  
   return {
     stopwatches,
-    presetTimers,
+    presetTimes,
     addTimer,
     startTimer,
     pauseTimer,

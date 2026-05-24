@@ -8,7 +8,7 @@ const store = useStopwatchStore();
  
 const name = ref('');
 const duration = ref(25);
-const presets = store.presetTimers
+const presets = store.presetTimes
 
 const selectPreset = (val) => {
   duration.value = val;
