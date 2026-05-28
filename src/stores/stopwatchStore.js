@@ -92,11 +92,13 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
       timer.accumulatedTime += Date.now() - timer.startTime;
       timer.startTime = null;
       timer.status = 'paused';
+
     }
   };
  
   const deleteTimer = (id) => {
     stopwatches.value = stopwatches.value.filter(t => t.id !== id);
+    localStorage.removeItem(`isPay${id}`)
   };
  
   // ─── Rehydrate (PWA crash/close recovery) ────────────────────────────────
