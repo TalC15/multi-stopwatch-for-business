@@ -165,7 +165,6 @@ function removePresetName(bIndex) {
       </div>
       <div class="relative isolate mb-3">
         <div
-          ref="scrollContainer"
           class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll"
         >
           <span
@@ -223,7 +222,6 @@ function removePresetName(bIndex) {
       </div>
       <div class="relative isolate mb-3">
         <div
-          ref="scrollContainer"
           class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll"
         >
           <span
@@ -277,41 +275,6 @@ function removePresetName(bIndex) {
     </main>
   </div>
 </template>
-<style scoped>
-.no-spinner::-webkit-outer-spin-button,
-.no-spinner::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
-}
+<style>
 
-/* Firefox */
-.no-spinner[type="number"] {
-  appearance: textfield;
-  -moz-appearance: textfield;
-}
-
-.custom-scroll::-webkit-scrollbar {
-  height: 6px;
-}
-
-.custom-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.custom-scroll::-webkit-scrollbar-thumb {
-  background: #d4d4d8;
-  border-radius: 9999px;
-}
-
-.custom-scroll::-webkit-scrollbar-thumb:hover {
-  background: #a1a1aa;
-}
-.custom-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.custom-scroll {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
 </style>

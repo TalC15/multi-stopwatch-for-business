@@ -8,7 +8,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
   watch(stopwatches, (val) => {
     localStorage.setItem('timers', JSON.stringify(val));
   }, { deep: true });
- 
+
   // ─── Tick ────────────────────────────────────────────────────────────────
   let tickInterval = null;
   
@@ -86,13 +86,14 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
     startTick();
   };
  
-  const pauseTimer = (id) => {
+  const pauseTimer = (id,pausedCount) => {
     const timer = stopwatches.value.find(t => t.id === id);
     if (timer && timer.status === 'running') {
       timer.accumulatedTime += Date.now() - timer.startTime;
       timer.startTime = null;
       timer.status = 'paused';
-
+      pausedCount++
+      localStorage.setItem(`pausedCount${id}`,JSON.stringify(pausedCount))
     }
   };
  

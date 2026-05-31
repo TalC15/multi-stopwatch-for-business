@@ -35,7 +35,7 @@ const save = () => {
     type: props.defaultType
   });
   name.value = '';
-  duration.value = 25;
+  duration.value = 5;
   emit('close')
   const createdTimerId = store.stopwatches[store.stopwatches.length-1].id
   store.startTimer(createdTimerId)
@@ -81,7 +81,7 @@ const save = () => {
           />
         </div>
         <!-- Quick presetNames -->
-        <div class="flex gap-3">
+        <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
           <button
             v-for="presetName in presetNames"
             :key="presetName"
@@ -121,7 +121,7 @@ const save = () => {
                 v-model.number="duration"
                 type="number"
                 min="1"
-                class="w-full text-center bg-transparent text-4xl font-black text-slate-900 dark:text-white outline-none tabular-nums"
+                class="no-spinner w-full text-center bg-transparent text-4xl font-black text-slate-900 dark:text-white outline-none tabular-nums"
               />
             </div>
  
@@ -136,7 +136,7 @@ const save = () => {
         </div>
  
         <!-- Quick presetTimes -->
-        <div class="flex gap-3">
+        <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
           <button
             v-for="presetTime in presetTimes"
             :key="presetTime"
@@ -169,3 +169,6 @@ const save = () => {
     </div>
   </div>
 </template>
+<style>
+
+</style>

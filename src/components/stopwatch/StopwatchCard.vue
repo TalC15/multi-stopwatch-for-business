@@ -34,40 +34,33 @@
         {{ statusLabel }}
       </span>
     </div>
-
-    <button
-      @click="payCompleted(timer.id)"
-      class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition bg-[#314158] hover:opacity-80"
-      :class="isPay ? 'bg-green-700':'bg-red-700'"
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="1.5"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        class="w-5 h-5"
-        :class="isPay ? 'text-green-600' : 'text-red-600'"
+    <div class="flex items-center justify-between">
+      <button
+        @click="payCompleted(timer.id)"
+        class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
+        :class="isPay ? 'bg-green-700' : 'bg-red-700'"
       >
-        <rect x="2" y="6" width="20" height="12" rx="2" />
-        <text
-          x="12"
-          y="15"
-          text-anchor="middle"
-          font-size="9"
-          font-family="sans-serif"
+        <svg
+          class="w-5 h-4 text-white"
           fill="currentColor"
-          stroke="none"
-          font-weight="600"
+          viewBox="-3 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
         >
-          200
-        </text>
-      </svg>
-      {{ isPay ? "Ödendi" : "Ödenmedi" }}
-    </button>
-
+          <path
+            d="m4.488 0h2.411v6.2c2.434-.88 4.89-1.805 7.341-2.693v1.993c-2.454.88-4.889 1.775-7.341 2.655v1.027c2.451-.888 4.907-1.813 7.341-2.693v1.978c-2.433.905-4.894 1.78-7.341 2.67v10.277c3.42-.449 6.235-2.662 7.53-5.681l.024-.062c.471-1.087.746-2.352.746-3.682 0-.003 0-.005 0-.008h2.502v.38c-.058 1.825-.512 3.53-1.279 5.052l.032-.069c-.702 1.379-1.601 2.553-2.676 3.536l-.009.008c-2.106 1.933-4.926 3.117-8.023 3.117-.443 0-.88-.024-1.311-.071l.053.005v-11.92c-1.506.53-2.99 1.083-4.488 1.62v-1.92c1.501-.548 3.006-1.091 4.488-1.658v-1.019c-1.493.51-2.99 1.082-4.488 1.613v-1.91c1.491-.56 3.009-1.094 4.488-1.666z"
+          />
+        </svg>
+        {{ isPay ? "Ödendi" : "Ödenmedi" }}
+      </button>
+      <span
+        :class="[
+          'text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1.5',
+          cardStyle.badge,
+        ]"
+      >
+        PAUSED COUNT: {{ pausedCount }}
+      </span>
+    </div>
     <div
       :class="[
         'text-5xl font-black text-center py-4 tracking-tight tabular-nums',
@@ -166,6 +159,34 @@
       </span>
     </div>
 
+    <div class="flex items-center justify-between">
+      <button
+        @click="payCompleted(timer.id)"
+        class="flex items-center gap-2 rounded-lg px-3 py-2 -mt-3 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
+        :class="isPay ? 'bg-green-700' : 'bg-red-700'"
+      >
+        <svg
+          class="w-5 h-4 text-white"
+          fill="currentColor"
+          viewBox="-3 0 24 24"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="m4.488 0h2.411v6.2c2.434-.88 4.89-1.805 7.341-2.693v1.993c-2.454.88-4.889 1.775-7.341 2.655v1.027c2.451-.888 4.907-1.813 7.341-2.693v1.978c-2.433.905-4.894 1.78-7.341 2.67v10.277c3.42-.449 6.235-2.662 7.53-5.681l.024-.062c.471-1.087.746-2.352.746-3.682 0-.003 0-.005 0-.008h2.502v.38c-.058 1.825-.512 3.53-1.279 5.052l.032-.069c-.702 1.379-1.601 2.553-2.676 3.536l-.009.008c-2.106 1.933-4.926 3.117-8.023 3.117-.443 0-.88-.024-1.311-.071l.053.005v-11.92c-1.506.53-2.99 1.083-4.488 1.62v-1.92c1.501-.548 3.006-1.091 4.488-1.658v-1.019c-1.493.51-2.99 1.082-4.488 1.613v-1.91c1.491-.56 3.009-1.094 4.488-1.666z"
+          />
+        </svg>
+        {{ isPay ? "Ödendi" : "Ödenmedi" }}
+      </button>
+
+      <span
+        :class="[
+          'text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1.5',
+          cardStyle.badge,
+        ]"
+      >
+        PAUSED COUNT: {{ pausedCount }}
+      </span>
+    </div>
     <div
       :class="[
         'text-5xl font-black text-center py-4 tracking-tight tabular-nums',
@@ -241,11 +262,13 @@ import { useStopwatchStore } from "@/stores/stopwatchStore";
 const props = defineProps(["timer"]);
 const store = useStopwatchStore();
 const isPay = ref(localStorage.getItem(`isPay${props.timer.id}`));
-const pausedCount = ref(0)
+const pausedCount = ref(
+  localStorage.getItem(`pausedCount${props.timer.id}`) || 0,
+);
 
-function payCompleted(id){
-  isPay.value = true
-  localStorage.setItem(`isPay${id}`,JSON.stringify(isPay.value))
+function payCompleted(id) {
+  isPay.value = true;
+  localStorage.setItem(`isPay${id}`, JSON.stringify(isPay.value));
 }
 
 const displayTime = computed(() => {
@@ -294,7 +317,8 @@ const statusLabel = computed(() => {
 
 const toggleTimer = () => {
   if (props.timer.status === "running") {
-    store.pauseTimer(props.timer.id);
+    store.pauseTimer(props.timer.id, pausedCount.value);
+    pausedCount.value = localStorage.getItem(`pausedCount${props.timer.id}`);
   } else {
     store.startTimer(props.timer.id);
   }
