@@ -1,8 +1,9 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref} from "vue";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
+import { message } from "../composables/message";
 
 const themeStore = useThemeStore();
 const router = useRouter();
@@ -10,18 +11,36 @@ const stopwatchStore = useStopwatchStore();
 const presetTime = ref("");
 const presetName = ref("");
 
+function defaultSettings(preset){
+  if(typeof(preset)==="number"){
+    stopwatchStore.duration = preset
+    localStorage.setItem('defaultDuration',JSON.stringify(stopwatchStore.duration))
+    message.success(`varsayılan zaman ${preset} dk olarak ayarlandı`)
+  }
+  else{
+    stopwatchStore.name = preset
+    localStorage.setItem('defaultName',JSON.stringify(stopwatchStore.name))
+    message.success(`varsayılan isim "${preset}" olarak ayarlandı`)
+  }
+}
+
 function addPresetTime() {
   stopwatchStore.presetTimes.push(presetTime.value);
   localStorage.setItem(
     "presetTimes",
     JSON.stringify(stopwatchStore.presetTimes),
   );
+  message.success('yeni zaman etiketi oluşturuldu')
   presetTime.value = "";
 }
 
 function addPresetName() {
   stopwatchStore.presetNames.push(presetName.value);
-  localStorage.setItem("presetNames", JSON.stringify(stopwatchStore.presetNames));
+  localStorage.setItem(
+    "presetNames",
+    JSON.stringify(stopwatchStore.presetNames),
+  );
+  message.success('yeni isim etiketi oluşturuldu')
   presetName.value = "";
 }
 
@@ -37,14 +56,13 @@ function removePresetTime(bIndex) {
 
 function removePresetName(bIndex) {
   stopwatchStore.presetNames = stopwatchStore.presetNames.filter(
-    (a,aIndex) => aIndex !== bIndex,
+    (a, aIndex) => aIndex !== bIndex,
   );
   localStorage.setItem(
     "presetNames",
     JSON.stringify(stopwatchStore.presetNames),
   );
 }
-
 </script>
 
 <template>
@@ -163,12 +181,12 @@ function removePresetName(bIndex) {
           <span class="relative top-1px">+</span>
         </button>
       </div>
+
       <div class="relative isolate mb-3">
-        <div
-          class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll"
-        >
+        <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
           <span
             v-for="(presetTime, index) in stopwatchStore.presetTimes"
+            @click="defaultSettings(presetTime)"
             :key="index"
             class="w-20% mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
           >
@@ -220,23 +238,28 @@ function removePresetName(bIndex) {
           <span class="relative top-1px">+</span>
         </button>
       </div>
+
       <div class="relative isolate mb-3">
-        <div
-          class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll"
-        >
-          <span
+        <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
+          <div
             v-for="(presetName, index) in stopwatchStore.presetNames"
             :key="index"
-            class="w-20% mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
+            class="relative shrink-0"
           >
-            {{ presetName }}
-            <button
-              @click="removePresetName(index)"
-              class="w-5 ml-3 text-xl leading-none -translate-y-0.5"
+            <span
+              @click="defaultSettings(presetName)"
+              class="cursor-pointer mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
             >
-              &times
-            </button>
-          </span>
+              {{ presetName }}
+
+              <button
+                @click.stop="removePresetName(index)"
+                class="w-5 ml-3 text-xl leading-none -translate-y-0.5"
+              >
+                &times;
+              </button>
+            </span>
+          </div>
         </div>
       </div>
       <!-- About Section -->
@@ -275,6 +298,4 @@ function removePresetName(bIndex) {
     </main>
   </div>
 </template>
-<style>
-
-</style>
+<style></style>

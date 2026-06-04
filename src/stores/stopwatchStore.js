@@ -1,10 +1,13 @@
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
- 
+import { message } from '../composables/message'; 
+
 export const useStopwatchStore = defineStore('stopwatch', () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
   const presetTimes = ref(JSON.parse(localStorage.getItem('presetTimes')) || [])
   const presetNames = ref(JSON.parse(localStorage.getItem('presetNames')) || [])
+  const duration = ref(JSON.parse(localStorage.getItem('defaultDuration')))
+  const name = ref(JSON.parse(localStorage.getItem('defaultName')))
   watch(stopwatches, (val) => {
     localStorage.setItem('timers', JSON.stringify(val));
   }, { deep: true });
@@ -97,9 +100,12 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
     }
   };
  
-  const deleteTimer = (id) => {
-    stopwatches.value = stopwatches.value.filter(t => t.id !== id);
-    localStorage.removeItem(`isPay${id}`)
+  const deleteTimer = (timer,deger) => {
+    stopwatches.value = stopwatches.value.filter(t => t.id !== timer.id);
+    localStorage.removeItem(`isPay${timer.id}`)
+    localStorage.removeItem(`pausedCount${timer.id}`)
+    message.success(`${timer.name} ${deger} silindi`)
+
   };
  
   // ─── Rehydrate (PWA crash/close recovery) ────────────────────────────────
@@ -141,6 +147,8 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
     stopwatches,
     presetTimes,
     presetNames,
+    duration,
+    name,
     addTimer,
     startTimer,
     pauseTimer,

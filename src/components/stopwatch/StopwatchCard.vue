@@ -107,7 +107,7 @@
         {{ timer.status === "running" ? "Pause" : "Start" }}
       </button>
       <button
-        @click="store.deleteTimer(timer.id)"
+        @click="store.deleteTimer(timer,'kronometresi')"
         :class="[
           'w-12 h-12 rounded-2xl flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -231,7 +231,7 @@
       </button>
 
       <button
-        @click="store.deleteTimer(timer.id)"
+        @click="store.deleteTimer(timer,'zamanlayıcısı')"
         :class="[
           'w-10 h-10 flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -258,6 +258,7 @@
 <script setup>
 import { ref, computed } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
+import { hapticTap } from "../../utils/haptics";
 
 const props = defineProps(["timer"]);
 const store = useStopwatchStore();
@@ -319,6 +320,7 @@ const toggleTimer = () => {
   if (props.timer.status === "running") {
     store.pauseTimer(props.timer.id, pausedCount.value);
     pausedCount.value = localStorage.getItem(`pausedCount${props.timer.id}`);
+    hapticTap()
   } else {
     store.startTimer(props.timer.id);
   }
