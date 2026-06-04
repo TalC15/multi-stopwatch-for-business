@@ -1,7 +1,8 @@
 import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
-import { message } from '../composables/message'; 
-
+import { message } from '../composables/message';
+import { notifyTimerEnd, cancelTimerSound } from '../utils/notifications';
+ 
 export const useStopwatchStore = defineStore('stopwatch', () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
   const presetTimes = ref(JSON.parse(localStorage.getItem('presetTimes')) || [])
@@ -11,7 +12,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
   watch(stopwatches, (val) => {
     localStorage.setItem('timers', JSON.stringify(val));
   }, { deep: true });
-
+ 
   // ─── Tick ────────────────────────────────────────────────────────────────
   let tickInterval = null;
   
@@ -25,9 +26,10 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
  
         if (timer.type === 'up') {
           timer.elapsed = elapsed;
-          // Hedef aşıldıysa sadece görsel flag — sayaç DURMAZ, running kalır
-          if (timer.targetMinutes && elapsed >= timer.targetMinutes * 60 * 1000) {
+          // Hedef aşıldıysa bir kez ses çal, flag set et
+          if (timer.targetMinutes && elapsed >= timer.targetMinutes * 60 * 1000 && !timer.reachedTarget) {
             timer.reachedTarget = true;
+            notifyTimerEnd(timer.id, timer.name);
           }
         } else {
           // Count-down
@@ -39,6 +41,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
             timer.status = 'expired';
             timer.startTime = null;
             timer.accumulatedTime = total;
+            notifyTimerEnd(timer.id, timer.name);
           } else {
             timer.remaining = remaining;
             timer.elapsed = elapsed;
@@ -75,13 +78,12 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
       accumulatedTime: 0,
       elapsed: 0,
       remaining: timer.type === 'down' ? targetMs : null,
-      reachedTarget: false, // count-up için görsel uyarı flag'i
+      reachedTarget: false,
     });
   };
  
   const startTimer = (id) => {
     const timer = stopwatches.value.find(t => t.id === id);
-    // count-down expired ise başlatma, count-up her zaman başlatılabilir
     if (!timer) return;
     if (timer.type === 'down' && timer.status === 'expired') return;
     timer.startTime = Date.now();
@@ -89,23 +91,26 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
     startTick();
   };
  
-  const pauseTimer = (id,pausedCount) => {
+  const pauseTimer = (id, pausedCount) => {
     const timer = stopwatches.value.find(t => t.id === id);
     if (timer && timer.status === 'running') {
       timer.accumulatedTime += Date.now() - timer.startTime;
       timer.startTime = null;
       timer.status = 'paused';
       pausedCount++
-      localStorage.setItem(`pausedCount${id}`,JSON.stringify(pausedCount))
+      localStorage.setItem(`pausedCount${id}`, JSON.stringify(pausedCount))
+      // Timer durdurulunca bekleyen seslerini iptal et
+      cancelTimerSound(id);
     }
   };
  
-  const deleteTimer = (timer,deger) => {
+  const deleteTimer = (timer, deger) => {
+    // Silinince bekleyen seslerini iptal et
+    cancelTimerSound(timer.id);
     stopwatches.value = stopwatches.value.filter(t => t.id !== timer.id);
     localStorage.removeItem(`isPay${timer.id}`)
     localStorage.removeItem(`pausedCount${timer.id}`)
     message.success(`${timer.name} ${deger} silindi`)
-
   };
  
   // ─── Rehydrate (PWA crash/close recovery) ────────────────────────────────
@@ -122,7 +127,6 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
           if (timer.targetMinutes && timer.elapsed >= timer.targetMinutes * 60 * 1000) {
             timer.reachedTarget = true;
           }
-          // count-up durmaz, paused'a al
           timer.status = 'paused';
         } else {
           const total = timer.targetMinutes * 60 * 1000;

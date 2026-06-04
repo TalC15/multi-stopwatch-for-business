@@ -44,8 +44,8 @@ const save = () => {
     message.success(`${store.name} zamanlayıcısı oluşturuldu`);
   }
   
-  store.name = JSON.parse(localStorage.getItem("defaultName"));
-  store.duration = JSON.parse(localStorage.getItem("defaultDuration"));
+  store.name = JSON.parse(localStorage.getItem("defaultName")) || 'timer';
+  store.duration = JSON.parse(localStorage.getItem("defaultDuration")) || 5;
 };
 </script>
 
