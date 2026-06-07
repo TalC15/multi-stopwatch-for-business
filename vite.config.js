@@ -1,17 +1,27 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-import path from 'path' // Bu satırı ekle
+import path from 'path'
 import { VitePWA } from 'vite-plugin-pwa'
+ 
 export default defineConfig({
   plugins: [
     vue(),
-     VitePWA({
+    VitePWA({
       registerType: 'autoUpdate',
+      workbox: {
+        // Service Worker ses API'lerini engellemsin diye
+        // navigateFallback'i kapat
+        navigateFallback: null,
+        // Ses dosyaları ve API çağrıları SW'dan geçmesin
+        runtimeCaching: [],
+      },
       manifest: {
         name: 'KeepTime',
-        short_name: 'App',
-        description: 'Benim Vue uygulamam',
+        short_name: 'KeepTime',
+        description: 'Ticari zamanlayıcı uygulaması',
         theme_color: '#ffffff',
+        // Ses izni için gerekli
+        permissions: ['notifications'],
         icons: [
           {
             src: '/icons/pwa-192x192.png',
@@ -29,7 +39,8 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'), // @ işaretini src klasörüne yönlendirir
+      '@': path.resolve(__dirname, './src'),
     },
   },
 })
+ 
