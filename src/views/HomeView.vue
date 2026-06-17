@@ -17,13 +17,14 @@ const isModalOpen = ref(false);
 const filteredTimers = computed(() =>
   store.stopwatches.filter(t => t.type === activeTab.value)
 );
- 
+
 onMounted(() => themeStore.applyTheme());
 </script>
  
 <template>
   <div :class="['min-h-screen bg-[var(--color-surface)] transition-colors duration-300']">
- 
+
+
     <!-- Navbar -->
     <Navbar @open-menu="isDrawerOpen = true" />
  
@@ -50,7 +51,7 @@ onMounted(() => themeStore.applyTheme());
            Filter
         </button>
       </div>
- 
+
       <!-- Timer Cards -->
       <div class="space-y-4">
         <StopwatchCard

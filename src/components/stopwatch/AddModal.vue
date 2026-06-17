@@ -27,7 +27,8 @@ const increment = () => {
 };
 
 const save = () => {
-  if (!store.name) return;
+  if (!store.name) return message.warning('isim eklemek iyi bir fikir olabilir');
+  if (!store.duration) return message.warning('süre eklemek iyi bir fikir olabilir');
   store.addTimer({
     name: store.name,
     duration: store.duration,

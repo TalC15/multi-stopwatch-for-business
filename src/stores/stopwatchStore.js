@@ -2,13 +2,13 @@ import { defineStore } from 'pinia';
 import { ref, watch } from 'vue';
 import { message } from '../composables/message';
 import { notifyTimerEnd, cancelTimerSound } from '../utils/notifications';
- 
+import { hapticTap } from '../utils/haptics';
 export const useStopwatchStore = defineStore('stopwatch', () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
   const presetTimes = ref(JSON.parse(localStorage.getItem('presetTimes')) || [])
   const presetNames = ref(JSON.parse(localStorage.getItem('presetNames')) || [])
-  const duration = ref(JSON.parse(localStorage.getItem('defaultDuration')))
-  const name = ref(JSON.parse(localStorage.getItem('defaultName')))
+  const duration = ref(JSON.parse(localStorage.getItem('defaultDuration')) || 0)
+  const name = ref(JSON.parse(localStorage.getItem('defaultName')) || '')
   watch(stopwatches, (val) => {
     localStorage.setItem('timers', JSON.stringify(val));
   }, { deep: true });
@@ -29,7 +29,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
           // Hedef aşıldıysa bir kez ses çal, flag set et
           if (timer.targetMinutes && elapsed >= timer.targetMinutes * 60 * 1000 && !timer.reachedTarget) {
             timer.reachedTarget = true;
-            notifyTimerEnd(timer.id, timer.name);
+            notifyTimerEnd(timer.id, timer.name, timer.isPay);
           }
         } else {
           // Count-down
@@ -41,7 +41,8 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
             timer.status = 'expired';
             timer.startTime = null;
             timer.accumulatedTime = total;
-            notifyTimerEnd(timer.id, timer.name);
+            timer.reachedTarget = true;
+            notifyTimerEnd(timer.id, timer.name, timer.isPay);
           } else {
             timer.remaining = remaining;
             timer.elapsed = elapsed;
@@ -73,6 +74,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
       name: timer.name,
       targetMinutes: timer.duration,
       type: timer.type,
+      isPay: false,
       status: 'idle',
       startTime: null,
       accumulatedTime: 0,
@@ -110,6 +112,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
     stopwatches.value = stopwatches.value.filter(t => t.id !== timer.id);
     localStorage.removeItem(`isPay${timer.id}`)
     localStorage.removeItem(`pausedCount${timer.id}`)
+    hapticTap()
     message.success(`${timer.name} ${deger} silindi`)
   };
  

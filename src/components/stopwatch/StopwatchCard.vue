@@ -36,9 +36,9 @@
     </div>
     <div class="flex items-center justify-between">
       <button
-        @click="payCompleted(timer.id)"
+        @click="timer.isPay=true"
         class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
-        :class="isPay ? 'bg-green-700' : 'bg-red-700'"
+        :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
         <svg
           class="w-5 h-4 text-white"
@@ -50,7 +50,7 @@
             d="m4.488 0h2.411v6.2c2.434-.88 4.89-1.805 7.341-2.693v1.993c-2.454.88-4.889 1.775-7.341 2.655v1.027c2.451-.888 4.907-1.813 7.341-2.693v1.978c-2.433.905-4.894 1.78-7.341 2.67v10.277c3.42-.449 6.235-2.662 7.53-5.681l.024-.062c.471-1.087.746-2.352.746-3.682 0-.003 0-.005 0-.008h2.502v.38c-.058 1.825-.512 3.53-1.279 5.052l.032-.069c-.702 1.379-1.601 2.553-2.676 3.536l-.009.008c-2.106 1.933-4.926 3.117-8.023 3.117-.443 0-.88-.024-1.311-.071l.053.005v-11.92c-1.506.53-2.99 1.083-4.488 1.62v-1.92c1.501-.548 3.006-1.091 4.488-1.658v-1.019c-1.493.51-2.99 1.082-4.488 1.613v-1.91c1.491-.56 3.009-1.094 4.488-1.666z"
           />
         </svg>
-        {{ isPay ? "Ödendi" : "Ödenmedi" }}
+        {{ props.timer.isPay ? "Ödendi" : "Ödenmedi" }}
       </button>
       <span
         :class="[
@@ -107,7 +107,7 @@
         {{ timer.status === "running" ? "Pause" : "Start" }}
       </button>
       <button
-        @click="store.deleteTimer(timer,'kronometresi')"
+        @click="deleteAndStop(timer)"
         :class="[
           'w-12 h-12 rounded-2xl flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -161,9 +161,9 @@
 
     <div class="flex items-center justify-between">
       <button
-        @click="payCompleted(timer.id)"
+        @click="timer.isPay=true"
         class="flex items-center gap-2 rounded-lg px-3 py-2 -mt-3 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
-        :class="isPay ? 'bg-green-700' : 'bg-red-700'"
+        :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
         <svg
           class="w-5 h-4 text-white"
@@ -175,7 +175,7 @@
             d="m4.488 0h2.411v6.2c2.434-.88 4.89-1.805 7.341-2.693v1.993c-2.454.88-4.889 1.775-7.341 2.655v1.027c2.451-.888 4.907-1.813 7.341-2.693v1.978c-2.433.905-4.894 1.78-7.341 2.67v10.277c3.42-.449 6.235-2.662 7.53-5.681l.024-.062c.471-1.087.746-2.352.746-3.682 0-.003 0-.005 0-.008h2.502v.38c-.058 1.825-.512 3.53-1.279 5.052l.032-.069c-.702 1.379-1.601 2.553-2.676 3.536l-.009.008c-2.106 1.933-4.926 3.117-8.023 3.117-.443 0-.88-.024-1.311-.071l.053.005v-11.92c-1.506.53-2.99 1.083-4.488 1.62v-1.92c1.501-.548 3.006-1.091 4.488-1.658v-1.019c-1.493.51-2.99 1.082-4.488 1.613v-1.91c1.491-.56 3.009-1.094 4.488-1.666z"
           />
         </svg>
-        {{ isPay ? "Ödendi" : "Ödenmedi" }}
+        {{ props.timer.isPay ? "Ödendi" : "Ödenmedi" }}
       </button>
 
       <span
@@ -231,7 +231,7 @@
       </button>
 
       <button
-        @click="store.deleteTimer(timer,'zamanlayıcısı')"
+        @click="deleteAndStop(timer)"
         :class="[
           'w-10 h-10 flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -256,21 +256,30 @@
 </template>
 
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { hapticTap } from "../../utils/haptics";
+import radarAlarm from '../../sounds/radar-alarm.mp3';
+import digitalAlarm from '../../sounds/digital-alarm.mp3';
 
 const props = defineProps(["timer"]);
 const store = useStopwatchStore();
-const isPay = ref(localStorage.getItem(`isPay${props.timer.id}`));
-const pausedCount = ref(
-  localStorage.getItem(`pausedCount${props.timer.id}`) || 0,
-);
+const pausedCount = ref(localStorage.getItem(`pausedCount${props.timer.id}`) || 0,);
+const audioRadar = new Audio(radarAlarm)
+  const audioDigital = new Audio(digitalAlarm)
 
-function payCompleted(id) {
-  isPay.value = true;
-  localStorage.setItem(`isPay${id}`, JSON.stringify(isPay.value));
-}
+const isReachedTime = computed(()=>{
+  return props.timer.reachedTarget
+})
+
+watch(isReachedTime,(newValue)=>{
+  if(newValue && props.timer.type === 'up'){
+    audioRadar.play()
+  }
+  else if(newValue && props.timer.type === 'down'){
+    audioDigital.play()
+  }
+})
 
 const displayTime = computed(() => {
   let ms;
@@ -320,11 +329,21 @@ const toggleTimer = () => {
   if (props.timer.status === "running") {
     store.pauseTimer(props.timer.id, pausedCount.value);
     pausedCount.value = localStorage.getItem(`pausedCount${props.timer.id}`);
+    audioRadar.pause();
+    audioDigital.pause();
     hapticTap()
   } else {
     store.startTimer(props.timer.id);
   }
 };
+
+function deleteAndStop(timer) {
+  audioRadar.pause();
+  audioDigital.pause();
+  audioRadar.currentTime = 0;
+  audioDigital.currentTime = 0;
+  store.deleteTimer(timer, "zamanlayıcısı");
+}
 
 const cardStyle = computed(() => {
   const { type, status, reachedTarget } = props.timer;
