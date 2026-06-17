@@ -40,22 +40,56 @@ function speakWeb(text) {
       resolve();
       return;
     }
+
+    // iOS'ta speechSynthesis bazen donuyor, önce cancel at
     window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    const voices = window.speechSynthesis.getVoices();
-    const trVoice =
-      voices.find((v) => v.lang === "tr-TR" && v.localService) ||
-      voices.find((v) => v.lang === "tr-TR") ||
-      voices.find((v) => v.lang.startsWith("tr")) ||
-      null;
-    if (trVoice) utterance.voice = trVoice;
-    utterance.lang = "tr-TR";
-    utterance.rate = 0.88;
-    utterance.pitch = 1.05;
-    utterance.volume = 1.0;
-    utterance.onend = resolve;
-    utterance.onerror = resolve;
-    setTimeout(() => window.speechSynthesis.speak(utterance), 80);
+
+    // iOS'ta voice listesi geç yükleniyor
+    const trySpeak = () => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const voices = window.speechSynthesis.getVoices();
+      const trVoice =
+        voices.find((v) => v.lang === "tr-TR" && v.localService) ||
+        voices.find((v) => v.lang === "tr-TR") ||
+        voices.find((v) => v.lang.startsWith("tr")) ||
+        null;
+      if (trVoice) utterance.voice = trVoice;
+      utterance.lang = "tr-TR";
+      utterance.rate = 0.88;
+      utterance.pitch = 1.05;
+      utterance.volume = 1.0;
+      utterance.onend = resolve;
+      utterance.onerror = resolve;
+
+      // iOS'ta timeout ile kontrol et — bazen onend hiç tetiklenmiyor
+      const timeout = setTimeout(() => {
+        window.speechSynthesis.cancel();
+        resolve();
+      }, 10000); // 10 saniye bekle, hala bitmemişse geç
+
+      utterance.onend = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+      utterance.onerror = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+
+      setTimeout(() => window.speechSynthesis.speak(utterance), 80);
+    };
+
+    // Voice listesi boşsa bekle
+    if (window.speechSynthesis.getVoices().length === 0) {
+      window.speechSynthesis.onvoiceschanged = () => {
+        window.speechSynthesis.onvoiceschanged = null;
+        trySpeak();
+      };
+      // onvoiceschanged iOS'ta tetiklenmeyebilir, fallback
+      setTimeout(trySpeak, 500);
+    } else {
+      trySpeak();
+    }
   });
 }
 

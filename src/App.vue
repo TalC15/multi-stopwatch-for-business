@@ -9,13 +9,29 @@ import { LocalNotifications } from "@capacitor/local-notifications";
 const store = useStopwatchStore()
 // PWA'da speechSynthesis'i kullanıcı etkileşimiyle uyandır
 // Bu olmadan PWA/production modda ses çalışmıyor
+// App.vue — unlockAudio fonksiyonunu güncelle
 function unlockAudio() {
   if ("speechSynthesis" in window) {
-    // Sessiz bir utterance çalıştır — ses motorunu uyandırır
-    const silent = new SpeechSynthesisUtterance("");
+    const silent = new SpeechSynthesisUtterance(" ");
     silent.volume = 0;
+    silent.rate = 2;
     window.speechSynthesis.speak(silent);
-    window.speechSynthesis.cancel();
+  }
+
+  // iOS için ses context'i de uyandır
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (AudioContext) {
+      const ctx = new AudioContext();
+      const buffer = ctx.createBuffer(1, 1, 22050);
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      source.connect(ctx.destination);
+      source.start(0);
+      ctx.resume();
+    }
+  } catch (e) {
+    console.log("Audio unlock hatası:", e);
   }
 }
 
