@@ -37,10 +37,10 @@ function unlockAudio() {
 
 onMounted(async () => {
   // Bildirim izni iste
-  console.log("[DEBUG] onMounted çalıştı");
+  //console.log("[DEBUG] onMounted çalıştı");
   
   try {
-    console.log("[DEBUG] izin fonksiyonu çağrılıyor");
+    //console.log("[DEBUG] izin fonksiyonu çağrılıyor");
     await requestNotificationPermission();
   } catch (err) {
     console.error("[DEBUG] izin hatası:", err);

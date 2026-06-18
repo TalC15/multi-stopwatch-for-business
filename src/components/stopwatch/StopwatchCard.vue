@@ -107,7 +107,7 @@
         {{ timer.status === "running" ? "Pause" : "Start" }}
       </button>
       <button
-        @click="deleteAndStop(timer)"
+        @click="deleteAndStop(timer,'kronometresi')"
         :class="[
           'w-12 h-12 rounded-2xl flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -231,7 +231,7 @@
       </button>
 
       <button
-        @click="deleteAndStop(timer)"
+        @click="deleteAndStop(timer,'zamanlayıcısı')"
         :class="[
           'w-10 h-10 flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -337,12 +337,12 @@ const toggleTimer = () => {
   }
 };
 
-function deleteAndStop(timer) {
+function deleteAndStop(timer,deger) {
   audioRadar.pause();
   audioDigital.pause();
   audioRadar.currentTime = 0;
   audioDigital.currentTime = 0;
-  store.deleteTimer(timer, "zamanlayıcısı");
+  store.deleteTimer(timer, deger);
 }
 
 const cardStyle = computed(() => {

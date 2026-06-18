@@ -167,22 +167,22 @@ export async function requestNotificationPermission() {
         visibility: 1,
         lights: true,
       });
-      console.log("[DEBUG] kanal oluşturuldu");
-      console.log(
+      //console.log("[DEBUG] kanal oluşturuldu");
+      /*console.log(
         "[DEBUG] kanallar:",
         JSON.stringify(await LocalNotifications.listChannels()),
-      );
+      );*/
     } catch (e) {
       console.error("[DEBUG] kanal hatası:", e);
     }
   }
 
   const perm = await LocalNotifications.checkPermissions();
-  console.log("[DEBUG] izin durumu:", JSON.stringify(perm));
+  //console.log("[DEBUG] izin durumu:", JSON.stringify(perm));
 
   if (perm.display !== "granted") {
     await LocalNotifications.requestPermissions();
-    console.log("[DEBUG] izin istendi, sonuç:", JSON.stringify(result));
+    //console.log("[DEBUG] izin istendi, sonuç:", JSON.stringify(result));
   }
 }
 
@@ -193,7 +193,7 @@ function toNotifId(timerId) {
 }
 
 export async function notifyTimerEnd(timerId, timerName, timerIsPay) {
-  console.log("[DEBUG] notifyTimerEnd çağrıldı:", timerId, timerName);
+  //console.log("[DEBUG] notifyTimerEnd çağrıldı:", timerId, timerName);
   const paid = timerIsPay ? "ödendi" : "ödenmedi";
   hapticAlarm();
   try {
@@ -208,9 +208,9 @@ export async function notifyTimerEnd(timerId, timerName, timerIsPay) {
         },
       ],
     });
-    console.log("[DEBUG] bildirim schedule edildi");
+    //console.log("[DEBUG] bildirim schedule edildi");
     const pending = await LocalNotifications.getPending();
-    console.log("[DEBUG] pending bildirimler:", JSON.stringify(pending));
+    //console.log("[DEBUG] pending bildirimler:", JSON.stringify(pending));
   } catch (e) {
     console.error("[DEBUG] schedule hatası:", e);
   }
@@ -225,7 +225,7 @@ export async function notifyTimerEnd(timerId, timerName, timerIsPay) {
       isPay: paid,
     });
   }
-  console.log("[DEBUG] activeTimers:", [...activeTimers.keys()]);
+  //console.log("[DEBUG] activeTimers:", [...activeTimers.keys()]);
   await runTurns();
 }
 
