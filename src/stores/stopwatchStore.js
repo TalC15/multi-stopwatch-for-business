@@ -3,6 +3,7 @@ import { ref, watch } from 'vue';
 import { message } from '../composables/message';
 import { notifyTimerEnd, cancelTimerSound } from '../utils/notifications';
 import { hapticTap } from '../utils/haptics';
+import { getUserId, syncTimerStart, syncTimerCancel, getChatId } from '../services/backendSync';
 export const useStopwatchStore = defineStore('stopwatch', () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
   const presetTimes = ref(JSON.parse(localStorage.getItem('presetTimes')) || [])
@@ -84,37 +85,40 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
     });
   };
  
-  const startTimer = (id) => {
-    const timer = stopwatches.value.find(t => t.id === id);
-    if (!timer) return;
-    if (timer.type === 'down' && timer.status === 'expired') return;
-    timer.startTime = Date.now();
-    timer.status = 'running';
-    startTick();
-  };
+ const startTimer = (id) => {
+  const timer = stopwatches.value.find(t => t.id === id);
+  if (!timer) return;
+  if (timer.type === 'down' && timer.status === 'expired') return;
+  timer.startTime = Date.now();
+  timer.status = 'running';
+  startTick();
+  // Backend sync
+  if (getChatId()) syncTimerStart(timer);
+};
  
-  const pauseTimer = (id, pausedCount) => {
-    const timer = stopwatches.value.find(t => t.id === id);
-    if (timer && timer.status === 'running') {
-      timer.accumulatedTime += Date.now() - timer.startTime;
-      timer.startTime = null;
-      timer.status = 'paused';
-      pausedCount++
-      localStorage.setItem(`pausedCount${id}`, JSON.stringify(pausedCount))
-      // Timer durdurulunca bekleyen seslerini iptal et
-      cancelTimerSound(id);
-    }
-  };
+ const pauseTimer = (id, pausedCount) => {
+  const timer = stopwatches.value.find(t => t.id === id);
+  if (timer && timer.status === 'running') {
+    timer.accumulatedTime += Date.now() - timer.startTime;
+    timer.startTime = null;
+    timer.status = 'paused';
+    pausedCount++;
+    localStorage.setItem(`pausedCount${id}`, JSON.stringify(pausedCount));
+    cancelTimerSound(id);
+    // Backend sync
+    syncTimerCancel(id);
+  }
+};
  
-  const deleteTimer = (timer, deger) => {
-    // Silinince bekleyen seslerini iptal et
-    cancelTimerSound(timer.id);
-    stopwatches.value = stopwatches.value.filter(t => t.id !== timer.id);
-    localStorage.removeItem(`isPay${timer.id}`)
-    localStorage.removeItem(`pausedCount${timer.id}`)
-    hapticTap()
-    message.success(`${timer.name} ${deger} silindi`)
-  };
+ const deleteTimer = (timer, deger) => {
+  cancelTimerSound(timer.id);
+  syncTimerCancel(timer.id); // Backend sync
+  stopwatches.value = stopwatches.value.filter(t => t.id !== timer.id);
+  localStorage.removeItem(`isPay${timer.id}`);
+  localStorage.removeItem(`pausedCount${timer.id}`);
+  hapticTap();
+  message.success(`${timer.name} ${deger} silindi`);
+};
  
   // ─── Rehydrate (PWA crash/close recovery) ────────────────────────────────
   const rehydrateTimers = () => {
