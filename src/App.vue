@@ -4,9 +4,6 @@ import AppMessage from "./components/ui/AppMessage.vue";
 import { messageState } from "./composables/message.js";
 import { onMounted } from "vue";
 import { requestNotificationPermission } from "./utils/notifications";
-import { useStopwatchStore } from "./stores/stopwatchStore.js";
-import { LocalNotifications } from "@capacitor/local-notifications";
-const store = useStopwatchStore()
 // PWA'da speechSynthesis'i kullanıcı etkileşimiyle uyandır
 // Bu olmadan PWA/production modda ses çalışmıyor
 // App.vue — unlockAudio fonksiyonunu güncelle

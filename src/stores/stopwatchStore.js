@@ -3,7 +3,7 @@ import { ref, watch } from 'vue';
 import { message } from '../composables/message';
 import { notifyTimerEnd, cancelTimerSound } from '../utils/notifications';
 import { hapticTap } from '../utils/haptics';
-import { getUserId, syncTimerStart, syncTimerCancel, getChatId } from '../services/backendSync';
+import { syncTimerStart, syncTimerCancel, isLoggedIn } from '../services/backendSync';
 export const useStopwatchStore = defineStore('stopwatch', () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem('timers')) || [])
   const presetTimes = ref(JSON.parse(localStorage.getItem('presetTimes')) || [])
@@ -93,7 +93,7 @@ export const useStopwatchStore = defineStore('stopwatch', () => {
   timer.status = 'running';
   startTick();
   // Backend sync
-  if (getChatId()) syncTimerStart(timer);
+  if (isLoggedIn()) syncTimerStart(timer);
 };
  
  const pauseTimer = (id, pausedCount) => {

@@ -1,54 +1,136 @@
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
-// Kullanıcı ID'sini localStorage'dan al veya oluştur
-export function getUserId() {
-  let userId = localStorage.getItem("userId");
-  if (!userId) {
-    userId = crypto.randomUUID();
-    localStorage.setItem("userId", userId);
-  }
-  return userId;
+// Token yönetimi
+export function getAccessToken() {
+  return localStorage.getItem("accessToken");
 }
 
-// Kullanıcıyı sunucuya kaydet
-export async function registerUser(chatId) {
-  const userId = getUserId();
+export function getRefreshToken() {
+  return localStorage.getItem("refreshToken");
+}
+
+export function saveTokens(accessToken, refreshToken) {
+  localStorage.setItem("accessToken", accessToken);
+  if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
+}
+
+export function clearTokens() {
+  localStorage.removeItem("accessToken");
+  localStorage.removeItem("refreshToken");
+  localStorage.removeItem("user");
+}
+
+export function getUser() {
+  const user = localStorage.getItem("user");
+  return user ? JSON.parse(user) : null;
+}
+
+export function saveUser(user) {
+  localStorage.setItem("user", JSON.stringify(user));
+}
+
+export function isLoggedIn() {
+  return !!getAccessToken();
+}
+
+// Auth header
+function authHeader() {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${getAccessToken()}`,
+  };
+}
+
+// Token yenile
+async function refreshAccessToken() {
+  const refreshToken = getRefreshToken();
+  if (!refreshToken) return false;
+
   try {
-    const response = await fetch(`${BASE_URL}/register`, {
+    const response = await fetch(`${BASE_URL}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, chatId }),
+      body: JSON.stringify({ refreshToken }),
     });
+
+    if (!response.ok) return false;
+
     const data = await response.json();
-    console.log("[Backend] Kullanıcı kaydedildi:", data);
-    return data;
-  } catch (err) {
-    console.error("[Backend] Kayıt hatası:", err);
+    saveTokens(data.accessToken, null);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-// Sunucuya kayıtlı mı kontrol et
-export function isRegistered() {
-  return !!localStorage.getItem("telegramChatId");
+// Genel fetch — token süresi dolunca otomatik yeniler
+async function apiFetch(url, options = {}) {
+  if (!getAccessToken()) return null;
+
+  let response = await fetch(url, options);
+
+  if (response.status === 401) {
+    const refreshed = await refreshAccessToken();
+    if (refreshed) {
+      options.headers = authHeader();
+      response = await fetch(url, options);
+    } else {
+      clearTokens();
+      window.location.reload();
+      return null;
+    }
+  }
+
+  return response;
 }
 
-// Chat ID'yi kaydet
-export function saveChatId(chatId) {
-  localStorage.setItem("telegramChatId", chatId);
+// Giriş
+export async function login(username, pin) {
+  try {
+    const response = await fetch(`${BASE_URL}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, pin }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      return { success: false, error: data.error };
+    }
+
+    saveTokens(data.accessToken, data.refreshToken);
+    saveUser(data.user);
+    return { success: true, user: data.user };
+  } catch {
+    return { success: false, error: "Sunucuya bağlanılamadı" };
+  }
 }
 
-// Chat ID'yi al
-export function getChatId() {
-  return localStorage.getItem("telegramChatId");
+// Çıkış
+export function logout() {
+  clearTokens();
+  window.location.reload();
+}
+
+// Telegram chat ID kaydet
+export async function saveTelegramChatId(chatId) {
+  try {
+    await apiFetch(`${BASE_URL}/register`, {
+      method: "POST",
+      headers: authHeader(),
+      body: JSON.stringify({ chatId }),
+    });
+  } catch (err) {
+    console.error("[Backend] Telegram kayıt hatası:", err);
+  }
 }
 
 // Timer başlat
 export async function syncTimerStart(timer) {
-  const userId = getUserId();
-  const chatId = getChatId();
-  if (!chatId) return; // Kayıtlı değilse atla
+  const user = getUser();
+  if (!user) return;
 
-  // endsAt hesapla
   let endsAt;
   if (timer.type === "down") {
     const total = timer.targetMinutes * 60 * 1000;
@@ -56,7 +138,6 @@ export async function syncTimerStart(timer) {
     const remaining = total - elapsed;
     endsAt = Date.now() + remaining;
   } else {
-    // count-up — hedef varsa
     if (!timer.targetMinutes) return;
     const elapsed = timer.accumulatedTime + (Date.now() - timer.startTime);
     const remaining = timer.targetMinutes * 60 * 1000 - elapsed;
@@ -65,11 +146,10 @@ export async function syncTimerStart(timer) {
   }
 
   try {
-    await fetch(`${BASE_URL}/timer/start`, {
+    await apiFetch(`${BASE_URL}/timer/start`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeader(),
       body: JSON.stringify({
-        userId,
         timerId: timer.id,
         timerName: timer.name,
         timerIsPay: timer.isPay,
@@ -85,12 +165,11 @@ export async function syncTimerStart(timer) {
 // Timer iptal
 export async function syncTimerCancel(timerId) {
   try {
-    await fetch(`${BASE_URL}/timer/cancel`, {
+    await apiFetch(`${BASE_URL}/timer/cancel`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: authHeader(),
       body: JSON.stringify({ timerId }),
     });
-    console.log("[Backend] Timer iptal edildi:", timerId);
   } catch (err) {
     console.error("[Backend] Timer iptal hatası:", err);
   }
