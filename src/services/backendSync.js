@@ -116,13 +116,17 @@ export function logout() {
 // Telegram chat ID kaydet
 export async function saveTelegramChatId(chatId) {
   try {
-    await apiFetch(`${BASE_URL}/register`, {
+    const response = await apiFetch(`${BASE_URL}/register`, {
       method: "POST",
       headers: authHeader(),
       body: JSON.stringify({ chatId }),
     });
+    if (!response) return { success: false };
+    const data = await response.json();
+    return data;
   } catch (err) {
     console.error("[Backend] Telegram kayıt hatası:", err);
+    return { success: false };
   }
 }
 

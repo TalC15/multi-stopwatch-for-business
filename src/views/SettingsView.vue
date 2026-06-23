@@ -1,26 +1,55 @@
 <script setup>
-import { ref} from "vue";
+import { ref } from "vue";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
 import { message } from "../composables/message";
+import { saveTelegramChatId } from "@/services/backendSync";
 
 const themeStore = useThemeStore();
 const router = useRouter();
 const stopwatchStore = useStopwatchStore();
 const presetTime = ref("");
 const presetName = ref("");
+const chatId = ref("");
+const telegramLoading = ref(false);
+const telegramSaved = ref(!!localStorage.getItem("telegramChatId"));
 
-function defaultSettings(preset){
-  if(typeof(preset)==="number"){
-    stopwatchStore.duration = preset
-    localStorage.setItem('defaultDuration',JSON.stringify(stopwatchStore.duration))
-    message.success(`varsayılan zaman ${preset} dk olarak ayarlandı`)
+async function saveTelegram() {
+  if (!chatId.value) return;
+  telegramLoading.value = true;
+  
+  const result = await saveTelegramChatId(chatId.value);
+  
+  if (result?.success) {
+    localStorage.setItem('telegramChatId', chatId.value);
+    telegramSaved.value = true;
+    message.success('Telegram bağlandı!');
+  } else {
+    message.warning('Geçersiz Chat ID. Lütfen tekrar dene.');
   }
-  else{
-    stopwatchStore.name = preset
-    localStorage.setItem('defaultName',JSON.stringify(stopwatchStore.name))
-    message.success(`varsayılan isim "${preset}" olarak ayarlandı`)
+  
+  telegramLoading.value = false;
+}
+
+function removeTelegram() {
+  localStorage.removeItem("telegramChatId");
+  telegramSaved.value = false;
+  chatId.value = "";
+}
+
+function defaultSettings(preset) {
+  if (typeof preset === "number") {
+    stopwatchStore.duration = preset;
+    localStorage.setItem(
+      "defaultDuration",
+      JSON.stringify(stopwatchStore.duration),
+    );
+    message.success(`varsayılan zaman ${preset} dk olarak ayarlandı`);
+  } else {
+    stopwatchStore.name = preset;
+    localStorage.setItem("defaultName", JSON.stringify(stopwatchStore.name));
+    message.success(`varsayılan isim "${preset}" olarak ayarlandı`);
   }
 }
 
@@ -30,7 +59,7 @@ function addPresetTime() {
     "presetTimes",
     JSON.stringify(stopwatchStore.presetTimes),
   );
-  message.success('yeni zaman etiketi oluşturuldu')
+  message.success("yeni zaman etiketi oluşturuldu");
   presetTime.value = "";
 }
 
@@ -40,7 +69,7 @@ function addPresetName() {
     "presetNames",
     JSON.stringify(stopwatchStore.presetNames),
   );
-  message.success('yeni isim etiketi oluşturuldu')
+  message.success("yeni isim etiketi oluşturuldu");
   presetName.value = "";
 }
 
@@ -262,7 +291,65 @@ function removePresetName(bIndex) {
           </div>
         </div>
       </div>
-      
+
+      <!-- Telegram Bildirimi -->
+      <div class="flex flex-col gap-3 mt-6 mb-6">
+        <div class="flex items-center gap-3">
+          <div
+            class="w-8 h-8 rounded-lg bg-[var(--color-primary-bg)] flex items-center justify-center"
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M22 2L11 13" />
+              <path d="M22 2L15 22 11 13 2 9l20-7z" />
+            </svg>
+          </div>
+          <span class="font-medium text-[var(--color-text-primary)]"
+            >Telegram Bildirimi</span
+          >
+        </div>
+
+        <div v-if="!telegramSaved" class="flex flex-col gap-2">
+          <p class="text-xs text-[var(--color-text-secondary)]">
+            @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
+            gir.
+          </p>
+          <input
+            v-model="chatId"
+            type="number"
+            placeholder="Chat ID (örn: 8030859580)"
+            class="px-3 py-2 rounded-xl bg-[var(--color-surface)] text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none focus:border-[var(--color-primary)] no-spinner"
+          />
+          <button
+            @click="saveTelegram"
+            :disabled="!chatId || telegramLoading"
+            class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-medium transition active:scale-95 disabled:opacity-40"
+          >
+            {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
+          </button>
+        </div>
+
+        <div v-else class="flex items-center justify-between">
+          <span class="text-xs text-green-500 font-medium"
+            >✓ Telegram bağlı</span
+          >
+          <button
+            @click="removeTelegram"
+            class="text-xs text-[var(--color-text-muted)] underline"
+          >
+            Kaldır
+          </button>
+        </div>
+      </div>
+
       <!-- About Section -->
       <div class="mb-2 ml-1">
         <span
