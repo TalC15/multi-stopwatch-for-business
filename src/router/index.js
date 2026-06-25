@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import { isLoggedIn } from '../services/backendSync'
+import { isLoggedIn,getUser } from '../services/backendSync'
 
 const routes = [
   {
@@ -19,7 +19,19 @@ const routes = [
     name: 'Settings',
     component: () => import('../views/SettingsView.vue'),
     meta: { requiresAuth: true }
-  }
+  },
+  {
+  path: '/manager',
+  name: 'Manager',
+  component: () => import('../views/ManagerView.vue'),
+  meta: { requiresAuth: true, requiresRole: ['manager', 'superadmin'] }
+},
+{
+  path: '/superadmin',
+  name: 'SuperAdmin',
+  component: () => import('../views/SuperAdminView.vue'),
+  meta: { requiresAuth: true, requiresRole: ['superadmin'] }
+}
 ]
 
 const router = createRouter({
@@ -33,7 +45,11 @@ router.beforeEach((to, from) => {
     return '/login'
   } else if (to.meta.guest && isLoggedIn()) {
     return '/'
+  } else if (to.meta.requiresRole) {
+    const user = getUser()
+    if (!user || !to.meta.requiresRole.includes(user.role)) {
+      return '/'
+    }
   }
 })
-
 export default router
