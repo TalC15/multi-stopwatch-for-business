@@ -31,6 +31,12 @@ const routes = [
   name: 'SuperAdmin',
   component: () => import('../views/SuperAdminView.vue'),
   meta: { requiresAuth: true, requiresRole: ['superadmin'] }
+},
+{
+  path: '/profile',
+  name: 'Profile',
+  component: () => import('../views/ProfileView.vue'),
+  meta: { requiresAuth: true }
 }
 ]
 

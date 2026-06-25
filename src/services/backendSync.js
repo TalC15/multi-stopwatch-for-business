@@ -64,7 +64,7 @@ async function refreshAccessToken() {
 }
 
 // Genel fetch — token süresi dolunca otomatik yeniler
-async function apiFetch(url, options = {}) {
+export async function apiFetch(url, options = {}) {
   if (!getAccessToken()) return null;
 
   let response = await fetch(url, options);
@@ -98,7 +98,6 @@ export async function login(username, pin) {
     if (!response.ok) {
       return { success: false, error: data.error };
     }
-
     saveTokens(data.accessToken, data.refreshToken);
     saveUser(data.user);
     return { success: true, user: data.user };

@@ -101,7 +101,7 @@ function removePresetName(bIndex) {
       class="h-14 bg-card border-b border-border px-4 flex items-center justify-between sticky top-0 z-30"
     >
       <button
-        @click="router.back()"
+        @click="router.push('/')"
         class="w-9 h-9 flex items-center justify-center text-primary-light active:scale-90 transition-transform"
       >
         <svg
