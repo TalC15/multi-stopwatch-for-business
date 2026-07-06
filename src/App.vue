@@ -1,5 +1,7 @@
 <script setup>
 import { RouterView } from "vue-router";
+import { connectSocket, disconnectSocket } from './services/socket';
+import { isLoggedIn } from './services/backendSync';
 import AppMessage from "./components/ui/AppMessage.vue";
 import { messageState } from "./composables/message.js";
 import { onMounted } from "vue";
@@ -33,18 +35,19 @@ function unlockAudio() {
 }
 
 onMounted(async () => {
-  // Bildirim izni iste
-  //console.log("[DEBUG] onMounted çalıştı");
-  
   try {
-    //console.log("[DEBUG] izin fonksiyonu çağrılıyor");
     await requestNotificationPermission();
   } catch (err) {
     console.error("[DEBUG] izin hatası:", err);
   }
-  // İlk tıklamada/dokunmada ses motorunu uyandır
+  //ilk tıklamada/dokunmada ses motorunu uyandır
   document.addEventListener("click", unlockAudio, { once: true });
   document.addEventListener("touchstart", unlockAudio, { once: true });
+
+  // Socket bağlantısı
+  if (isLoggedIn()) {
+    connectSocket();
+  }
 });
 </script>
 

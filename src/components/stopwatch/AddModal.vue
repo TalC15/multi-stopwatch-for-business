@@ -1,14 +1,20 @@
 <script setup>
-import { ref, computed } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { message } from "../../composables/message";
+import { apiFetch, getAccessToken, getUser } from "@/services/backendSync";
 
-const props = defineProps(["isOpen", "defaultType"]);
+const props = defineProps(["isOpen", "defaultType", "forceShared"]);
 const emit = defineEmits(["close"]);
 const store = useStopwatchStore();
 
 const presetTimes = store.presetTimes;
 const presetNames = store.presetNames;
+
+const isShared = ref(false);
+const sharedModeAvailable = ref(false);
+
+const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
 const selectPresetTime = (val) => {
   store.duration = val;
@@ -26,13 +32,16 @@ const increment = () => {
   store.duration++;
 };
 
-const save = () => {
-  if (!store.name) return message.warning('isim eklemek iyi bir fikir olabilir');
-  if (!store.duration) return message.warning('süre eklemek iyi bir fikir olabilir');
-  store.addTimer({
+const save = async () => {
+  if (!store.name)
+    return message.warning("isim eklemek iyi bir fikir olabilir");
+  if (!store.duration)
+    return message.warning("süre eklemek iyi bir fikir olabilir");
+  await store.addTimer({
     name: store.name,
     duration: store.duration,
     type: props.defaultType,
+    isShared: isShared.value,
   });
 
   emit("close");
@@ -44,10 +53,45 @@ const save = () => {
   } else {
     message.success(`${store.name} zamanlayıcısı oluşturuldu`);
   }
-  
-  store.name = JSON.parse(localStorage.getItem("defaultName")) || 'timer';
+
+  store.name = JSON.parse(localStorage.getItem("defaultName")) || "timer";
   store.duration = JSON.parse(localStorage.getItem("defaultDuration")) || 5;
+  isShared.value = false; // sıfırla
 };
+
+async function checkSharedMode() {
+  const user = getUser();
+  if (!user?.workspace_id) return;
+
+  const response = await apiFetch(`${BASE_URL}/workspace`, {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${getAccessToken()}`,
+    },
+  });
+
+  if (response) {
+    const data = await response.json();
+    sharedModeAvailable.value = data.workspace?.shared_mode_enabled || false;
+  }
+}
+
+watch(
+  () => props.isOpen,
+  (newVal) => {
+    if (newVal) {
+      checkSharedMode();
+      isShared.value = props.forceShared || false;
+    }
+  },
+);
+
+onMounted(() => {
+  checkSharedMode();
+  if (props.forceShared) {
+    isShared.value = true;
+  }
+});
 </script>
 
 <template>
@@ -140,6 +184,38 @@ const save = () => {
           <div
             class="flex items-center bg-indigo-50 dark:bg-slate-800 rounded-2xl p-2 gap-2"
           >
+            <!-- Ortak Timer Toggle — sadece workspace'de shared mode açıksa görünür -->
+            <div
+              v-if="sharedModeAvailable && !forceShared"
+              class="flex items-center justify-between ..."
+            >
+              <span class="text-sm font-bold text-slate-700 dark:text-slate-300"
+                >Ortak Timer</span
+              >
+              <button
+                @click="isShared = !isShared"
+                :class="[
+                  'w-12 h-7 rounded-full relative transition-colors duration-300',
+                  isShared ? 'bg-indigo-700' : 'bg-slate-300 dark:bg-slate-600',
+                ]"
+              >
+                <div
+                  :class="[
+                    'absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300',
+                    isShared
+                      ? 'translate-x-5 left-0.5'
+                      : 'translate-x-0 left-0.5',
+                  ]"
+                ></div>
+              </button>
+            </div>
+            <div
+              v-else-if="forceShared"
+              class="text-xs text-center text-indigo-500 font-medium"
+            >
+              Bu timer otomatik olarak ortak listeye eklenecek
+            </div>
+
             <!-- Minus -->
             <button
               @click="decrement"

@@ -36,7 +36,7 @@
     </div>
     <div class="flex items-center justify-between">
       <button
-        @click="timer.isPay=true"
+        @click="store.updateIsPay(timer.id,!timer.isPay)"
         class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -161,7 +161,7 @@
 
     <div class="flex items-center justify-between">
       <button
-        @click="timer.isPay=true"
+        @click="store.updateIsPay(timer.id,!timer.isPay)"
         class="flex items-center gap-2 rounded-lg px-3 py-2 -mt-3 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >

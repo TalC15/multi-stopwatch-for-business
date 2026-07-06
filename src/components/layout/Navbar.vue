@@ -1,9 +1,15 @@
 <script setup>
-import { logout, getUser } from '../../services/backendSync';
+import { logout as apiLogout, getUser } from '../../services/backendSync';
+import { disconnectSocket } from '../../services/socket';
 
 defineEmits(['open-menu']);
 
 const user = getUser();
+
+function logout() {
+  disconnectSocket();
+  apiLogout();
+}
 </script>
 
 <template>

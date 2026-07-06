@@ -1,5 +1,5 @@
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
-
+import router from '../router'
 // Token yönetimi
 export function getAccessToken() {
   return localStorage.getItem("accessToken");
@@ -76,7 +76,7 @@ export async function apiFetch(url, options = {}) {
       response = await fetch(url, options);
     } else {
       clearTokens();
-      window.location.reload();
+      router.push('/login');
       return null;
     }
   }
@@ -129,8 +129,57 @@ export async function saveTelegramChatId(chatId) {
   }
 }
 
+// Timer DB'ye kaydet
+export async function dbCreateTimer(timer) {
+  const response = await apiFetch(`${BASE_URL}/timers`, {
+    method: "POST",
+    headers: authHeader(),
+    body: JSON.stringify({
+      id: timer.id,
+      name: timer.name,
+      type: timer.type,
+      targetMinutes: timer.targetMinutes,
+      isShared: timer.isShared || false,
+    }),
+  });
+  if (!response) return null;
+  return await response.json();
+}
+
+// Timer güncelle
+export async function dbUpdateTimer(timerId, updates) {
+  const response = await apiFetch(`${BASE_URL}/timers/${timerId}`, {
+    method: "PATCH",
+    headers: authHeader(),
+    body: JSON.stringify(updates),
+  });
+  if (!response) return null;
+  return await response.json();
+}
+
+// Timer sil (soft delete)
+export async function dbDeleteTimer(timerId) {
+  const response = await apiFetch(`${BASE_URL}/timers/${timerId}`, {
+    method: "DELETE",
+    headers: authHeader(),
+  });
+  if (!response) return null;
+  return await response.json();
+}
+
+// Ortak timer'ları getir
+export async function dbGetSharedTimers() {
+  const response = await apiFetch(`${BASE_URL}/timers/shared`, {
+    headers: authHeader(),
+  });
+  if (!response) return [];
+  const data = await response.json();
+  return data.timers || [];
+}
+
 // Timer başlat
 export async function syncTimerStart(timer) {
+
   const user = getUser();
   if (!user) return;
 
@@ -155,7 +204,6 @@ export async function syncTimerStart(timer) {
       body: JSON.stringify({
         timerId: timer.id,
         timerName: timer.name,
-        timerIsPay: timer.isPay,
         endsAt,
       }),
     });
