@@ -266,8 +266,7 @@ const props = defineProps(["timer"]);
 const store = useStopwatchStore();
 const pausedCount = ref(localStorage.getItem(`pausedCount${props.timer.id}`) || 0,);
 const audioRadar = new Audio(radarAlarm)
-  const audioDigital = new Audio(digitalAlarm)
-
+const audioDigital = new Audio(digitalAlarm)
 const isReachedTime = computed(()=>{
   return props.timer.reachedTarget
 })

@@ -86,12 +86,7 @@ watch(
   },
 );
 
-onMounted(() => {
-  checkSharedMode();
-  if (props.forceShared) {
-    isShared.value = true;
-  }
-});
+onMounted(() =>checkSharedMode());
 </script>
 
 <template>

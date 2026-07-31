@@ -13,6 +13,7 @@ const themeStore = useThemeStore();
 const activeTab = ref("up");
 const isDrawerOpen = ref(false);
 const isModalOpen = ref(false);
+const isPausedAll = ref(false)
 
 const filteredTimers = computed(() =>
   store.stopwatches.filter((t) => t.type === activeTab.value && !t.isShared),
@@ -21,6 +22,17 @@ const filteredTimers = computed(() =>
 const sharedTimers = computed(() =>
   store.stopwatches.filter((t) => t.isShared),
 );
+
+function allTimersPause(){
+  if(isPausedAll.value){
+    filteredTimers.value.map((val)=>store.startTimer(val.id))
+    isPausedAll.value = false
+  }
+  else{
+    filteredTimers.value.map((val)=>store.pauseTimer(val.id,0)) //şuanlık ikinci parametre sıfır ancak ileride düzeltilmeli 
+    isPausedAll.value = true
+  }
+}
 
 onMounted(() => themeStore.applyTheme());
 </script>
@@ -44,6 +56,9 @@ onMounted(() => themeStore.applyTheme());
         <h2 class="text-2xl font-black text-[var(--color-text-primary)]">
           {{ activeTab === "up" ? "Active Timers" : "Active Countdowns" }}
         </h2>
+        <button @click="allTimersPause">
+          {{ isPausedAll ? "hepsini devam ettir" : "hepsini durdur" }}
+        </button>
         <button
           v-if="activeTab === 'up'"
           class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
