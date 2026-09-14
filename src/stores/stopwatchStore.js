@@ -147,8 +147,10 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     startTick();
 
     if (isLoggedIn()) {
+      // Mutlak bitiş zamanı — her cihaz kendi saatine göre buradan geriye
+      // doğru hesap yapar, cihaza özel Date.now() değerini asla birbirine göndermeyiz.
       let endsAt = null;
-      if (timer.type === "down") {
+      if (timer.targetMinutes) {
         const remaining =
           timer.targetMinutes * 60 * 1000 - timer.accumulatedTime;
         endsAt = new Date(Date.now() + remaining).toISOString();
@@ -161,7 +163,14 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       });
 
       if (timer.isShared) {
-        emitTimerEvent("updated", timer);
+        // Diğer cihazlara SADECE senkronize edilecek bilgiyi gönder.
+        // startTime/accumulatedTime bu cihaza özeldir, gönderilmez.
+        emitTimerEvent("updated", {
+          id: timer.id,
+          status: timer.status,
+          endsAt,
+          accumulatedTimeAtStart: timer.accumulatedTime,
+        });
       }
     }
   };
@@ -184,7 +193,12 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
         });
 
         if (timer.isShared) {
-          emitTimerEvent("updated", timer);
+          emitTimerEvent("updated", {
+            id: timer.id,
+            status: timer.status,
+            endsAt: null,
+            accumulatedTimeAtStart: timer.accumulatedTime,
+          });
         }
       }
     }
@@ -216,11 +230,12 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     if (isLoggedIn()) {
       dbUpdateTimer(id, { is_pay: isPay });
       if (timer.isShared) {
-        emitTimerEvent("updated", timer);
+        emitTimerEvent("updated", { id: timer.id, isPay });
       }
     }
   };
   // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
+    // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
   onTimerEvent(({ event, data }) => {
     if (event === "created") {
       // Zaten varsa ekleme
@@ -229,7 +244,45 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       }
     } else if (event === "updated") {
       const timer = stopwatches.value.find((t) => t.id === data.id);
-      if (timer) Object.assign(timer, data);
+      if (!timer) return;
+
+      // KRİTİK: startTime / accumulatedTime cihaza özeldir, ASLA başka
+      // bir cihazdan gelen değerle ezilmez. Sadece "veri" alanları kopyalanır;
+      // zaman ise mutlak endsAt'ten bu cihazın kendi saatine göre yeniden kurulur.
+      if (data.status !== undefined) timer.status = data.status;
+      if (data.isPay !== undefined) timer.isPay = data.isPay;
+      if (data.reachedTarget !== undefined)
+        timer.reachedTarget = data.reachedTarget;
+
+      if (data.status === "running" && data.endsAt) {
+        // Diğer cihaz timer'ı başlattı → bu cihaz kendi startTime'ını,
+        // gönderilen mutlak bitiş zamanından geriye doğru hesaplar.
+        const totalMs = (timer.targetMinutes || 0) * 60 * 1000;
+        const endsAtMs = new Date(data.endsAt).getTime();
+        const remaining = endsAtMs - Date.now();
+        timer.accumulatedTime = totalMs - remaining;
+        timer.startTime = Date.now();
+        startTick();
+      } else if (data.status === "running") {
+        // Hedefsiz (targetMinutes yok) count-up — mutlak endsAt hesaplanamaz,
+        // bu cihaz kendi accumulatedTime'ından devam eder.
+        if (data.accumulatedTimeAtStart !== undefined) {
+          timer.accumulatedTime = data.accumulatedTimeAtStart;
+        }
+        timer.startTime = Date.now();
+        startTick();
+      } else if (data.status === "paused") {
+        // Diğer cihaz durdurdu → bu cihazda da yerel start/accumulated durur.
+        if (
+          data.accumulatedTimeAtStart !== undefined &&
+          timer.status === "paused"
+        ) {
+          timer.accumulatedTime = data.accumulatedTimeAtStart;
+        } else if (timer.startTime) {
+          timer.accumulatedTime += Date.now() - timer.startTime;
+        }
+        timer.startTime = null;
+      }
     } else if (event === "deleted") {
       stopwatches.value = stopwatches.value.filter((t) => t.id !== data.id);
     }
