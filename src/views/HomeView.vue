@@ -34,7 +34,10 @@ function allTimersPause(){
   }
 }
 
-onMounted(() => themeStore.applyTheme());
+onMounted(() => {
+  themeStore.applyTheme() 
+  store.loadSharedTimers();
+});
 </script>
 
 <template>

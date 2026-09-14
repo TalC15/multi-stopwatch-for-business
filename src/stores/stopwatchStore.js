@@ -10,6 +10,7 @@ import {
   dbCreateTimer,
   dbUpdateTimer,
   dbDeleteTimer,
+  dbGetSharedTimers,
 } from "../services/backendSync";
 import { emitTimerEvent, onTimerEvent } from "../services/socket";
 
@@ -160,6 +161,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       dbUpdateTimer(timer.id, {
         status: "running",
         ends_at: endsAt,
+        accumulated_ms: timer.accumulatedTime,
       });
 
       if (timer.isShared) {
@@ -190,6 +192,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
         dbUpdateTimer(timer.id, {
           status: "paused",
           paused_count: pausedCount,
+          accumulated_ms: timer.accumulatedTime,
         });
 
         if (timer.isShared) {
@@ -288,6 +291,65 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     }
   });
 
+  // ─── DB'den ortak timer'ları yükle (sayfa açılışında) ────────────────────
+  const loadSharedTimers = async () => {
+    if (!isLoggedIn()) return;
+    const dbTimers = await dbGetSharedTimers();
+    if (!dbTimers || dbTimers.length === 0) return;
+
+    const now = Date.now();
+
+    dbTimers.forEach((dbTimer) => {
+      // Zaten local'de varsa dokunma — canlı/güncel veri DB'den daha değerli
+      if (stopwatches.value.find((t) => t.id === dbTimer.id)) return;
+
+      const targetMinutes = dbTimer.target_minutes
+        ? Number(dbTimer.target_minutes)
+        : null;
+      const accumulatedMs = dbTimer.accumulated_ms || 0;
+
+      const timer = {
+        id: dbTimer.id,
+        name: dbTimer.name,
+        targetMinutes,
+        type: dbTimer.type,
+        isPay: dbTimer.is_pay || false,
+        isShared: true,
+        status: dbTimer.status === "running" ? "paused" : dbTimer.status,
+        startTime: null,
+        accumulatedTime: accumulatedMs,
+        elapsed: accumulatedMs,
+        remaining:
+          dbTimer.type === "down" && targetMinutes
+            ? Math.max(targetMinutes * 60 * 1000 - accumulatedMs, 0)
+            : null,
+        reachedTarget: false,
+      };
+
+      // running olarak DB'de kayıtlıysa, ends_at üzerinden bu cihazın
+      // kendi saatine göre yeniden hesapla ve gerçekten çalıştır.
+      if (dbTimer.status === "running" && dbTimer.ends_at) {
+        const endsAtMs = new Date(dbTimer.ends_at).getTime();
+        const remaining = endsAtMs - now;
+        if (remaining > 0 || dbTimer.type === "up") {
+          timer.status = "running";
+          timer.startTime = now;
+          if (targetMinutes) {
+            timer.accumulatedTime = targetMinutes * 60 * 1000 - remaining;
+          }
+        } else {
+          timer.status = "expired";
+        }
+      }
+
+      stopwatches.value.push(timer);
+    });
+
+    if (stopwatches.value.some((t) => t.status === "running")) {
+      startTick();
+    }
+  };
+
   // ─── Rehydrate ────────────────────────────────────────────────────────────
   const rehydrateTimers = () => {
     const now = Date.now();
@@ -338,5 +400,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     updateIsPay,
     startTick,
     stopTick,
+    loadSharedTimers,
   };
 });
