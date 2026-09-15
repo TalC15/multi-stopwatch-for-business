@@ -36,7 +36,7 @@
     </div>
     <div class="flex items-center justify-between">
       <button
-        @click="store.updateIsPay(timer.id,!timer.isPay)"
+        @click="store.updateIsPay(timer.id, !timer.isPay)"
         class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -107,7 +107,7 @@
         {{ timer.status === "running" ? "Pause" : "Start" }}
       </button>
       <button
-        @click="deleteAndStop(timer,'kronometresi')"
+        @click="requestDelete(timer, 'kronometresi')"
         :class="[
           'w-12 h-12 rounded-2xl flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -161,7 +161,7 @@
 
     <div class="flex items-center justify-between">
       <button
-        @click="store.updateIsPay(timer.id,!timer.isPay)"
+        @click="store.updateIsPay(timer.id, !timer.isPay)"
         class="flex items-center gap-2 rounded-lg px-3 py-2 -mt-3 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -231,7 +231,7 @@
       </button>
 
       <button
-        @click="deleteAndStop(timer,'zamanlayıcısı')"
+        @click="requestDelete(timer, 'zamanlayıcısı')"
         :class="[
           'w-10 h-10 flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -253,32 +253,44 @@
       </button>
     </div>
   </div>
+
+  <ConfirmModal
+    :isOpen="confirmOpen"
+    title="Ortak timer'ı sil"
+    message="Bu ortak bir timer. Silme işlemi workspace'teki herkesi etkileyecek. Emin misiniz?"
+    confirmText="Sil"
+    cancelText="Vazgeç"
+    @confirm="confirmDelete"
+    @cancel="cancelDelete"
+  />
 </template>
 
 <script setup>
 import { ref, computed, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { hapticTap } from "../../utils/haptics";
-import radarAlarm from '../../sounds/radar-alarm.mp3';
-import digitalAlarm from '../../sounds/digital-alarm.mp3';
+import radarAlarm from "../../sounds/radar-alarm.mp3";
+import digitalAlarm from "../../sounds/digital-alarm.mp3";
+import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 
 const props = defineProps(["timer"]);
 const store = useStopwatchStore();
-const pausedCount = ref(localStorage.getItem(`pausedCount${props.timer.id}`) || 0,);
-const audioRadar = new Audio(radarAlarm)
-const audioDigital = new Audio(digitalAlarm)
-const isReachedTime = computed(()=>{
-  return props.timer.reachedTarget
-})
+const pausedCount = ref(
+  localStorage.getItem(`pausedCount${props.timer.id}`) || 0,
+);
+const audioRadar = new Audio(radarAlarm);
+const audioDigital = new Audio(digitalAlarm);
+const isReachedTime = computed(() => {
+  return props.timer.reachedTarget;
+});
 
-watch(isReachedTime,(newValue)=>{
-  if(newValue && props.timer.type === 'up'){
-    audioRadar.play()
+watch(isReachedTime, (newValue) => {
+  if (newValue && props.timer.type === "up") {
+    audioRadar.play();
+  } else if (newValue && props.timer.type === "down") {
+    audioDigital.play();
   }
-  else if(newValue && props.timer.type === 'down'){
-    audioDigital.play()
-  }
-})
+});
 
 const displayTime = computed(() => {
   let ms;
@@ -330,18 +342,43 @@ const toggleTimer = () => {
     pausedCount.value = localStorage.getItem(`pausedCount${props.timer.id}`);
     audioRadar.pause();
     audioDigital.pause();
-    hapticTap()
+    hapticTap();
   } else {
     store.startTimer(props.timer.id);
   }
 };
 
-function deleteAndStop(timer,deger) {
+function deleteAndStop(timer, deger) {
   audioRadar.pause();
   audioDigital.pause();
   audioRadar.currentTime = 0;
   audioDigital.currentTime = 0;
   store.deleteTimer(timer, deger);
+}
+
+const confirmOpen = ref(false);
+const pendingDelete = ref(null);
+
+function requestDelete(timer, deger) {
+  if (timer.isShared) {
+    pendingDelete.value = { timer, deger };
+    confirmOpen.value = true;
+  } else {
+    deleteAndStop(timer, deger);
+  }
+}
+
+function confirmDelete() {
+  if (pendingDelete.value) {
+    deleteAndStop(pendingDelete.value.timer, pendingDelete.value.deger);
+  }
+  confirmOpen.value = false;
+  pendingDelete.value = null;
+}
+
+function cancelDelete() {
+  confirmOpen.value = false;
+  pendingDelete.value = null;
 }
 
 const cardStyle = computed(() => {
