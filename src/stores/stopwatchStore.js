@@ -207,16 +207,22 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     }
   };
 
-  const deleteTimer = (timer, deger) => {
+   const deleteTimer = (timer, deger) => {
+    console.log('[DEBUG-DELETE] deleteTimer çağrıldı, id:', timer.id, 'isShared:', timer.isShared, 'isLoggedIn:', isLoggedIn());
     cancelTimerSound(timer.id);
 
     if (isLoggedIn()) {
+      console.log('[DEBUG-DELETE] isLoggedIn true, syncTimerCancel + dbDeleteTimer çağrılıyor');
       syncTimerCancel(timer.id);
-      dbDeleteTimer(timer.id);
+      dbDeleteTimer(timer.id).then((res) => {
+        console.log('[DEBUG-DELETE] dbDeleteTimer sonucu:', JSON.stringify(res));
+      });
 
       if (timer.isShared) {
         emitTimerEvent("deleted", { id: timer.id });
       }
+    } else {
+      console.log('[DEBUG-DELETE] isLoggedIn FALSE, hiçbir DB isteği atılmadı');
     }
 
     stopwatches.value = stopwatches.value.filter((t) => t.id !== timer.id);
