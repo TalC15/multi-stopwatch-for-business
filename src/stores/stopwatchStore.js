@@ -207,11 +207,12 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     }
   };
 
-   const deleteTimer = (timer, deger) => {
+  const deleteTimer = (timer, deger) => {
     cancelTimerSound(timer.id);
 
     if (isLoggedIn()) {
       syncTimerCancel(timer.id);
+      dbDeleteTimer(timer.id);
 
       if (timer.isShared) {
         emitTimerEvent("deleted", { id: timer.id });
