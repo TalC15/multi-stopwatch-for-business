@@ -159,12 +159,16 @@ export async function dbUpdateTimer(timerId, updates) {
 
 // Timer sil (soft delete)
 export async function dbDeleteTimer(timerId) {
+  console.log('[DEBUG-DBDELETE] çağrıldı, timerId:', timerId, 'url:', `${BASE_URL}/timers/${timerId}`);
   const response = await apiFetch(`${BASE_URL}/timers/${timerId}`, {
     method: "DELETE",
     headers: authHeader(),
   });
+  console.log('[DEBUG-DBDELETE] apiFetch sonucu var mı:', !!response, 'status:', response ? response.status : 'null (response yok)');
   if (!response) return null;
-  return await response.json();
+  const json = await response.json();
+  console.log('[DEBUG-DBDELETE] response body:', JSON.stringify(json));
+  return json;
 }
 
 // Ortak timer'ları getir
