@@ -256,8 +256,8 @@
 
   <ConfirmModal
     :isOpen="confirmOpen"
-    title="Ortak timer'ı sil"
-    message="Bu ortak bir timer. Silme işlemi workspace'teki herkesi etkileyecek. Emin misiniz?"
+    title="Ortak zamanlayıcıyı sil"
+    message="Bu ortak bir zamanlayıcı. Silme işlemi çalışma gurubundaki herkesi etkileyecek. Emin misiniz?"
     confirmText="Sil"
     cancelText="Vazgeç"
     @confirm="confirmDelete"

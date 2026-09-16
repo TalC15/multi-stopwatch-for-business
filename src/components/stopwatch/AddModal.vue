@@ -34,9 +34,11 @@ const increment = () => {
 
 const save = async () => {
   if (!store.name)
-    return message.warning("isim eklemek iyi bir fikir olabilir");
+    return message.warning("isim eklemek zorunludur");
   if (!store.duration)
-    return message.warning("süre eklemek iyi bir fikir olabilir");
+    return message.warning("süre belirtmek zorunludur");
+  if(props.forceShared.value && !sharedModeAvailable.value)
+    return message.warning("yönetici izni yok")
   await store.addTimer({
     name: store.name,
     duration: store.duration,
@@ -206,9 +208,9 @@ onMounted(() =>checkSharedMode());
             </div>
             <div
               v-else-if="forceShared"
-              class="text-xs text-center text-indigo-500 font-medium"
+              class="wrap-break-word text-xs text-center text-indigo-500 font-medium"
             >
-              Bu timer otomatik olarak ortak listeye eklenecek
+              Bu kronometre otomatik olarak <br/> ortak listeye eklenecek
             </div>
 
             <!-- Minus -->
@@ -258,9 +260,9 @@ onMounted(() =>checkSharedMode());
       </div>
 
       <!-- Create Button -->
+
       <button
         @click="save"
-        :disabled="!store.name"
         class="w-full mt-7 py-4 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-600 text-white rounded-2xl font-black text-lg shadow-lg shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
       >
         <svg
@@ -282,8 +284,11 @@ onMounted(() =>checkSharedMode());
             d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
           />
         </svg>
-        Create Stopwatch
+        {{props.forceShared===true ? 'ortak kronometre oluştur' : defaultType==='up' ? 'kronometre oluştur' : defaultType==='down' ? 'sayaç oluştur'  : 'oluştur'}}
       </button>
+
+
+      
     </div>
   </div>
 </template>

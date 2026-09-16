@@ -54,190 +54,195 @@ onMounted(() => {
     <!-- Main Content -->
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
       <!-- Page Header -->
-      <div class="flex justify-between items-center mb-5">
-        <h2 class="text-2xl font-black text-[var(--color-text-primary)]">
-          {{ activeTab === "up" ? "Active Timers" : "Active Countdowns" }}
+      <div class="flex items-center mb-5">
+        <h2 class="truncate text-2xl font-black text-[var(--color-text-primary)]">
+          {{ activeTab === "up" ? "Kronometreler" :  activeTab === 'down' ? "Sayaçlar" : 'Ortak' }}
         </h2>
-        <button @click="allTimersPause">
-          <svg
-            v-if="isPausedAll"
-            xmlns="http://www.w3.org/2000/svg"
-            width="45"
-            height="45"
-            viewBox="0 0 512 512"
-            fill="none"
+        <div class="ml-auto flex items-center gap-4">
+          <button
+            class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
+            @click="allTimersPause"
           >
-            <g
-              stroke="#4F46E5"
-              stroke-width="16"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            <svg
+              v-if="isPausedAll"
+              xmlns="http://www.w3.org/2000/svg"
+              width="45"
+              height="45"
+              viewBox="0 0 512 512"
+              fill="none"
             >
-              <!-- SOL KRONOMETRE -->
-
-              <circle cx="132" cy="290" r="82" />
-
-              <path d="M116 208V184H148V208" />
-
-              <path d="M132 249V290L157 308" />
-
-              <path d="M132 222V232" />
-
-              <path d="M132 348V358" />
-
-              <path d="M74 290H84" />
-
-              <path d="M180 290H190" />
-
-              <!-- SAĞ KRONOMETRE -->
-
-              <circle cx="380" cy="290" r="82" />
-
-              <path d="M364 208V184H396V208" />
-
-              <path d="M380 249V290L405 308" />
-
-              <path d="M380 222V232" />
-
-              <path d="M380 348V358" />
-
-              <path d="M322 290H332" />
-
-              <path d="M428 290H438" />
-
-              <!-- ORTADAKİ BÜYÜK KRONOMETRE -->
-
-              <circle cx="256" cy="270" r="116" fill="white" />
-
-              <circle cx="256" cy="270" r="108" />
-
-              <path d="M232 162V126H280V162" />
-
-              <path d="M256 204V270L306 306" />
-
-              <path d="M256 184V196" />
-
-              <path d="M256 344V356" />
-
-              <path d="M190 270H202" />
-
-              <path d="M310 270H322" />
-
-              <!-- TÜM KRONOMETRELERİ BAŞLAT -->
-
-              <circle
-                cx="356"
-                cy="374"
-                r="72"
-                fill="#4F46E5"
+              <g
                 stroke="#4F46E5"
-              />
+                stroke-width="16"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <!-- SOL KRONOMETRE -->
 
-              <!-- SADECE BU KISIM DEĞİŞTİ: ■ → ▶ -->
+                <circle cx="132" cy="290" r="82" />
 
-              <path
-                d="M342 334L342 414L398 374L342 334Z"
-                fill="white"
-                stroke="none"
-              />
-            </g>
-          </svg>
-          <svg
-            v-else
-            xmlns="http://www.w3.org/2000/svg"
-            width="45"
-            height="45"
-            viewBox="0 0 512 512"
-            fill="none"
+                <path d="M116 208V184H148V208" />
+
+                <path d="M132 249V290L157 308" />
+
+                <path d="M132 222V232" />
+
+                <path d="M132 348V358" />
+
+                <path d="M74 290H84" />
+
+                <path d="M180 290H190" />
+
+                <!-- SAĞ KRONOMETRE -->
+
+                <circle cx="380" cy="290" r="82" />
+
+                <path d="M364 208V184H396V208" />
+
+                <path d="M380 249V290L405 308" />
+
+                <path d="M380 222V232" />
+
+                <path d="M380 348V358" />
+
+                <path d="M322 290H332" />
+
+                <path d="M428 290H438" />
+
+                <!-- ORTADAKİ BÜYÜK KRONOMETRE -->
+
+                <circle cx="256" cy="270" r="116" fill="white" />
+
+                <circle cx="256" cy="270" r="108" />
+
+                <path d="M232 162V126H280V162" />
+
+                <path d="M256 204V270L306 306" />
+
+                <path d="M256 184V196" />
+
+                <path d="M256 344V356" />
+
+                <path d="M190 270H202" />
+
+                <path d="M310 270H322" />
+
+                <!-- TÜM KRONOMETRELERİ BAŞLAT -->
+
+                <circle
+                  cx="356"
+                  cy="374"
+                  r="72"
+                  fill="#4F46E5"
+                  stroke="#4F46E5"
+                />
+
+                <!-- SADECE BU KISIM DEĞİŞTİ: ■ → ▶ -->
+
+                <path
+                  d="M342 334L342 414L398 374L342 334Z"
+                  fill="white"
+                  stroke="none"
+                />
+              </g>
+            </svg>
+            <svg
+              v-else
+              xmlns="http://www.w3.org/2000/svg"
+              width="45"
+              height="45"
+              viewBox="0 0 512 512"
+              fill="none"
+            >
+              <g
+                stroke="#4F46E5"
+                stroke-width="16"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <!-- SOL KRONOMETRE -->
+
+                <circle cx="132" cy="290" r="82" />
+
+                <path d="M116 208V184H148V208" />
+
+                <path d="M132 249V290L157 308" />
+
+                <path d="M132 222V232" />
+
+                <path d="M132 348V358" />
+
+                <path d="M74 290H84" />
+
+                <path d="M180 290H190" />
+
+                <!-- SAĞ KRONOMETRE -->
+
+                <circle cx="380" cy="290" r="82" />
+
+                <path d="M364 208V184H396V208" />
+
+                <path d="M380 249V290L405 308" />
+
+                <path d="M380 222V232" />
+
+                <path d="M380 348V358" />
+
+                <path d="M322 290H332" />
+
+                <path d="M428 290H438" />
+
+                <!-- ORTADAKİ BÜYÜK KRONOMETRE -->
+
+                <circle cx="256" cy="270" r="116" fill="white" />
+
+                <circle cx="256" cy="270" r="108" />
+
+                <path d="M232 162V126H280V162" />
+
+                <path d="M256 204V270L306 306" />
+
+                <path d="M256 184V196" />
+
+                <path d="M256 344V356" />
+
+                <path d="M190 270H202" />
+
+                <path d="M310 270H322" />
+
+                <!-- TÜM KRONOMETRELERİ DURDUR -->
+
+                <circle
+                  cx="356"
+                  cy="374"
+                  r="72"
+                  fill="#4F46E5"
+                  stroke="#4F46E5"
+                />
+
+                <rect
+                  x="326"
+                  y="344"
+                  width="60"
+                  height="60"
+                  rx="8"
+                  fill="white"
+                  stroke="none"
+                />
+              </g>
+            </svg>
+          </button>
+          <button
+            class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
           >
-            <g
-              stroke="#4F46E5"
-              stroke-width="16"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <!-- SOL KRONOMETRE -->
-
-              <circle cx="132" cy="290" r="82" />
-
-              <path d="M116 208V184H148V208" />
-
-              <path d="M132 249V290L157 308" />
-
-              <path d="M132 222V232" />
-
-              <path d="M132 348V358" />
-
-              <path d="M74 290H84" />
-
-              <path d="M180 290H190" />
-
-              <!-- SAĞ KRONOMETRE -->
-
-              <circle cx="380" cy="290" r="82" />
-
-              <path d="M364 208V184H396V208" />
-
-              <path d="M380 249V290L405 308" />
-
-              <path d="M380 222V232" />
-
-              <path d="M380 348V358" />
-
-              <path d="M322 290H332" />
-
-              <path d="M428 290H438" />
-
-              <!-- ORTADAKİ BÜYÜK KRONOMETRE -->
-
-              <circle cx="256" cy="270" r="116" fill="white" />
-
-              <circle cx="256" cy="270" r="108" />
-
-              <path d="M232 162V126H280V162" />
-
-              <path d="M256 204V270L306 306" />
-
-              <path d="M256 184V196" />
-
-              <path d="M256 344V356" />
-
-              <path d="M190 270H202" />
-
-              <path d="M310 270H322" />
-
-              <!-- TÜM KRONOMETRELERİ DURDUR -->
-
-              <circle
-                cx="356"
-                cy="374"
-                r="72"
-                fill="#4F46E5"
-                stroke="#4F46E5"
-              />
-
-              <rect
-                x="326"
-                y="344"
-                width="60"
-                height="60"
-                rx="8"
-                fill="white"
-                stroke="none"
-              />
-            </g>
-          </svg>
-        </button>
-        <button
-          class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
-        >
-          <span class="flex flex-col items-center gap-[3px]">
-            <span class="block h-[2px] w-4 rounded-full bg-current"></span>
-            <span class="block h-[2px] w-3 rounded-full bg-current"></span>
-            <span class="block h-[2px] w-2 rounded-full bg-current"></span>
-          </span>
-          Filter
-        </button>
+            <span class="flex flex-col items-center gap-[3px]">
+              <span class="block h-[2px] w-4 rounded-full bg-current"></span>
+              <span class="block h-[2px] w-3 rounded-full bg-current"></span>
+              <span class="block h-[2px] w-2 rounded-full bg-current"></span>
+            </span>
+            Filter
+          </button>
+        </div>
       </div>
 
       <!-- Timer Cards -->
@@ -279,10 +284,10 @@ onMounted(() => {
           <p class="text-sm font-semibold text-[var(--color-text-muted)]">
             {{
               activeTab === "shared"
-                ? "Henüz ortak timer yok"
+                ? "Henüz ortak kronometre veya sayaç yok"
                 : activeTab === "up"
-                  ? "No active timers"
-                  : "No active countdowns"
+                  ? "Henüz aktif kronometre yok"
+                  : "Henüz aktif sayaç yok"
             }}
           </p>
         </div>
@@ -427,7 +432,7 @@ onMounted(() => {
     <!-- Add Modal -->
     <AddModal
       :isOpen="isModalOpen"
-      :defaultType="activeTab === 'shared' ? 'up' : activeTab"
+      :defaultType="activeTab ==='shared' ? 'up' : activeTab"
       :forceShared="activeTab === 'shared'"
       @close="isModalOpen = false"
     />
