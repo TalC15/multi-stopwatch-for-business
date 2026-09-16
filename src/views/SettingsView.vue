@@ -6,6 +6,7 @@ import { useRouter } from "vue-router";
 import { message } from "../composables/message";
 import { saveTelegramChatId } from "@/services/backendSync";
 
+const store = useStopwatchStore()
 const themeStore = useThemeStore();
 const router = useRouter();
 const stopwatchStore = useStopwatchStore();
@@ -54,6 +55,9 @@ function defaultSettings(preset) {
 }
 
 function addPresetTime() {
+  const isPresetTimes=store?.presetTimes.map(a=>a)
+  if(isPresetTimes?.includes(presetTime.value))
+    return message.warning('Bu süre zaten mevcut')
   stopwatchStore.presetTimes.push(presetTime.value);
   localStorage.setItem(
     "presetTimes",
@@ -64,6 +68,9 @@ function addPresetTime() {
 }
 
 function addPresetName() {
+  const isPresetNames = store?.presetNames.map(a=>a)
+  if(isPresetNames?.includes(presetName.value))
+    return message.warning('Bu isim zaten mevcut')
   stopwatchStore.presetNames.push(presetName.value);
   localStorage.setItem(
     "presetNames",

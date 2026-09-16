@@ -8,19 +8,19 @@ let timer = null
 
 export const message = {
   success(text) {
-    show(text)
+    show(text,'success')
   },
 
   error(text) {
-    show(text)
+    show(text,'error')
   },
 
   warning(text) {
-    show(text)
+    show(text,'warning')
   },
 }
 
-function show(text, type = 'success') {
+function show(text,type) {
   const id = Date.now() + Math.random()
 
   messageState.messages.push({

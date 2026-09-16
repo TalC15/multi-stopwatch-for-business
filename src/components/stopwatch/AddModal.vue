@@ -37,8 +37,12 @@ const save = async () => {
     return message.warning("isim eklemek zorunludur");
   if (!store.duration)
     return message.warning("süre belirtmek zorunludur");
-  if(props.forceShared.value && !sharedModeAvailable.value)
+  if(props.forceShared && !sharedModeAvailable.value)
     return message.warning("yönetici izni yok")
+  const isStopwatchNames = store?.stopwatches.map(a=>a.name)
+  if(isStopwatchNames?.includes(store.name))
+    return message.warning("bu isim önceden kullanılmış")
+  console.log(store.name)
   await store.addTimer({
     name: store.name,
     duration: store.duration,
