@@ -5,6 +5,11 @@ import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
 import { message } from "../composables/message";
 import { saveTelegramChatId } from "@/services/backendSync";
+import telegramStep1 from "@/assets/telegram/telegram-step-1.png";
+import telegramStep2 from "@/assets/telegram/telegram-step-2.png";
+import telegramStep3 from "@/assets/telegram/telegram-step-3.png";
+import telegramStep4 from "@/assets/telegram/telegram-step-4.png";
+import telegramStep5 from "@/assets/telegram/telegram-step-5.png";
 
 const store = useStopwatchStore()
 const themeStore = useThemeStore();
@@ -15,6 +20,62 @@ const presetName = ref("");
 const chatId = ref("");
 const telegramLoading = ref(false);
 const telegramSaved = ref(!!localStorage.getItem("telegramChatId"));
+
+const showTelegramHelp = ref(false);
+const currentTelegramStep = ref(0);
+
+const telegramSteps = [
+  {
+    title: "Telegram'ı açın",
+    description: "Telefonunuzda Telegram uygulamasını açın.",
+    image: telegramStep1,
+  },
+  {
+    title: "KeepTime botunu arayın",
+    description:
+      "Telegram'ın arama bölümüne @KeepTimeApp_bot yazın ve KeepTime botunu seçin.",
+    image: telegramStep2,
+  },
+  {
+    title: "/start komutunu gönderin",
+    description:
+      "Bot ile sohbeti açtıktan sonra mesaj bölümüne /start yazıp gönderin.",
+    image: telegramStep3,
+  },
+  {
+    title: "Chat ID'nizi alın",
+    description:
+      "Bot size bir Chat ID gönderecek. Bu numarayı kopyalayın.",
+    image: telegramStep4,
+  },
+  {
+    title: "Chat ID'yi KeepTime'a girin",
+    description:
+      "Kopyaladığınız Chat ID'yi aşağıdaki alana yapıştırın ve Kaydet'e basın.",
+    image: telegramStep5,
+  },
+];
+
+function openTelegramHelp() {
+  currentTelegramStep.value = 0;
+  showTelegramHelp.value = true;
+}
+
+function closeTelegramHelp() {
+  showTelegramHelp.value = false;
+}
+
+function nextTelegramStep() {
+  if (currentTelegramStep.value < telegramSteps.length - 1) {
+    currentTelegramStep.value++;
+  }
+}
+
+function previousTelegramStep() {
+  if (currentTelegramStep.value > 0) {
+    currentTelegramStep.value--;
+  }
+}
 
 async function saveTelegram() {
   if (!chatId.value) return;
@@ -299,63 +360,132 @@ function removePresetName(bIndex) {
         </div>
       </div>
 
-      <!-- Telegram Bildirimi -->
-      <div class="flex flex-col gap-3 mt-6 mb-6">
-        <div class="flex items-center gap-3">
-          <div
-            class="w-8 h-8 rounded-lg bg-[var(--color-primary-bg)] flex items-center justify-center"
-          >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="1.8"
-              stroke-linecap="round"
-              stroke-linejoin="round"
-            >
-              <path d="M22 2L11 13" />
-              <path d="M22 2L15 22 11 13 2 9l20-7z" />
-            </svg>
-          </div>
-          <span class="font-medium text-[var(--color-text-primary)]"
-            >Telegram Bildirimi</span
-          >
-        </div>
-
-        <div v-if="!telegramSaved" class="flex flex-col gap-2">
-          <p class="text-xs text-[var(--color-text-secondary)]">
-            @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
-            gir.
-          </p>
-          <input
-            v-model="chatId"
-            type="number"
-            placeholder="Chat ID (örn: 8030859580)"
-            class="px-3 py-2 rounded-xl bg-[var(--color-surface)] text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none focus:border-[var(--color-primary)] no-spinner"
-          />
-          <button
-            @click="saveTelegram"
-            :disabled="!chatId || telegramLoading"
-            class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-medium transition active:scale-95 disabled:opacity-40"
-          >
-            {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
-          </button>
-        </div>
-
-        <div v-else class="flex items-center justify-between">
-          <span class="text-xs text-green-500 font-medium"
-            >✓ Telegram bağlı</span
-          >
-          <button
-            @click="removeTelegram"
-            class="text-xs text-[var(--color-text-muted)] underline"
-          >
-            Kaldır
-          </button>
-        </div>
+<!-- Telegram Bildirimi -->
+<div class="bg-card rounded-2xl border border-border overflow-hidden mb-6">
+  
+  <!-- Header -->
+  <div class="flex items-center justify-between px-4 py-4">
+    
+    <!-- Sol taraf -->
+    <div class="flex items-center gap-3 min-w-0">
+      <div
+        class="w-8 h-8 shrink-0 rounded-lg
+               bg-primary-bg
+               flex items-center justify-center"
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.8"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          class="text-primary-light"
+        >
+          <path d="M22 2L11 13" />
+          <path d="M22 2L15 22 11 13 2 9l20-7z" />
+        </svg>
       </div>
+
+      <span class="font-medium text-text-primary">
+        Telegram Bildirimi
+      </span>
+    </div>
+
+    <!-- Bilgi butonu -->
+    <button
+      type="button"
+      @click="openTelegramHelp"
+      class="shrink-0 w-9 h-9 ml-3
+             rounded-full
+             flex items-center justify-center
+             cursor-pointer
+             text-[#4F46E5]
+             bg-[#EEF2FF]
+             border border-[#C7D2FE]
+             hover:bg-[#E0E7FF]
+             active:scale-95
+             transition-all duration-200"
+      aria-label="Telegram bağlantısı hakkında bilgi"
+    >
+      <svg
+        width="18"
+        height="18"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <circle cx="12" cy="12" r="9" />
+        <path d="M12 10v6" />
+        <path d="M12 7h.01" />
+      </svg>
+    </button>
+
+  </div>
+
+  <!-- Telegram bağlı değilse -->
+  <div
+    v-if="!telegramSaved"
+    class="px-4 pb-4 flex flex-col gap-2"
+  >
+    <p class="text-xs text-text-secondary">
+      @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni gir.
+    </p>
+
+    <input
+      v-model="chatId"
+      type="number"
+      placeholder="Chat ID (örn: 8030859580)"
+      class="px-3 py-2 rounded-xl
+             bg-surface
+             text-text-primary
+             border border-border
+             text-sm
+             focus:outline-none
+             focus:border-primary
+             no-spinner"
+    />
+
+    <button
+      @click="saveTelegram"
+      :disabled="!chatId || telegramLoading"
+      class="px-4 py-2 rounded-xl
+             bg-indigo-700
+             text-white
+             text-sm font-medium
+             transition
+             active:scale-95
+             disabled:opacity-40"
+    >
+      {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
+    </button>
+  </div>
+
+  <!-- Telegram bağlıysa -->
+  <div
+    v-else
+    class="px-4 pb-4 flex items-center justify-between"
+  >
+    <span class="text-xs text-green-500 font-medium">
+      ✓ Telegram bağlı
+    </span>
+
+    <button
+      @click="removeTelegram"
+      class="text-xs text-text-muted underline"
+    >
+      Kaldır
+    </button>
+  </div>
+
+</div>
+
+        
 
       <!-- About Section -->
       <div class="mb-2 ml-1">
@@ -391,6 +521,269 @@ function removePresetName(bIndex) {
         </div>
       </div>
     </main>
+        <!-- Telegram Help Modal -->
+    <Transition name="telegram-modal">
+      <div
+        v-if="showTelegramHelp"
+        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+      >
+        <!-- Backdrop -->
+        <div
+          class="absolute inset-0 bg-slate-950/60 backdrop-blur-sm"
+          @click="closeTelegramHelp"
+        ></div>
+
+        <!-- Modal -->
+        <div
+          class="relative z-10 w-full max-w-lg max-h-[90vh]
+                 overflow-hidden rounded-3xl
+                 bg-[var(--color-card)]
+                 border border-[var(--color-border)]
+                 shadow-2xl"
+        >
+          <!-- Header -->
+          <div
+            class="flex items-center justify-between px-5 py-4
+                   border-b border-[var(--color-border)]"
+          >
+            <div>
+              <p
+                class="text-[10px] font-black tracking-[0.18em]
+                       uppercase text-[var(--color-text-muted)]"
+              >
+                Telegram Bildirimi
+              </p>
+
+              <h2
+                class="mt-1 text-lg font-bold
+                       text-[var(--color-text-primary)]"
+              >
+                Bildirimleri nasıl bağlarım?
+              </h2>
+            </div>
+
+            <button
+              @click="closeTelegramHelp"
+              class="w-9 h-9 rounded-full
+                     flex items-center justify-center
+                     text-[var(--color-text-secondary)]
+                     hover:bg-black/5 dark:hover:bg-white/5
+                     active:scale-90
+                     transition-all"
+              aria-label="Kapat"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <path d="M18 6L6 18" />
+                <path d="M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <!-- Progress -->
+          <div class="px-5 pt-4">
+            <div class="flex items-center gap-2">
+              <div
+                v-for="(step, index) in telegramSteps"
+                :key="index"
+                class="flex-1 h-1.5 rounded-full overflow-hidden
+                       bg-[var(--color-border)]"
+              >
+                <div
+                  class="h-full rounded-full transition-all duration-300"
+                  :class="
+                    index <= currentTelegramStep
+                      ? 'bg-[#4F46E5] w-full'
+                      : 'w-0'
+                  "
+                ></div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between mt-2">
+              <span
+                class="text-xs font-medium
+                       text-[var(--color-text-secondary)]"
+              >
+                Adım {{ currentTelegramStep + 1 }} / {{ telegramSteps.length }}
+              </span>
+
+              <span
+                class="text-xs font-medium
+                       text-[#4F46E5]"
+              >
+                {{ telegramSteps[currentTelegramStep].title }}
+              </span>
+            </div>
+          </div>
+
+          <!-- Content -->
+          <div class="px-5 pt-4 pb-5 overflow-y-auto max-h-[65vh]">
+            <div
+              class="rounded-2xl overflow-hidden
+                     border border-[var(--color-border)]
+                     bg-[var(--color-surface)]"
+            >
+              <Transition name="step-image" mode="out-in">
+                <img
+                  :key="currentTelegramStep"
+                  :src="telegramSteps[currentTelegramStep].image"
+                  :alt="telegramSteps[currentTelegramStep].title"
+                  class="w-full max-h-[360px] object-contain block"
+                />
+              </Transition>
+            </div>
+
+            <!-- Step info -->
+            <div class="mt-4">
+              <div class="flex items-start gap-3">
+                <div
+                  class="shrink-0 w-9 h-9 rounded-xl
+                         bg-[#4F46E5]
+                         text-white
+                         flex items-center justify-center
+                         text-sm font-bold"
+                >
+                  {{ currentTelegramStep + 1 }}
+                </div>
+
+                <div>
+                  <h3
+                    class="text-base font-bold
+                           text-[var(--color-text-primary)]"
+                  >
+                    {{ telegramSteps[currentTelegramStep].title }}
+                  </h3>
+
+                  <p
+                    class="mt-1 text-sm leading-6
+                           text-[var(--color-text-secondary)]"
+                  >
+                    {{ telegramSteps[currentTelegramStep].description }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Dots -->
+            <div class="flex justify-center gap-2 mt-5">
+              <button
+                v-for="(step, index) in telegramSteps"
+                :key="index"
+                @click="currentTelegramStep = index"
+                class="transition-all duration-300 rounded-full"
+                :class="
+                  index === currentTelegramStep
+                    ? 'w-6 h-2 bg-[#4F46E5]'
+                    : 'w-2 h-2 bg-[var(--color-border)]'
+                "
+                :aria-label="`Adım ${index + 1}`"
+              ></button>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div
+            class="px-5 py-4 border-t border-[var(--color-border)]
+                   flex items-center justify-between gap-3"
+          >
+            <button
+              @click="previousTelegramStep"
+              :disabled="currentTelegramStep === 0"
+              class="flex-1 h-11 rounded-xl
+                     border border-[var(--color-border)]
+                     text-sm font-semibold
+                     text-[var(--color-text-primary)]
+                     transition-all
+                     active:scale-[0.98]
+                     disabled:opacity-30 disabled:pointer-events-none
+                     hover:bg-black/5 dark:hover:bg-white/5"
+            >
+              Geri
+            </button>
+
+            <button
+              v-if="currentTelegramStep < telegramSteps.length - 1"
+              @click="nextTelegramStep"
+              class="flex-1 h-11 rounded-xl
+                     bg-[#4F46E5]
+                     text-white
+                     text-sm font-semibold
+                     shadow-lg shadow-indigo-500/20
+                     transition-all
+                     active:scale-[0.98]
+                     hover:bg-[#4338CA]"
+            >
+              Sonraki
+            </button>
+
+            <button
+              v-else
+              @click="closeTelegramHelp"
+              class="flex-1 h-11 rounded-xl
+                     bg-[#4F46E5]
+                     text-white
+                     text-sm font-semibold
+                     shadow-lg shadow-indigo-500/20
+                     transition-all
+                     active:scale-[0.98]
+                     hover:bg-[#4338CA]"
+            >
+              Tamam
+            </button>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
-<style></style>
+<style>
+.telegram-modal-enter-active,
+.telegram-modal-leave-active {
+  transition: opacity 0.25s ease;
+}
+
+.telegram-modal-enter-active > div:last-child,
+.telegram-modal-leave-active > div:last-child {
+  transition:
+    transform 0.25s ease,
+    opacity 0.25s ease;
+}
+
+.telegram-modal-enter-from,
+.telegram-modal-leave-to {
+  opacity: 0;
+}
+
+.telegram-modal-enter-from > div:last-child,
+.telegram-modal-leave-to > div:last-child {
+  opacity: 0;
+  transform: scale(0.96) translateY(8px);
+}
+
+.step-image-enter-active,
+.step-image-leave-active {
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.step-image-enter-from {
+  opacity: 0;
+  transform: translateX(20px);
+}
+
+.step-image-leave-to {
+  opacity: 0;
+  transform: translateX(-20px);
+}
+
+</style>
