@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from "vue";
+import { ref,onMounted,onUnmounted } from "vue";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
@@ -55,6 +55,13 @@ const telegramSteps = [
     image: telegramStep5,
   },
 ];
+
+onMounted(() => {
+  telegramSteps.forEach((step) => {
+  const img = new Image();
+  img.src = step.image;
+});
+});
 
 function openTelegramHelp() {
   currentTelegramStep.value = 0;
@@ -403,9 +410,9 @@ function removePresetName(bIndex) {
              flex items-center justify-center
              cursor-pointer
              text-[#4F46E5]
-             bg-[#EEF2FF]
-             border border-[#C7D2FE]
-             hover:bg-[#E0E7FF]
+             
+             border border-[#432DD7]
+             hover:bg-[#3624b5]
              active:scale-95
              transition-all duration-200"
       aria-label="Telegram bağlantısı hakkında bilgi"
@@ -485,8 +492,6 @@ function removePresetName(bIndex) {
 
 </div>
 
-        
-
       <!-- About Section -->
       <div class="mb-2 ml-1">
         <span
@@ -535,7 +540,7 @@ function removePresetName(bIndex) {
 
         <!-- Modal -->
         <div
-          class="relative z-10 w-full max-w-lg max-h-[90vh]
+          class="relative z-10 w-full max-w-lg max-h-[95vh]
                  overflow-hidden rounded-3xl
                  bg-[var(--color-card)]
                  border border-[var(--color-border)]
@@ -627,20 +632,21 @@ function removePresetName(bIndex) {
 
           <!-- Content -->
           <div class="px-5 pt-4 pb-5 overflow-y-auto max-h-[65vh]">
-            <div
-              class="rounded-2xl overflow-hidden
-                     border border-[var(--color-border)]
-                     bg-[var(--color-surface)]"
-            >
-              <Transition name="step-image" mode="out-in">
-                <img
-                  :key="currentTelegramStep"
-                  :src="telegramSteps[currentTelegramStep].image"
-                  :alt="telegramSteps[currentTelegramStep].title"
-                  class="w-full max-h-[360px] object-contain block"
-                />
-              </Transition>
-            </div>
+             <div
+    class="rounded-2xl overflow-hidden
+           border border-[var(--color-border)]
+           bg-[var(--color-surface)]
+           h-[360px] flex items-center justify-center"
+  >
+    <Transition name="step-image" mode="out-in">
+      <img
+        :key="currentTelegramStep"
+        :src="telegramSteps[currentTelegramStep].image"
+        :alt="telegramSteps[currentTelegramStep].title"
+        class="w-full h-full object-contain block"
+      />
+    </Transition>
+  </div>
 
             <!-- Step info -->
             <div class="mt-4">
