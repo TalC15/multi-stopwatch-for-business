@@ -106,8 +106,16 @@ export async function login(username, pin) {
   }
 }
 
-// Çıkış
-export function logout() {
+// Çıkış — backend'e haber ver (oturumu iptal et), sonra local temizle
+export async function logout() {
+  try {
+    await apiFetch(`${BASE_URL}/auth/logout`, {
+      method: "POST",
+      headers: authHeader(),
+    });
+  } catch {
+    // Backend'e ulaşılamasa bile local temizlik devam etmeli
+  }
   clearTokens();
   window.location.reload();
 }

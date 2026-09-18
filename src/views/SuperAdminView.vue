@@ -93,6 +93,20 @@ async function deleteUser(userId, username) {
   }
 }
 
+async function forceLogout(userId, username) {
+  const response = await apiFetch(`${BASE_URL}/users/${userId}/force-logout`, {
+    method: 'POST',
+    headers: authHeader(),
+  });
+
+  if (response?.ok) {
+    message.success(`${username} kullanıcısının oturumu kapatıldı`);
+  } else {
+    const data = response ? await response.json() : null;
+    message.warning(data?.error || 'Oturum kapatılamadı');
+  }
+}
+
 async function updateUser() {
   if (!editingUser.value) return;
 
@@ -213,7 +227,13 @@ onMounted(() => fetchAll());
               <span class="font-medium text-[var(--color-text-primary)] text-sm">{{ user.username }}</span>
               <span class="text-xs text-[var(--color-text-muted)]">{{ user.role }} — {{ workspaceName(user.workspace_id) }}</span>
             </div>
-            <div class="flex gap-2">
+           <div class="flex gap-2">
+              <button @click="forceLogout(user.id, user.username)"
+                class="w-8 h-8 flex items-center justify-center text-amber-500 hover:text-amber-700 transition">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+              </button>
               <button @click="editingUser = { ...user }"
                 class="w-8 h-8 flex items-center justify-center text-indigo-500 hover:text-indigo-700 transition">
                 <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
