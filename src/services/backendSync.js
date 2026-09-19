@@ -1,5 +1,5 @@
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
-import router from '../router'
+import router from "../router";
 // Token yönetimi
 export function getAccessToken() {
   return localStorage.getItem("accessToken");
@@ -42,9 +42,9 @@ function authHeader() {
 }
 
 // Token yenile
-async function refreshAccessToken() {
+export async function refreshAccessToken() {
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return false;
+  if (!refreshToken) return { ok: false, hardFail: true };
 
   try {
     const response = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -53,13 +53,19 @@ async function refreshAccessToken() {
       body: JSON.stringify({ refreshToken }),
     });
 
-    if (!response.ok) return false;
+    if (response.ok) {
+      const data = await response.json();
+      saveTokens(data.accessToken, null);
+      return { ok: true };
+    }
 
-    const data = await response.json();
-    saveTokens(data.accessToken, null);
-    return true;
+    // 401/403 → oturum gerçekten geçersiz, çıkış yapılmalı
+    // Diğer (503, 500 vb.) → geçici sorun, oturum SİLİNMEMELİ
+    const hardFail = response.status === 401 || response.status === 403;
+    return { ok: false, hardFail };
   } catch {
-    return false;
+    // Ağ hatası (internet yok, sunucuya ulaşılamadı) → geçici, oturum SİLİNMEMELİ
+    return { ok: false, hardFail: false };
   }
 }
 
@@ -70,15 +76,16 @@ export async function apiFetch(url, options = {}) {
   let response = await fetch(url, options);
 
   if (response.status === 401) {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
+    const result = await refreshAccessToken();
+    if (result.ok) {
       options.headers = authHeader();
       response = await fetch(url, options);
-    } else {
+    } else if (result.hardFail) {
       clearTokens();
-      router.push('/login');
+      router.push("/login");
       return null;
     }
+    // hardFail false (geçici sorun) → oturumu koru, sadece bu istek başarısız sayılır
   }
 
   return response;
@@ -167,15 +174,25 @@ export async function dbUpdateTimer(timerId, updates) {
 
 // Timer sil (soft delete)
 export async function dbDeleteTimer(timerId) {
-  console.log('[DEBUG-DBDELETE] çağrıldı, timerId:', timerId, 'url:', `${BASE_URL}/timers/${timerId}`);
+  console.log(
+    "[DEBUG-DBDELETE] çağrıldı, timerId:",
+    timerId,
+    "url:",
+    `${BASE_URL}/timers/${timerId}`,
+  );
   const response = await apiFetch(`${BASE_URL}/timers/${timerId}`, {
     method: "DELETE",
     headers: authHeader(),
   });
-  console.log('[DEBUG-DBDELETE] apiFetch sonucu var mı:', !!response, 'status:', response ? response.status : 'null (response yok)');
+  console.log(
+    "[DEBUG-DBDELETE] apiFetch sonucu var mı:",
+    !!response,
+    "status:",
+    response ? response.status : "null (response yok)",
+  );
   if (!response) return null;
   const json = await response.json();
-  console.log('[DEBUG-DBDELETE] response body:', JSON.stringify(json));
+  console.log("[DEBUG-DBDELETE] response body:", JSON.stringify(json));
   return json;
 }
 
@@ -191,7 +208,6 @@ export async function dbGetSharedTimers() {
 
 // Timer başlat
 export async function syncTimerStart(timer) {
-
   const user = getUser();
   if (!user) return;
 
