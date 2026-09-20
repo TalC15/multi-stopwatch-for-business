@@ -192,7 +192,7 @@ function removePresetName(bIndex) {
           <path d="M19 12H5M12 5l-7 7 7 7" />
         </svg>
       </button>
-      <h1 class="text-lg font-black text-primary-light">Settings</h1>
+      <h1 class="text-lg font-black text-primary-light">Ayarlar</h1>
       <div class="w-9"></div>
     </nav>
 
@@ -227,7 +227,7 @@ function removePresetName(bIndex) {
                 <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
               </svg>
             </div>
-            <span class="font-medium text-text-primary">Dark Mode</span>
+            <span class="font-medium text-text-primary">Koyu Tema</span>
           </div>
           <button
             @click="themeStore.toggleTheme()"
@@ -447,7 +447,7 @@ function removePresetName(bIndex) {
     <input
       v-model="chatId"
       type="number"
-      placeholder="Chat ID (örn: 8030859580)"
+      placeholder="Chat ID (örn: 1234567890)"
       class="px-3 py-2 rounded-xl
              bg-surface
              text-text-primary
@@ -520,7 +520,7 @@ function removePresetName(bIndex) {
                 <path d="M12 16v-4M12 8h.01" />
               </svg>
             </div>
-            <span class="font-medium text-text-primary">Version</span>
+            <span class="font-medium text-text-primary">Versiyon</span>
           </div>
           <span class="text-sm text-text-muted">1.0.0</span>
         </div>

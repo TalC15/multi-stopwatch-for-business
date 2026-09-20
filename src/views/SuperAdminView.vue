@@ -287,7 +287,7 @@ onMounted(() => fetchAll());
       <!-- Workspace Listesi -->
       <!-- Workspace Listesi -->
 <div class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5 flex flex-col gap-3">
-  <h2 class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]">Workspace'ler</h2>
+  <h2 class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]">Çalışma Gurupları</h2>
   <div v-if="workspaces.length === 0" class="text-center py-4 text-[var(--color-text-muted)] text-sm">Henüz workspace yok</div>
   <div
     v-for="ws in workspaces"

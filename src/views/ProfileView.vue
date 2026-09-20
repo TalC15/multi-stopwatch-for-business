@@ -136,13 +136,70 @@ onMounted(() => fetchWorkspace());
           Profilim
         </h1>
         <span v-if="user" class="text-xs text-[var(--color-text-secondary)]">{{
-          user?.role
+          user?.username
         }}</span>
       </div>
       <div class="w-9"></div>
     </nav>
 
     <main class="max-w-md mx-auto px-4 pt-6 pb-12 flex flex-col gap-6">
+      <!--Profil Bilgileri-->
+      <div
+        class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5"
+      >
+        <h2
+          class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)] mb-4"
+        >
+          PROFİL BİLGİLERİM
+        </h2>
+
+        <div class="flex items-center gap-4">
+          <!-- Profil fotoğrafı -->
+          <div
+            class="w-16 h-16 shrink-0 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center overflow-hidden"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="none"
+              class="w-9 h-9 text-[var(--color-text-muted)]"
+            >
+              <circle cx="12" cy="8" r="3.5" fill="currentColor" />
+              <path d="M5 20c0-3.5 3.13-6 7-6s7 2.5 7 6" fill="currentColor" />
+            </svg>
+          </div>
+
+          <!-- Kullanıcı bilgileri -->
+          <div class="flex flex-col min-w-0">
+            <span
+              class="text-lg font-bold text-[var(--color-text-primary)] truncate"
+            >
+              {{ user?.username || "Kullanıcı" }}
+            </span>
+
+            <span class="text-xs text-[var(--color-text-secondary)] capitalize">
+              {{ user?.role || "Rol belirtilmemiş" }}
+            </span>
+          </div>
+        </div>
+
+        <div
+          class="mt-4 pt-4 border-t border-[var(--color-border)] flex flex-col gap-3"
+        >
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-[var(--color-text-secondary)]">
+              Durum
+            </span>
+
+            <span
+              class="flex items-center gap-1.5 text-xs font-medium text-green-500"
+            >
+              <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+              Aktif
+            </span>
+          </div>
+        </div>
+      </div>
       <!-- Workspace Durumu -->
       <div
         class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5 flex flex-col gap-4"
@@ -150,7 +207,7 @@ onMounted(() => fetchWorkspace());
         <h2
           class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]"
         >
-          Workspace
+          ÇALIŞMA GURUBUM
         </h2>
 
         <div
@@ -175,7 +232,7 @@ onMounted(() => fetchWorkspace());
             :disabled="leaveLoading"
             class="w-full py-3 rounded-2xl border border-red-500 text-red-500 font-bold text-sm transition active:scale-95 disabled:opacity-40"
           >
-            {{ leaveLoading ? "Ayrılıyor..." : "Workspace'den Ayrıl" }}
+            {{ leaveLoading ? "Ayrılıyor..." : "Guruptan Ayrıl" }}
           </button>
         </div>
 
@@ -221,7 +278,7 @@ onMounted(() => fetchWorkspace());
           <input
             v-model="chatId"
             type="number"
-            placeholder="Chat ID (örn: 8030859580)"
+            placeholder="Chat ID (örn: 1234567890)"
             class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none no-spinner"
           />
           <button

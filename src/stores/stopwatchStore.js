@@ -25,7 +25,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   const duration = ref(
     JSON.parse(localStorage.getItem("defaultDuration")) || 0,
   );
-  const name = ref(JSON.parse(localStorage.getItem("defaultName")) || "");
+  const name = ref(JSON.parse(localStorage.getItem("defaultName")) || "kronometre");
 
   watch(
     stopwatches,

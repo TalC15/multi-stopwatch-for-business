@@ -8,6 +8,7 @@ const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
 const users = ref([]);
+const sameWorkspaceUsers = ref([])
 const workspace = ref(null);
 const loading = ref(false);
 const createLoading = ref(false);
@@ -47,6 +48,7 @@ async function fetchUsers() {
   if (response) {
     const data = await response.json();
     users.value = data.users || [];
+    sameWorkspaceUsers.value = users.value.filter(a=>a?.workspace_id===workspace.value.id)
   }
   loading.value = false;
 }
@@ -151,6 +153,7 @@ async function createUser() {
       username: newUsername.value,
       pin: newPin.value,
       role: "worker",
+      workspace_id : workspace.value.id
     }),
   });
 
@@ -248,7 +251,7 @@ onMounted(async () => {
         <h2
           class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]"
         >
-          Workspace
+          çalışma gurubum
         </h2>
 
         <!-- Workspace var -->
@@ -289,7 +292,7 @@ onMounted(async () => {
                 >Ortak Ekran</span
               >
               <span class="text-xs text-[var(--color-text-muted)]"
-                >Çalışanlar birbirinin timer'larını görür</span
+                >Çalışanlar birbirlerinin kronometrelerini görebilir</span
               >
             </div>
             <button
@@ -319,7 +322,7 @@ onMounted(async () => {
             :disabled="leaveLoading"
             class="w-full py-2.5 rounded-2xl border border-red-500 text-red-500 font-bold text-sm transition active:scale-95 disabled:opacity-40"
           >
-            {{ leaveLoading ? "Ayrılıyor..." : "Workspace'den Ayrıl" }}
+            {{ leaveLoading ? "Ayrılıyor..." : "Guruptan Ayrıl" }}
           </button>
         </div>
 
@@ -383,7 +386,7 @@ onMounted(async () => {
         <h2
           class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]"
         >
-          Yeni Worker
+          Yeni Çalışan Oluştur
         </h2>
         <input
           v-model="newUsername"
@@ -402,8 +405,10 @@ onMounted(async () => {
           :disabled="!newUsername || !newPin || createLoading"
           class="w-full py-3 rounded-2xl bg-indigo-700 text-white font-bold transition active:scale-95 disabled:opacity-40"
         >
-          {{ createLoading ? "Oluşturuluyor..." : "Worker Oluştur" }}
+          {{ createLoading ? "Oluşturuluyor..." : "Çalışan Oluştur" }}
         </button>
+        <p class="text-[9px] font-black tracking-widest  text-[var(--color-text-muted)]">
+          Oluşturacağınız çalışanlar bulunduğunuz çalışma gurubuna eklenir</p>
       </div>
 
       <!-- Çalışanlar -->
@@ -429,7 +434,7 @@ onMounted(async () => {
           Henüz çalışan yok
         </div>
         <div
-          v-for="user in users"
+          v-for="user in sameWorkspaceUsers"
           :key="user.id"
           class="flex items-center justify-between py-3 border-b border-[var(--color-border)] last:border-0"
         >
