@@ -26,7 +26,7 @@ const themeStore = useThemeStore();
       <!-- Header -->
       <div class="flex justify-between items-center mb-8">
         <h2 class="text-xl font-bold text-[var(--color-text-primary)]">
-          KeepTime
+          KeepTimer
         </h2>
         <button
           @click="$emit('close')"

@@ -1,5 +1,5 @@
 <script setup>
-import { ref,onMounted,onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted } from "vue";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
@@ -11,7 +11,7 @@ import telegramStep3 from "@/assets/telegram/telegram-step-3.png";
 import telegramStep4 from "@/assets/telegram/telegram-step-4.png";
 import telegramStep5 from "@/assets/telegram/telegram-step-5.png";
 
-const store = useStopwatchStore()
+const store = useStopwatchStore();
 const themeStore = useThemeStore();
 const router = useRouter();
 const stopwatchStore = useStopwatchStore();
@@ -44,8 +44,7 @@ const telegramSteps = [
   },
   {
     title: "Chat ID'nizi alın",
-    description:
-      "Bot size bir Chat ID gönderecek. Bu numarayı kopyalayın.",
+    description: "Bot size bir Chat ID gönderecek. Bu numarayı kopyalayın.",
     image: telegramStep4,
   },
   {
@@ -58,9 +57,9 @@ const telegramSteps = [
 
 onMounted(() => {
   telegramSteps.forEach((step) => {
-  const img = new Image();
-  img.src = step.image;
-});
+    const img = new Image();
+    img.src = step.image;
+  });
 });
 
 function openTelegramHelp() {
@@ -87,17 +86,17 @@ function previousTelegramStep() {
 async function saveTelegram() {
   if (!chatId.value) return;
   telegramLoading.value = true;
-  
+
   const result = await saveTelegramChatId(chatId.value);
-  
+
   if (result?.success) {
-    localStorage.setItem('telegramChatId', chatId.value);
+    localStorage.setItem("telegramChatId", chatId.value);
     telegramSaved.value = true;
-    message.success('Telegram bağlandı!');
+    message.success("Telegram bağlandı!");
   } else {
-    message.warning('Geçersiz Chat ID. Lütfen tekrar dene.');
+    message.warning("Geçersiz Chat ID. Lütfen tekrar dene.");
   }
-  
+
   telegramLoading.value = false;
 }
 
@@ -123,9 +122,10 @@ function defaultSettings(preset) {
 }
 
 function addPresetTime() {
-  const isPresetTimes=store?.presetTimes.map(a=>a)
-  if(isPresetTimes?.includes(presetTime.value))
-    return message.warning('Bu süre zaten mevcut')
+  if(String(presetTime.value).trim()==='') return message.warning('bir süre belirtmediniz')
+  const isPresetTimes = store?.presetTimes.map((a) => a);
+  if (isPresetTimes?.includes(presetTime.value))
+    return message.warning("Bu zaman etiketi zaten mevcut");
   stopwatchStore.presetTimes.push(presetTime.value);
   localStorage.setItem(
     "presetTimes",
@@ -136,9 +136,10 @@ function addPresetTime() {
 }
 
 function addPresetName() {
-  const isPresetNames = store?.presetNames.map(a=>a)
-  if(isPresetNames?.includes(presetName.value))
-    return message.warning('Bu isim zaten mevcut')
+  if(presetName.value.trim()==='') return message.warning('bir isim koymadınız')
+  const isPresetNames = store?.presetNames.map((a) => a);
+  if (isPresetNames?.includes(presetName.value))
+    return message.warning("Bu isim etiketi zaten mevcut");
   stopwatchStore.presetNames.push(presetName.value);
   localStorage.setItem(
     "presetNames",
@@ -156,6 +157,7 @@ function removePresetTime(bIndex) {
     "presetTimes",
     JSON.stringify(stopwatchStore.presetTimes),
   );
+  message.success("bir zaman etiketi silindi");
 }
 
 function removePresetName(bIndex) {
@@ -166,6 +168,7 @@ function removePresetName(bIndex) {
     "presetNames",
     JSON.stringify(stopwatchStore.presetNames),
   );
+  message.success("bir isim etiketi silindi");
 }
 </script>
 
@@ -290,14 +293,15 @@ function removePresetName(bIndex) {
         <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
           <span
             v-for="(presetTime, index) in stopwatchStore.presetTimes"
-            @click="defaultSettings(presetTime)"
             :key="index"
             class="w-20% mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
           >
-            {{ presetTime }}
+            <span @click="defaultSettings(presetTime)">
+              {{ presetTime }}
+            </span>
             <button
               @click="removePresetTime(index)"
-              class="w-5 ml-3 text-xl leading-none -translate-y-0.5"
+              class="w-7 ml-3 text-xl leading-none -translate-y-0.5"
             >
               &times
             </button>
@@ -351,10 +355,11 @@ function removePresetName(bIndex) {
             class="relative shrink-0"
           >
             <span
-              @click="defaultSettings(presetName)"
               class="cursor-pointer mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
             >
-              {{ presetName }}
+              <span @click="defaultSettings(presetName)">
+                {{ presetName }}
+              </span>
 
               <button
                 @click.stop="removePresetName(index)"
@@ -367,130 +372,99 @@ function removePresetName(bIndex) {
         </div>
       </div>
 
-<!-- Telegram Bildirimi -->
-<div class="bg-card rounded-2xl border border-border overflow-hidden mb-6">
-  
-  <!-- Header -->
-  <div class="flex items-center justify-between px-4 py-4">
-    
-    <!-- Sol taraf -->
-    <div class="flex items-center gap-3 min-w-0">
+      <!-- Telegram Bildirimi -->
       <div
-        class="w-8 h-8 shrink-0 rounded-lg
-               bg-primary-bg
-               flex items-center justify-center"
+        class="bg-card rounded-2xl border border-border overflow-hidden mb-6"
       >
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.8"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          class="text-primary-light"
-        >
-          <path d="M22 2L11 13" />
-          <path d="M22 2L15 22 11 13 2 9l20-7z" />
-        </svg>
+        <!-- Header -->
+        <div class="flex items-center justify-between px-4 py-4">
+          <!-- Sol taraf -->
+          <div class="flex items-center gap-3 min-w-0">
+            <div
+              class="w-8 h-8 shrink-0 rounded-lg bg-primary-bg flex items-center justify-center"
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.8"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                class="text-primary-light"
+              >
+                <path d="M22 2L11 13" />
+                <path d="M22 2L15 22 11 13 2 9l20-7z" />
+              </svg>
+            </div>
+
+            <span class="font-medium text-text-primary">
+              Telegram Bildirimi
+            </span>
+          </div>
+
+          <!-- Bilgi butonu -->
+          <button
+            type="button"
+            @click="openTelegramHelp"
+            class="shrink-0 w-9 h-9 ml-3 rounded-full flex items-center justify-center cursor-pointer text-[#4F46E5] border border-[#432DD7] hover:bg-[#3624b5] active:scale-95 transition-all duration-200"
+            aria-label="Telegram bağlantısı hakkında bilgi"
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 10v6" />
+              <path d="M12 7h.01" />
+            </svg>
+          </button>
+        </div>
+
+        <!-- Telegram bağlı değilse -->
+        <div v-if="!telegramSaved" class="px-4 pb-4 flex flex-col gap-2">
+          <p class="text-xs text-text-secondary">
+            @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
+            gir.
+          </p>
+
+          <input
+            v-model="chatId"
+            type="number"
+            placeholder="Chat ID (örn: 1234567890)"
+            class="px-3 py-2 rounded-xl bg-surface text-text-primary border border-border text-sm focus:outline-none focus:border-primary no-spinner"
+          />
+
+          <button
+            @click="saveTelegram"
+            :disabled="!chatId || telegramLoading"
+            class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-medium transition active:scale-95 disabled:opacity-40"
+          >
+            {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
+          </button>
+        </div>
+
+        <!-- Telegram bağlıysa -->
+        <div v-else class="px-4 pb-4 flex items-center justify-between">
+          <span class="text-xs text-green-500 font-medium">
+            ✓ Telegram bağlı
+          </span>
+
+          <button
+            @click="removeTelegram"
+            class="text-xs text-text-muted underline"
+          >
+            Kaldır
+          </button>
+        </div>
       </div>
-
-      <span class="font-medium text-text-primary">
-        Telegram Bildirimi
-      </span>
-    </div>
-
-    <!-- Bilgi butonu -->
-    <button
-      type="button"
-      @click="openTelegramHelp"
-      class="shrink-0 w-9 h-9 ml-3
-             rounded-full
-             flex items-center justify-center
-             cursor-pointer
-             text-[#4F46E5]
-             
-             border border-[#432DD7]
-             hover:bg-[#3624b5]
-             active:scale-95
-             transition-all duration-200"
-      aria-label="Telegram bağlantısı hakkında bilgi"
-    >
-      <svg
-        width="18"
-        height="18"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-      >
-        <circle cx="12" cy="12" r="9" />
-        <path d="M12 10v6" />
-        <path d="M12 7h.01" />
-      </svg>
-    </button>
-
-  </div>
-
-  <!-- Telegram bağlı değilse -->
-  <div
-    v-if="!telegramSaved"
-    class="px-4 pb-4 flex flex-col gap-2"
-  >
-    <p class="text-xs text-text-secondary">
-      @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni gir.
-    </p>
-
-    <input
-      v-model="chatId"
-      type="number"
-      placeholder="Chat ID (örn: 1234567890)"
-      class="px-3 py-2 rounded-xl
-             bg-surface
-             text-text-primary
-             border border-border
-             text-sm
-             focus:outline-none
-             focus:border-primary
-             no-spinner"
-    />
-
-    <button
-      @click="saveTelegram"
-      :disabled="!chatId || telegramLoading"
-      class="px-4 py-2 rounded-xl
-             bg-indigo-700
-             text-white
-             text-sm font-medium
-             transition
-             active:scale-95
-             disabled:opacity-40"
-    >
-      {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
-    </button>
-  </div>
-
-  <!-- Telegram bağlıysa -->
-  <div
-    v-else
-    class="px-4 pb-4 flex items-center justify-between"
-  >
-    <span class="text-xs text-green-500 font-medium">
-      ✓ Telegram bağlı
-    </span>
-
-    <button
-      @click="removeTelegram"
-      class="text-xs text-text-muted underline"
-    >
-      Kaldır
-    </button>
-  </div>
-
-</div>
 
       <!-- About Section -->
       <div class="mb-2 ml-1">
@@ -526,7 +500,7 @@ function removePresetName(bIndex) {
         </div>
       </div>
     </main>
-        <!-- Telegram Help Modal -->
+    <!-- Telegram Help Modal -->
     <Transition name="telegram-modal">
       <div
         v-if="showTelegramHelp"
@@ -540,28 +514,21 @@ function removePresetName(bIndex) {
 
         <!-- Modal -->
         <div
-          class="relative z-10 w-full max-w-lg max-h-[95vh]
-                 overflow-hidden rounded-3xl
-                 bg-[var(--color-card)]
-                 border border-[var(--color-border)]
-                 shadow-2xl"
+          class="relative z-10 w-full max-w-lg max-h-[95vh] overflow-hidden rounded-3xl bg-[var(--color-card)] border border-[var(--color-border)] shadow-2xl"
         >
           <!-- Header -->
           <div
-            class="flex items-center justify-between px-5 py-4
-                   border-b border-[var(--color-border)]"
+            class="flex items-center justify-between px-5 py-4 border-b border-[var(--color-border)]"
           >
             <div>
               <p
-                class="text-[10px] font-black tracking-[0.18em]
-                       uppercase text-[var(--color-text-muted)]"
+                class="text-[10px] font-black tracking-[0.18em] uppercase text-[var(--color-text-muted)]"
               >
                 Telegram Bildirimi
               </p>
 
               <h2
-                class="mt-1 text-lg font-bold
-                       text-[var(--color-text-primary)]"
+                class="mt-1 text-lg font-bold text-[var(--color-text-primary)]"
               >
                 Bildirimleri nasıl bağlarım?
               </h2>
@@ -569,12 +536,7 @@ function removePresetName(bIndex) {
 
             <button
               @click="closeTelegramHelp"
-              class="w-9 h-9 rounded-full
-                     flex items-center justify-center
-                     text-[var(--color-text-secondary)]
-                     hover:bg-black/5 dark:hover:bg-white/5
-                     active:scale-90
-                     transition-all"
+              class="w-9 h-9 rounded-full flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-black/5 dark:hover:bg-white/5 active:scale-90 transition-all"
               aria-label="Kapat"
             >
               <svg
@@ -599,15 +561,12 @@ function removePresetName(bIndex) {
               <div
                 v-for="(step, index) in telegramSteps"
                 :key="index"
-                class="flex-1 h-1.5 rounded-full overflow-hidden
-                       bg-[var(--color-border)]"
+                class="flex-1 h-1.5 rounded-full overflow-hidden bg-[var(--color-border)]"
               >
                 <div
                   class="h-full rounded-full transition-all duration-300"
                   :class="
-                    index <= currentTelegramStep
-                      ? 'bg-[#4F46E5] w-full'
-                      : 'w-0'
+                    index <= currentTelegramStep ? 'bg-[#4F46E5] w-full' : 'w-0'
                   "
                 ></div>
               </div>
@@ -615,16 +574,12 @@ function removePresetName(bIndex) {
 
             <div class="flex items-center justify-between mt-2">
               <span
-                class="text-xs font-medium
-                       text-[var(--color-text-secondary)]"
+                class="text-xs font-medium text-[var(--color-text-secondary)]"
               >
                 Adım {{ currentTelegramStep + 1 }} / {{ telegramSteps.length }}
               </span>
 
-              <span
-                class="text-xs font-medium
-                       text-[#4F46E5]"
-              >
+              <span class="text-xs font-medium text-[#4F46E5]">
                 {{ telegramSteps[currentTelegramStep].title }}
               </span>
             </div>
@@ -632,46 +587,37 @@ function removePresetName(bIndex) {
 
           <!-- Content -->
           <div class="px-5 pt-4 pb-5 overflow-y-auto max-h-[65vh]">
-             <div
-    class="rounded-2xl overflow-hidden
-           border border-[var(--color-border)]
-           bg-[var(--color-surface)]
-           h-[360px] flex items-center justify-center"
-  >
-    <Transition name="step-image" mode="out-in">
-      <img
-        :key="currentTelegramStep"
-        :src="telegramSteps[currentTelegramStep].image"
-        :alt="telegramSteps[currentTelegramStep].title"
-        class="w-full h-full object-contain block"
-      />
-    </Transition>
-  </div>
+            <div
+              class="rounded-2xl overflow-hidden border border-[var(--color-border)] bg-[var(--color-surface)] h-[360px] flex items-center justify-center"
+            >
+              <Transition name="step-image" mode="out-in">
+                <img
+                  :key="currentTelegramStep"
+                  :src="telegramSteps[currentTelegramStep].image"
+                  :alt="telegramSteps[currentTelegramStep].title"
+                  class="w-full h-full object-contain block"
+                />
+              </Transition>
+            </div>
 
             <!-- Step info -->
             <div class="mt-4">
               <div class="flex items-start gap-3">
                 <div
-                  class="shrink-0 w-9 h-9 rounded-xl
-                         bg-[#4F46E5]
-                         text-white
-                         flex items-center justify-center
-                         text-sm font-bold"
+                  class="shrink-0 w-9 h-9 rounded-xl bg-[#4F46E5] text-white flex items-center justify-center text-sm font-bold"
                 >
                   {{ currentTelegramStep + 1 }}
                 </div>
 
                 <div>
                   <h3
-                    class="text-base font-bold
-                           text-[var(--color-text-primary)]"
+                    class="text-base font-bold text-[var(--color-text-primary)]"
                   >
                     {{ telegramSteps[currentTelegramStep].title }}
                   </h3>
 
                   <p
-                    class="mt-1 text-sm leading-6
-                           text-[var(--color-text-secondary)]"
+                    class="mt-1 text-sm leading-6 text-[var(--color-text-secondary)]"
                   >
                     {{ telegramSteps[currentTelegramStep].description }}
                   </p>
@@ -698,20 +644,12 @@ function removePresetName(bIndex) {
 
           <!-- Footer -->
           <div
-            class="px-5 py-4 border-t border-[var(--color-border)]
-                   flex items-center justify-between gap-3"
+            class="px-5 py-4 border-t border-[var(--color-border)] flex items-center justify-between gap-3"
           >
             <button
               @click="previousTelegramStep"
               :disabled="currentTelegramStep === 0"
-              class="flex-1 h-11 rounded-xl
-                     border border-[var(--color-border)]
-                     text-sm font-semibold
-                     text-[var(--color-text-primary)]
-                     transition-all
-                     active:scale-[0.98]
-                     disabled:opacity-30 disabled:pointer-events-none
-                     hover:bg-black/5 dark:hover:bg-white/5"
+              class="flex-1 h-11 rounded-xl border border-[var(--color-border)] text-sm font-semibold text-[var(--color-text-primary)] transition-all active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none hover:bg-black/5 dark:hover:bg-white/5"
             >
               Geri
             </button>
@@ -719,14 +657,7 @@ function removePresetName(bIndex) {
             <button
               v-if="currentTelegramStep < telegramSteps.length - 1"
               @click="nextTelegramStep"
-              class="flex-1 h-11 rounded-xl
-                     bg-[#4F46E5]
-                     text-white
-                     text-sm font-semibold
-                     shadow-lg shadow-indigo-500/20
-                     transition-all
-                     active:scale-[0.98]
-                     hover:bg-[#4338CA]"
+              class="flex-1 h-11 rounded-xl bg-[#4F46E5] text-white text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98] hover:bg-[#4338CA]"
             >
               Sonraki
             </button>
@@ -734,14 +665,7 @@ function removePresetName(bIndex) {
             <button
               v-else
               @click="closeTelegramHelp"
-              class="flex-1 h-11 rounded-xl
-                     bg-[#4F46E5]
-                     text-white
-                     text-sm font-semibold
-                     shadow-lg shadow-indigo-500/20
-                     transition-all
-                     active:scale-[0.98]
-                     hover:bg-[#4338CA]"
+              class="flex-1 h-11 rounded-xl bg-[#4F46E5] text-white text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98] hover:bg-[#4338CA]"
             >
               Tamam
             </button>
@@ -791,5 +715,4 @@ function removePresetName(bIndex) {
   opacity: 0;
   transform: translateX(-20px);
 }
-
 </style>

@@ -266,7 +266,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from "vue";
+import { ref, computed, watch, onMounted, onUnmounted } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { hapticTap } from "../../utils/haptics";
 import radarAlarm from "../../sounds/radar-alarm.mp3";
@@ -295,7 +295,7 @@ watch(isReachedTime, (newValue) => {
 const displayTime = computed(() => {
   let ms;
   if (props.timer.type === "up") {
-    ms = props.timer.elapsed || 0;
+    ms = smoothElapsed.value;
   } else {
     ms = props.timer.remaining ?? props.timer.targetMinutes * 60 * 1000;
   }
@@ -305,9 +305,45 @@ const displayTime = computed(() => {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 });
 
+const smoothElapsed = ref(props.timer.elapsed || 0);
+
+let animationFrame = null;
+let startTime = 0;
+let startElapsed = 0;
+
+const updateSmoothElapsed = () => {
+  if (props.timer.status === "running") {
+    smoothElapsed.value = startElapsed + (performance.now() - startTime);
+  }
+
+  animationFrame = requestAnimationFrame(updateSmoothElapsed);
+};
+
+onMounted(() => {
+  startElapsed = props.timer.elapsed || 0;
+  startTime = performance.now();
+
+  updateSmoothElapsed();
+});
+
+onUnmounted(() => {
+  cancelAnimationFrame(animationFrame);
+});
+
+watch(
+  () => props.timer.status,
+  (status) => {
+    if (status === "running") {
+      startElapsed = props.timer.elapsed || 0;
+      startTime = performance.now();
+    } else {
+      smoothElapsed.value = props.timer.elapsed || 0;
+    }
+  },
+);
+
 const centiseconds = computed(() => {
-  const ms = props.timer.elapsed || 0;
-  return String(Math.floor((ms % 1000) / 10)).padStart(2, "0");
+  return String(Math.floor((smoothElapsed.value % 1000) / 10)).padStart(2, "0");
 });
 
 const progressPercent = computed(() => {

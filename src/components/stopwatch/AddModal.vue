@@ -60,7 +60,7 @@ const save = async () => {
     message.success(`${store.name} zamanlayıcısı oluşturuldu`);
   }
 
-  store.name = JSON.parse(localStorage.getItem("defaultName")) || "timer";
+  store.name = JSON.parse(localStorage.getItem("defaultName")) || "kronometre";
   store.duration = JSON.parse(localStorage.getItem("defaultDuration")) || 5;
   isShared.value = false; // sıfırla
 };

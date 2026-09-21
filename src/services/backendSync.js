@@ -225,8 +225,8 @@ export async function syncTimerStart(timer) {
     endsAt = Date.now() + remaining;
   }
 
-  try {
-    await apiFetch(`${BASE_URL}/timer/start`, {
+ try {
+    const response = await apiFetch(`${BASE_URL}/timer/start`, {
       method: "POST",
       headers: authHeader(),
       body: JSON.stringify({
@@ -235,11 +235,25 @@ export async function syncTimerStart(timer) {
         endsAt,
       }),
     });
+
+    if (!response) return; // token yok, apiFetch zaten hiç istek atmadı
+
+    if (response.status === 400) {
+      // Telegram bağlı değilse bu normal bir durum, hata değil — sessizce geç
+      return;
+    }
+
+    if (!response.ok) {
+      console.warn("[Backend] Timer başlatma bildirimi gönderilemedi:", response.status);
+      return;
+    }
+
     console.log("[Backend] Timer başlatıldı:", timer.name);
   } catch (err) {
     console.error("[Backend] Timer başlatma hatası:", err);
   }
 }
+
 
 // Timer iptal
 export async function syncTimerCancel(timerId) {
@@ -251,5 +265,18 @@ export async function syncTimerCancel(timerId) {
     });
   } catch (err) {
     console.error("[Backend] Timer iptal hatası:", err);
+  }
+}
+
+// telegram bağlantısı kaldırma
+export async function cancelTelegramChatId(user_id){
+  try{
+    await apiFetch(`${BASE_URL}/telegram/cancel`,{
+      method: "UPDATE",
+      headers: authHeader(),
+      body: JSON.stringify({user_id}),
+    })
+  }catch(err){
+    console.error("[Backend] Telegram bağlantı kaldırma hatası:",err);
   }
 }

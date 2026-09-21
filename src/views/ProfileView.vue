@@ -7,6 +7,7 @@ import {
   getAccessToken,
   saveTelegramChatId,
   getUser,
+  cancelTelegramChatId
 } from "@/services/backendSync";
 
 const user = getUser();
@@ -54,7 +55,7 @@ async function joinWorkspace() {
   if (response) {
     const data = await response.json();
     if (response.ok) {
-      message.success(`${data.workspace.name} workspace'ine katıldınız`);
+      message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
       inviteCode.value = "";
       workspace.value = data.workspace;
     } else {
@@ -75,7 +76,7 @@ async function leaveWorkspace() {
   if (response) {
     const data = await response.json();
     if (response.ok) {
-      message.success("Workspace'den ayrıldınız");
+      message.success("Çalışma gurubundan ayrıldınız");
       workspace.value = null;
     } else {
       message.warning(data.error || "Ayrılma başarısız");
@@ -100,10 +101,18 @@ async function saveTelegram() {
   telegramLoading.value = false;
 }
 
-function removeTelegram() {
-  localStorage.removeItem("telegramChatId");
-  telegramSaved.value = false;
-  chatId.value = "";
+async function removeTelegram(user_id) {
+  if(!user_id) return
+  const result = await cancelTelegramChatId(user_id)
+  if (result?.success) {
+    localStorage.removeItem("telegramChatId");
+    telegramSaved.value = false;
+    chatId.value = "";
+    message.success("Telegram bağlantısı kesildi");
+  } else {
+    message.error("Telegram bağlantısı kesilemedi");
+  }
+  
 }
 
 onMounted(() => fetchWorkspace());
@@ -239,7 +248,7 @@ onMounted(() => fetchWorkspace());
         <!-- Workspace yok -->
         <div v-else class="flex flex-col gap-3">
           <p class="text-xs text-[var(--color-text-secondary)]">
-            Henüz bir workspace'e dahil değilsiniz. Davet kodu ile
+            Henüz bir çalışma gurubuna dahil değilsiniz. Davet kodu ile
             katılabilirsiniz.
           </p>
           <div class="flex gap-2">
@@ -295,12 +304,13 @@ onMounted(() => fetchWorkspace());
             >✓ Telegram bağlı</span
           >
           <button
-            @click="removeTelegram"
+            @click="removeTelegram(user?.id)"
             class="text-xs text-[var(--color-text-muted)] underline"
           >
             Kaldır
           </button>
         </div>
+        
       </div>
     </main>
   </div>

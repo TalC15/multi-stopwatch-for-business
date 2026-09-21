@@ -55,8 +55,16 @@ onMounted(() => {
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
       <!-- Page Header -->
       <div class="flex items-center mb-5">
-        <h2 class="truncate text-2xl font-black text-[var(--color-text-primary)]">
-          {{ activeTab === "up" ? "Kronometreler" :  activeTab === 'down' ? "Sayaçlar" : 'Ortak' }}
+        <h2
+          class="truncate text-2xl font-black text-[var(--color-text-primary)]"
+        >
+          {{
+            activeTab === "up"
+              ? "Kronometreler"
+              : activeTab === "down"
+                ? "Sayaçlar"
+                : "Ortak"
+          }}
         </h2>
         <div class="ml-auto flex items-center gap-4">
           <button
@@ -240,7 +248,7 @@ onMounted(() => {
               <span class="block h-[2px] w-3 rounded-full bg-current"></span>
               <span class="block h-[2px] w-2 rounded-full bg-current"></span>
             </span>
-            Filter
+            Sırala
           </button>
         </div>
       </div>
@@ -361,7 +369,7 @@ onMounted(() => {
             </text>
           </svg>
           <span class="text-[10px] font-black tracking-wider uppercase"
-            >Count-Up</span
+            >Kronometre</span
           >
         </button>
 
@@ -382,18 +390,21 @@ onMounted(() => {
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
           >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M6 2h12M6 22h12
-          M8 2v4c0 2.5 4 4 4 6s-4 3.5-4 6v4
-          M16 2v4c0 2.5-4 4-4 6s4 3.5 4 6v4"
-            />
+            <!-- Üst buton ve bağlantı -->
+            <path d="M10 2h4" />
+            <path d="M12 2v2" />
+            <!-- Geri sayım çemberi ve yön oku -->
+            <path d="M21 13a9 9 0 1 1-3-6.7L21 9" />
+            <polyline points="21 5 21 9 17 9" />
+            <!-- Saat ibreleri -->
+            <path d="M12 9v4l2.5 2.5" />
           </svg>
           <span class="text-[10px] font-black tracking-wider uppercase"
-            >Countdown</span
+            >Sayaç</span
           >
         </button>
 
@@ -432,7 +443,7 @@ onMounted(() => {
     <!-- Add Modal -->
     <AddModal
       :isOpen="isModalOpen"
-      :defaultType="activeTab ==='shared' ? 'up' : activeTab"
+      :defaultType="activeTab === 'shared' ? 'up' : activeTab"
       :forceShared="activeTab === 'shared'"
       @close="isModalOpen = false"
     />
