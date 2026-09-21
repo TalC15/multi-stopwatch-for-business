@@ -272,7 +272,7 @@ export async function syncTimerCancel(timerId) {
 export async function cancelTelegramChatId(user_id){
   try{
     await apiFetch(`${BASE_URL}/telegram/cancel`,{
-      method: "UPDATE",
+      method: "PATCH",
       headers: authHeader(),
       body: JSON.stringify({user_id}),
     })
