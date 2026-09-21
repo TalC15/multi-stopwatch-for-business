@@ -225,7 +225,7 @@ export async function syncTimerStart(timer) {
     endsAt = Date.now() + remaining;
   }
 
- try {
+  try {
     const response = await apiFetch(`${BASE_URL}/timer/start`, {
       method: "POST",
       headers: authHeader(),
@@ -244,7 +244,10 @@ export async function syncTimerStart(timer) {
     }
 
     if (!response.ok) {
-      console.warn("[Backend] Timer başlatma bildirimi gönderilemedi:", response.status);
+      console.warn(
+        "[Backend] Timer başlatma bildirimi gönderilemedi:",
+        response.status,
+      );
       return;
     }
 
@@ -253,7 +256,6 @@ export async function syncTimerStart(timer) {
     console.error("[Backend] Timer başlatma hatası:", err);
   }
 }
-
 
 // Timer iptal
 export async function syncTimerCancel(timerId) {
@@ -269,14 +271,35 @@ export async function syncTimerCancel(timerId) {
 }
 
 // telegram bağlantısı kaldırma
-export async function cancelTelegramChatId(user_id){
-  try{
-    await apiFetch(`${BASE_URL}/telegram/cancel`,{
+export async function cancelTelegramChatId(user_id) {
+  try {
+    const response = await apiFetch(`${BASE_URL}/telegram/cancel`, {
       method: "PATCH",
       headers: authHeader(),
-      body: JSON.stringify({user_id}),
-    })
-  }catch(err){
-    console.error("[Backend] Telegram bağlantı kaldırma hatası:",err);
+      body: JSON.stringify({ user_id }),
+    });
+    if (!response) return { success: false };
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error("[Backend] Telegram bağlantı kaldırma hatası:", err);
+    return { success: false };
+  }
+}
+
+// telegram chatID var mı kontrolü
+export async function telegramControl(user_id) {
+  try {
+    const response = await apiFetch(`${BASE_URL}/telegram/control`, {
+      method: "POST",
+      headers: authHeader(),
+      body: JSON.stringify({ user_id }),
+    });
+    if (!response) return {success:false};
+    const data = await response.json();
+    return data;
+  } catch (err) {
+    console.error("[Backend] Telegram bağlantısı kontrol hatası:", err);
+    return { success: false };
   }
 }

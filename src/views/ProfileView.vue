@@ -7,21 +7,26 @@ import {
   getAccessToken,
   saveTelegramChatId,
   getUser,
-  cancelTelegramChatId
+  cancelTelegramChatId,
+  telegramControl
 } from "@/services/backendSync";
 
 const user = getUser();
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
-
 const workspace = ref(null);
 const loading = ref(false);
 const joinLoading = ref(false);
 const leaveLoading = ref(false);
 const inviteCode = ref("");
 const chatId = ref("");
-const telegramSaved = ref(!!localStorage.getItem("telegramChatId"));
+const telegramSaved = ref(null);
 const telegramLoading = ref(false);
+
+async function telegramSavedControl(){
+  const res = await telegramControl(user?.id)
+  telegramSaved.value = res.connected
+}
 
 function authHeader() {
   return {
@@ -104,6 +109,7 @@ async function saveTelegram() {
 async function removeTelegram(user_id) {
   if(!user_id) return
   const result = await cancelTelegramChatId(user_id)
+  console.log(result)
   if (result?.success) {
     localStorage.removeItem("telegramChatId");
     telegramSaved.value = false;
@@ -115,7 +121,7 @@ async function removeTelegram(user_id) {
   
 }
 
-onMounted(() => fetchWorkspace());
+onMounted(() => {fetchWorkspace(); telegramSavedControl()});
 </script>
 
 <template>
