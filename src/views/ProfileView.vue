@@ -8,7 +8,7 @@ import {
   saveTelegramChatId,
   getUser,
   cancelTelegramChatId,
-  telegramControl
+  telegramControl,
 } from "@/services/backendSync";
 
 const user = getUser();
@@ -21,12 +21,8 @@ const leaveLoading = ref(false);
 const inviteCode = ref("");
 const chatId = ref("");
 const telegramSaved = ref(null);
-const telegramLoading = ref(false);
-
-async function telegramSavedControl(){
-  const res = await telegramControl(user?.id)
-  telegramSaved.value = res.connected
-}
+const telegramLoadingButton = ref(false);
+const telegramLoadingDiv = ref(false);
 
 function authHeader() {
   return {
@@ -92,7 +88,7 @@ async function leaveWorkspace() {
 
 async function saveTelegram() {
   if (!chatId.value) return;
-  telegramLoading.value = true;
+  telegramLoadingButton.value = true;
 
   const result = await saveTelegramChatId(chatId.value);
 
@@ -103,13 +99,13 @@ async function saveTelegram() {
   } else {
     message.warning("Geçersiz Chat ID. Lütfen tekrar dene.");
   }
-  telegramLoading.value = false;
+  telegramLoadingButton.value = false;
 }
 
 async function removeTelegram(user_id) {
-  if(!user_id) return
-  const result = await cancelTelegramChatId(user_id)
-  console.log(result)
+  if (!user_id) return;
+  const result = await cancelTelegramChatId(user_id);
+  console.log(result);
   if (result?.success) {
     localStorage.removeItem("telegramChatId");
     telegramSaved.value = false;
@@ -118,10 +114,19 @@ async function removeTelegram(user_id) {
   } else {
     message.error("Telegram bağlantısı kesilemedi");
   }
-  
 }
 
-onMounted(() => {fetchWorkspace(); telegramSavedControl()});
+async function telegramSavedControl() {
+  telegramLoadingDiv.value = true;
+  const res = await telegramControl(user?.id);
+  telegramLoadingDiv.value = false;
+  telegramSaved.value = res.connected;
+}
+
+onMounted(() => {
+  fetchWorkspace();
+  telegramSavedControl();
+});
 </script>
 
 <template>
@@ -284,39 +289,42 @@ onMounted(() => {fetchWorkspace(); telegramSavedControl()});
         >
           Telegram Bildirimi
         </h2>
+        <div v-if="!telegramLoadingDiv">
+          <div v-if="!telegramSaved" class="flex flex-col gap-3">
+            <p class="text-xs text-[var(--color-text-secondary)]">
+              @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
+              gir.
+            </p>
+            <input
+              v-model="chatId"
+              type="number"
+              placeholder="Chat ID (örn: 1234567890)"
+              class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none no-spinner"
+            />
+            <button
+              @click="saveTelegram"
+              :disabled="!chatId || telegramLoadingButton"
+              class="w-full py-3 rounded-2xl bg-indigo-700 text-white font-bold transition active:scale-95 disabled:opacity-40"
+            >
+              {{ telegramLoadingButton ? "Kaydediliyor..." : "Kaydet" }}
+            </button>
+          </div>
 
-        <div v-if="!telegramSaved" class="flex flex-col gap-3">
-          <p class="text-xs text-[var(--color-text-secondary)]">
-            @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
-            gir.
-          </p>
-          <input
-            v-model="chatId"
-            type="number"
-            placeholder="Chat ID (örn: 1234567890)"
-            class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none no-spinner"
-          />
-          <button
-            @click="saveTelegram"
-            :disabled="!chatId || telegramLoading"
-            class="w-full py-3 rounded-2xl bg-indigo-700 text-white font-bold transition active:scale-95 disabled:opacity-40"
-          >
-            {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
-          </button>
+          <div v-else class="flex items-center justify-between">
+            <span class="text-sm text-green-500 font-medium"
+              >✓ Telegram bağlı</span
+            >
+            <button
+              @click="removeTelegram(user?.id)"
+              class="text-xs text-[var(--color-text-muted)] underline"
+            >
+              Kaldır
+            </button>
+          </div>
         </div>
-
-        <div v-else class="flex items-center justify-between">
-          <span class="text-sm text-green-500 font-medium"
-            >✓ Telegram bağlı</span
-          >
-          <button
-            @click="removeTelegram(user?.id)"
-            class="text-xs text-[var(--color-text-muted)] underline"
-          >
-            Kaldır
-          </button>
+        <div v-else class="text-center py-4 text-[var(--color-text-muted)] text-sm">
+          Yükleniyor...
         </div>
-        
       </div>
     </main>
   </div>

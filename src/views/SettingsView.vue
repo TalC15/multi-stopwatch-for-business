@@ -4,7 +4,7 @@ import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
 import { message } from "../composables/message";
-import { saveTelegramChatId } from "@/services/backendSync";
+import { saveTelegramChatId,telegramControl,getUser,cancelTelegramChatId } from "@/services/backendSync";
 import telegramStep1 from "@/assets/telegram/telegram-step-1.png";
 import telegramStep2 from "@/assets/telegram/telegram-step-2.png";
 import telegramStep3 from "@/assets/telegram/telegram-step-3.png";
@@ -14,11 +14,13 @@ import telegramStep5 from "@/assets/telegram/telegram-step-5.png";
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
 const router = useRouter();
+const user = getUser()
 const stopwatchStore = useStopwatchStore();
 const presetTime = ref("");
 const presetName = ref("");
 const chatId = ref("");
-const telegramLoading = ref(false);
+const telegramLoadingButton = ref(false);
+const telegramLoadingDiv = ref(false);
 const telegramSaved = ref(!!localStorage.getItem("telegramChatId"));
 
 const showTelegramHelp = ref(false);
@@ -55,11 +57,19 @@ const telegramSteps = [
   },
 ];
 
+async function telegramSavedControl() {
+  telegramLoadingDiv.value = true;
+  const res = await telegramControl(user?.id);
+  telegramLoadingDiv.value = false;
+  telegramSaved.value = res.connected;
+}
+
 onMounted(() => {
   telegramSteps.forEach((step) => {
     const img = new Image();
     img.src = step.image;
   });
+  telegramSavedControl()
 });
 
 function openTelegramHelp() {
@@ -85,7 +95,7 @@ function previousTelegramStep() {
 
 async function saveTelegram() {
   if (!chatId.value) return;
-  telegramLoading.value = true;
+  telegramLoadingButton.value = true;
 
   const result = await saveTelegramChatId(chatId.value);
 
@@ -97,13 +107,21 @@ async function saveTelegram() {
     message.warning("Geçersiz Chat ID. Lütfen tekrar dene.");
   }
 
-  telegramLoading.value = false;
+  telegramLoadingButton.value = false;
 }
 
-function removeTelegram() {
-  localStorage.removeItem("telegramChatId");
-  telegramSaved.value = false;
-  chatId.value = "";
+async function removeTelegram(user_id) {
+  if (!user_id) return;
+  const result = await cancelTelegramChatId(user_id);
+  console.log(result);
+  if (result?.success) {
+    localStorage.removeItem("telegramChatId");
+    telegramSaved.value = false;
+    chatId.value = "";
+    message.success("Telegram bağlantısı kesildi");
+  } else {
+    message.error("Telegram bağlantısı kesilemedi");
+  }
 }
 
 function defaultSettings(preset) {
@@ -373,7 +391,8 @@ function removePresetName(bIndex) {
       </div>
 
       <!-- Telegram Bildirimi -->
-      <div
+     <div v-if="!telegramLoadingDiv">
+        <div
         class="bg-card rounded-2xl border border-border overflow-hidden mb-6"
       >
         <!-- Header -->
@@ -444,10 +463,10 @@ function removePresetName(bIndex) {
 
           <button
             @click="saveTelegram"
-            :disabled="!chatId || telegramLoading"
+            :disabled="!chatId || telegramLoadingButton"
             class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-medium transition active:scale-95 disabled:opacity-40"
           >
-            {{ telegramLoading ? "Kaydediliyor..." : "Kaydet" }}
+            {{ telegramLoadingButton ? "Kaydediliyor..." : "Kaydet" }}
           </button>
         </div>
 
@@ -458,13 +477,18 @@ function removePresetName(bIndex) {
           </span>
 
           <button
-            @click="removeTelegram"
+            @click="removeTelegram(user?.id)"
             class="text-xs text-text-muted underline"
           >
             Kaldır
           </button>
         </div>
       </div>
+     </div>  
+     <div v-else class="text-center py-4 text-[var(--color-text-muted)] text-sm">
+        Yükleniyor...
+     </div>
+      
 
       <!-- About Section -->
       <div class="mb-2 ml-1">
