@@ -7,6 +7,9 @@ import { apiFetch, getAccessToken, getUser } from "@/services/backendSync";
 const props = defineProps(["isOpen", "defaultType", "forceShared"]);
 const emit = defineEmits(["close"]);
 const store = useStopwatchStore();
+const user = getUser()
+
+console.log('fffd',user)
 
 const presetTimes = store.presetTimes;
 const presetNames = store.presetNames;
@@ -43,6 +46,8 @@ const save = async () => {
     return message.warning("süre negatif olamaz")
   if(store.duration>1440)
     return message.warning("çok uzun süre(en fazla 1440)")
+  if (!user?.workspace_id)
+    return message.warning("ortak kronometre oluşturmak için bir workspace'e katılmalısınız")
   if(props.forceShared && !sharedModeAvailable.value)
     return message.warning("yönetici izni yok")
   const isStopwatchNames = store?.stopwatches.map(a=>a.name)

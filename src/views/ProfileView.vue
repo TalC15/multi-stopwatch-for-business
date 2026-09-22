@@ -60,6 +60,8 @@ async function joinWorkspace() {
     const data = await response.json();
     if (response.ok) {
       message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
+      user.workspace_id = data.workspace.id
+      localStorage.setItem("user",JSON.stringify(user))
       inviteCode.value = "";
       workspace.value = data.workspace;
     } else {
@@ -82,6 +84,8 @@ async function leaveWorkspace() {
     if (response.ok) {
       message.success("Çalışma gurubundan ayrıldınız");
       workspace.value = null;
+      user.workspace_id = null
+      localStorage.setItem("user",JSON.stringify(user))
       // Soket eski workspace odasında kalmasın diye bağlantıyı sıfırla
       disconnectSocket();
       connectSocket();
