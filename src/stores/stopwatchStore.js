@@ -240,6 +240,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
     // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
   onTimerEvent(({ event, data }) => {
+    console.log("[Socket] Event alındı:", event, "id:", data?.id, "zaman:", new Date().toISOString());
     if (event === "created") {
       // Zaten varsa ekleme
       if (!stopwatches.value.find((t) => t.id === data.id)) {

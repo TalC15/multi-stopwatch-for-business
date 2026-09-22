@@ -17,16 +17,21 @@ export function connectSocket() {
   socket = io(SOCKET_URL);
 
   socket.on("connect", () => {
-    console.log("[Socket] Bağlandı:", socket.id);
+    console.log("[Socket] Bağlandı:", socket.id, "zaman:", new Date().toISOString());
 
     const user = getUser();
     if (user?.workspace_id) {
       socket.emit("join-workspace", user.workspace_id);
+      console.log("[Socket] join-workspace gönderildi:", user.workspace_id, "zaman:", new Date().toISOString());
     }
   });
 
-  socket.on("disconnect", () => {
-    console.log("[Socket] Bağlantı kesildi");
+  socket.on("disconnect", (reason) => {
+    console.log("[Socket] Bağlantı kesildi, sebep:", reason, "zaman:", new Date().toISOString());
+  });
+
+  socket.io.on("reconnect_attempt", (attempt) => {
+    console.log("[Socket] Yeniden bağlanma denemesi:", attempt, "zaman:", new Date().toISOString());
   });
 
   // Socket kurulmadan önce kaydedilmiş dinleyicileri şimdi gerçek socket'e bağla
