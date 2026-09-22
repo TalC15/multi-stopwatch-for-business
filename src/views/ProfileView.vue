@@ -328,7 +328,7 @@ onMounted(() => {
               @click="removeTelegram(user?.id)"
               class="text-xs text-[var(--color-text-muted)] underline"
             >
-              Kaldır
+              Bağlantıyı kes
             </button>
           </div>
         </div>

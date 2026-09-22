@@ -33,9 +33,9 @@ const telegramSteps = [
     image: telegramStep1,
   },
   {
-    title: "KeepTime botunu arayın",
+    title: "KeepTimer Bildirimleri botunu arayın",
     description:
-      "Telegram'ın arama bölümüne @KeepTimeApp_bot yazın ve KeepTime botunu seçin.",
+      "Telegram'ın arama bölümüne @KeepTimeApp_bot yazın ve KeepTimer Bildirimleri botunu seçin.",
     image: telegramStep2,
   },
   {
@@ -50,7 +50,7 @@ const telegramSteps = [
     image: telegramStep4,
   },
   {
-    title: "Chat ID'yi KeepTime'a girin",
+    title: "Chat ID'yi KeepTimer'a girin",
     description:
       "Kopyaladığınız Chat ID'yi aşağıdaki alana yapıştırın ve Kaydet'e basın.",
     image: telegramStep5,
@@ -485,7 +485,7 @@ function removePresetName(bIndex) {
             @click="removeTelegram(user?.id)"
             class="text-xs text-text-muted underline"
           >
-            Kaldır
+            Bağlantıyı kes
           </button>
         </div>
       </div>

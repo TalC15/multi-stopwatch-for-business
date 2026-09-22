@@ -359,7 +359,7 @@ onMounted(() => fetchAll());
         >
           <div class="flex flex-col gap-0.5">
             <span class="text-sm font-medium text-[var(--color-text-primary)]">{{ member.username }}</span>
-            <span class="text-xs text-[var(--color-text-muted)]">{{ member.role }}</span>
+            <span :class="[store.roleStyles[member?.role].text,'text-[11px]']">{{ member.role }}</span>
           </div>
           <span class="text-xs text-[var(--color-text-muted)]">{{ formatDate(member.created_at) }}</span>
         </div>
