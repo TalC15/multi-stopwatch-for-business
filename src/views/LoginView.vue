@@ -84,6 +84,7 @@
             v-model="username"
             type="text"
             placeholder="Kullanıcı adınız"
+            maxlength="25"
             class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)] transition"
           />
         </div>

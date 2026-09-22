@@ -35,8 +35,14 @@ const increment = () => {
 const save = async () => {
   if (!store.name)
     return message.warning("isim eklemek zorunludur");
+  if (store.name.length>35)
+    return message.warning("çok uzun isim")
   if (!store.duration)
     return message.warning("süre belirtmek zorunludur");
+  if(store.duration<0)
+    return message.warning("süre negatif olamaz")
+  if(store.duration>1440)
+    return message.warning("çok uzun süre(en fazla 1440)")
   if(props.forceShared && !sharedModeAvailable.value)
     return message.warning("yönetici izni yok")
   const isStopwatchNames = store?.stopwatches.map(a=>a.name)
@@ -115,7 +121,7 @@ onMounted(() =>checkSharedMode());
         class="flex justify-between items-center mb-6 pb-5 border-b border-slate-100 dark:border-slate-800"
       >
         <h2 class="text-2xl font-black text-slate-900 dark:text-white">
-          New Stopwatch
+          Yeni Zamanlayıcı
         </h2>
         <button
           @click="emit('close')"
@@ -144,12 +150,13 @@ onMounted(() =>checkSharedMode());
           <label
             class="block text-sm font-bold text-slate-500 dark:text-slate-400 mb-2"
           >
-            Stopwatch Name
+            Zamanlayıcı İsmi
           </label>
           <input
             v-model="store.name"
             type="text"
             placeholder="e.g., Presentation Prep"
+            maxlength="35"
             class="w-full px-4 py-3.5 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 border-none outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-700 text-base font-medium transition-all"
           />
         </div>
@@ -174,11 +181,11 @@ onMounted(() =>checkSharedMode());
         <div>
           <div class="flex justify-between items-center mb-2">
             <label class="text-sm font-bold text-slate-500 dark:text-slate-400">
-              Target Duration
+              Hedeflenen Süre
             </label>
             <span
               class="text-sm font-semibold text-slate-400 dark:text-slate-500"
-              >Minutes</span
+              >Dakika</span
             >
           </div>
 
@@ -190,8 +197,8 @@ onMounted(() =>checkSharedMode());
               v-if="sharedModeAvailable && !forceShared"
               class="flex items-center justify-between ..."
             >
-              <span class="text-sm font-bold text-slate-700 dark:text-slate-300"
-                >Ortak Timer</span
+              <span class=" mr-1 text-sm font-bold text-slate-700 dark:text-slate-300"
+                >Ortak Zaman</span
               >
               <button
                 @click="isShared = !isShared"

@@ -8,11 +8,12 @@ const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
 const users = ref([]);
-const sameWorkspaceUsers = ref([])
+const sameWorkspaceUsers = ref([]);
 const workspace = ref(null);
 const loading = ref(false);
 const createLoading = ref(false);
 const workspaceLoading = ref(false);
+const workspaceLoadingDiv = ref(false);
 const leaveLoading = ref(false);
 const refreshLoading = ref(false);
 
@@ -31,12 +32,14 @@ function authHeader() {
 }
 
 async function fetchWorkspace() {
+  workspaceLoadingDiv.value = true;
   const response = await apiFetch(`${BASE_URL}/workspace`, {
     headers: authHeader(),
   });
   if (response) {
     const data = await response.json();
     workspace.value = data.workspace;
+    workspaceLoadingDiv.value = false
   }
 }
 
@@ -48,7 +51,9 @@ async function fetchUsers() {
   if (response) {
     const data = await response.json();
     users.value = data.users || [];
-    sameWorkspaceUsers.value = users.value.filter(a=>a?.workspace_id===workspace.value.id)
+    sameWorkspaceUsers.value = users.value.filter(
+      (a) => a?.workspace_id === workspace.value.id,
+    );
   }
   loading.value = false;
 }
@@ -144,6 +149,8 @@ async function refreshInviteCode() {
 
 async function createUser() {
   if (!newUsername.value || !newPin.value) return;
+  if (newUsername.value.length > 25 || newPin.value.length > 25)
+    return message.error("çok uzun isim veya PIN");
   createLoading.value = true;
 
   const response = await apiFetch(`${BASE_URL}/users/create`, {
@@ -153,7 +160,7 @@ async function createUser() {
       username: newUsername.value,
       pin: newPin.value,
       role: "worker",
-      workspace_id : workspace.value.id
+      workspace_id: workspace.value.id,
     }),
   });
 
@@ -165,7 +172,7 @@ async function createUser() {
       newPin.value = "";
       await fetchUsers();
     } else {
-      message.warning(data.error || "Kullanıcı oluşturulamadı");
+      message.error(data.error || "Kullanıcı oluşturulamadı");
     }
   }
   createLoading.value = false;
@@ -181,7 +188,7 @@ async function deleteUser(userId, username) {
     message.success(`${username} silindi`);
     await fetchUsers();
   } else {
-    message.warning("Kullanıcı silinemedi");
+    message.error("Kullanıcı silinemedi");
   }
 }
 
@@ -255,126 +262,134 @@ onMounted(async () => {
         </h2>
 
         <!-- Workspace var -->
-        <div v-if="workspace" class="flex flex-col gap-3">
-          <div class="flex items-center justify-between">
-            <span class="font-bold text-[var(--color-text-primary)]">{{
-              workspace.name
-            }}</span>
-            <span class="text-xs text-green-500">Aktif</span>
-          </div>
+        <div v-if="!workspaceLoadingDiv">
+          <div v-if="workspace" class="flex flex-col gap-3">
+            <div class="flex items-center justify-between">
+              <span class="font-bold text-[var(--color-text-primary)]">{{
+                workspace.name
+              }}</span>
+              <span class="text-xs text-green-500">Aktif</span>
+            </div>
 
-          <!-- Davet kodu -->
-          <div
-            class="flex items-center gap-2 bg-[var(--color-surface)] rounded-xl px-4 py-3"
-          >
-            <span class="text-xs text-[var(--color-text-muted)]"
-              >Davet Kodu:</span
+            <!-- Davet kodu -->
+            <div
+              class="flex items-center gap-2 bg-[var(--color-surface)] rounded-xl px-4 py-3"
             >
-            <span
-              class="flex-1 font-black text-[var(--color-primary-light)] tracking-widest"
-              >{{ workspace.invite_code }}</span
-            >
-            <button
-              @click="refreshInviteCode"
-              :disabled="refreshLoading"
-              class="text-xs text-indigo-500 font-medium disabled:opacity-40"
-            >
-              {{ refreshLoading ? "..." : "Yenile" }}
-            </button>
-          </div>
-
-          <!-- Ortak Ekran Toggle -->
-          <div
-            class="flex items-center justify-between bg-[var(--color-surface)] rounded-xl px-4 py-3"
-          >
-            <div class="flex flex-col gap-0.5">
-              <span class="text-sm font-medium text-[var(--color-text-primary)]"
-                >Ortak Ekran</span
-              >
               <span class="text-xs text-[var(--color-text-muted)]"
-                >Çalışanlar birbirlerinin kronometrelerini görebilir</span
+                >Davet Kodu:</span
               >
+              <span
+                class="flex-1 font-black text-[var(--color-primary-light)] tracking-widest"
+                >{{ workspace.invite_code }}</span
+              >
+              <button
+                @click="refreshInviteCode"
+                :disabled="refreshLoading"
+                class="text-xs text-indigo-500 font-medium disabled:opacity-40"
+              >
+                {{ refreshLoading ? "..." : "Yenile" }}
+              </button>
             </div>
-            <button
-              @click="toggleSharedMode"
-              :disabled="sharedModeLoading"
-              :class="[
-                'w-12 h-7 rounded-full relative transition-colors duration-300',
-                workspace.shared_mode_enabled
-                  ? 'bg-indigo-700'
-                  : 'bg-[var(--color-border)]',
-              ]"
+
+            <!-- Ortak Ekran Toggle -->
+            <div
+              class="flex items-center justify-between bg-[var(--color-surface)] rounded-xl px-4 py-3"
             >
-              <div
+              <div class="flex flex-col gap-0.5">
+                <span
+                  class="text-sm font-medium text-[var(--color-text-primary)]"
+                  >Ortak Ekran</span
+                >
+                <span class="text-xs text-[var(--color-text-muted)]"
+                  >Çalışanlar birbirlerinin kronometrelerini görebilir</span
+                >
+              </div>
+              <button
+                @click="toggleSharedMode"
+                :disabled="sharedModeLoading"
                 :class="[
-                  'absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300',
+                  'w-12 h-7 rounded-full relative transition-colors duration-300',
                   workspace.shared_mode_enabled
-                    ? 'translate-x-5 left-0.5'
-                    : 'translate-x-0 left-0.5',
+                    ? 'bg-indigo-700'
+                    : 'bg-[var(--color-border)]',
                 ]"
-              ></div>
+              >
+                <div
+                  :class="[
+                    'absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform duration-300',
+                    workspace.shared_mode_enabled
+                      ? 'translate-x-5 left-0.5'
+                      : 'translate-x-0 left-0.5',
+                  ]"
+                ></div>
+              </button>
+            </div>
+
+            <!-- Ayrıl -->
+            <button
+              @click="leaveWorkspace"
+              :disabled="leaveLoading"
+              class="w-full py-2.5 rounded-2xl border border-red-500 text-red-500 font-bold text-sm transition active:scale-95 disabled:opacity-40"
+            >
+              {{ leaveLoading ? "Ayrılıyor..." : "Guruptan Ayrıl" }}
             </button>
           </div>
 
-          <!-- Ayrıl -->
-          <button
-            @click="leaveWorkspace"
-            :disabled="leaveLoading"
-            class="w-full py-2.5 rounded-2xl border border-red-500 text-red-500 font-bold text-sm transition active:scale-95 disabled:opacity-40"
-          >
-            {{ leaveLoading ? "Ayrılıyor..." : "Guruptan Ayrıl" }}
-          </button>
+          <!-- Workspace yok -->
+          <div v-else class="flex flex-col gap-3">
+            <div class="flex flex-col gap-2">
+              <p class="text-xs text-[var(--color-text-secondary)]">
+                Yeni workspace oluştur:
+              </p>
+              <div class="flex gap-2">
+                <input
+                  v-model="newWorkspaceName"
+                  type="text"
+                  placeholder="Workspace adı"
+                  class="flex-1 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none"
+                />
+                <button
+                  @click="createWorkspace"
+                  :disabled="!newWorkspaceName || workspaceLoading"
+                  class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-bold disabled:opacity-40"
+                >
+                  Oluştur
+                </button>
+              </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <div class="flex-1 h-px bg-[var(--color-border)]"></div>
+              <span class="text-xs text-[var(--color-text-muted)]">veya</span>
+              <div class="flex-1 h-px bg-[var(--color-border)]"></div>
+            </div>
+
+            <div class="flex flex-col gap-2">
+              <p class="text-xs text-[var(--color-text-secondary)]">
+                Davet kodu ile katıl:
+              </p>
+              <div class="flex gap-2">
+                <input
+                  v-model="inviteCode"
+                  type="text"
+                  placeholder="Davet kodu"
+                  class="flex-1 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none uppercase"
+                />
+                <button
+                  @click="joinWorkspace"
+                  :disabled="!inviteCode || workspaceLoading"
+                  class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-bold disabled:opacity-40"
+                >
+                  Katıl
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
-
-        <!-- Workspace yok -->
-        <div v-else class="flex flex-col gap-3">
-          <div class="flex flex-col gap-2">
-            <p class="text-xs text-[var(--color-text-secondary)]">
-              Yeni workspace oluştur:
-            </p>
-            <div class="flex gap-2">
-              <input
-                v-model="newWorkspaceName"
-                type="text"
-                placeholder="Workspace adı"
-                class="flex-1 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none"
-              />
-              <button
-                @click="createWorkspace"
-                :disabled="!newWorkspaceName || workspaceLoading"
-                class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-bold disabled:opacity-40"
-              >
-                Oluştur
-              </button>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <div class="flex-1 h-px bg-[var(--color-border)]"></div>
-            <span class="text-xs text-[var(--color-text-muted)]">veya</span>
-            <div class="flex-1 h-px bg-[var(--color-border)]"></div>
-          </div>
-
-          <div class="flex flex-col gap-2">
-            <p class="text-xs text-[var(--color-text-secondary)]">
-              Davet kodu ile katıl:
-            </p>
-            <div class="flex gap-2">
-              <input
-                v-model="inviteCode"
-                type="text"
-                placeholder="Davet kodu"
-                class="flex-1 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none uppercase"
-              />
-              <button
-                @click="joinWorkspace"
-                :disabled="!inviteCode || workspaceLoading"
-                class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-bold disabled:opacity-40"
-              >
-                Katıl
-              </button>
-            </div>
-          </div>
+        <div v-else
+          class="text-center py-4 text-[var(--color-text-muted)] text-sm"
+        >
+          Yükleniyor...
         </div>
       </div>
 
@@ -392,12 +407,14 @@ onMounted(async () => {
           v-model="newUsername"
           type="text"
           placeholder="Kullanıcı adı"
+          maxlength="25"
           class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] focus:outline-none text-sm"
         />
         <input
           v-model="newPin"
           type="password"
           placeholder="PIN"
+          maxlength="25"
           class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] focus:outline-none text-sm"
         />
         <button
@@ -407,8 +424,11 @@ onMounted(async () => {
         >
           {{ createLoading ? "Oluşturuluyor..." : "Çalışan Oluştur" }}
         </button>
-        <p class="text-[9px] font-black tracking-widest  text-[var(--color-text-muted)]">
-          Oluşturacağınız çalışanlar bulunduğunuz çalışma gurubuna eklenir</p>
+        <p
+          class="text-[9px] font-black tracking-widest text-[var(--color-text-muted)]"
+        >
+          Oluşturacağınız çalışanlar bulunduğunuz çalışma gurubuna eklenir
+        </p>
       </div>
 
       <!-- Çalışanlar -->

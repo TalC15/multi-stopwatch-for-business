@@ -50,6 +50,7 @@ async function fetchAll() {
 
 async function createUser() {
   if (!newUsername.value || !newPin.value) return;
+  if (newUsername.value.length>25 || newPin.value.length>25) return message.error("çok uzun isim veya PIN");
   createLoading.value = true;
 
   const response = await apiFetch(`${BASE_URL}/users/create`, {
@@ -73,7 +74,7 @@ async function createUser() {
       newWorkspaceId.value = '';
       await fetchAll();
     } else {
-      message.warning(data.error || 'Kullanıcı oluşturulamadı');
+      message.error(data.error || 'Kullanıcı oluşturulamadı');
     }
   }
   createLoading.value = false;
@@ -89,7 +90,7 @@ async function deleteUser(userId, username) {
     message.success(`${username} silindi`);
     await fetchAll();
   } else {
-    message.warning('Kullanıcı silinemedi');
+    message.error('Kullanıcı silinemedi');
   }
 }
 
@@ -103,7 +104,7 @@ async function forceLogout(userId, username) {
     message.success(`${username} kullanıcısının oturumu kapatıldı`);
   } else {
     const data = response ? await response.json() : null;
-    message.warning(data?.error || 'Oturum kapatılamadı');
+    message.error(data?.error || 'Oturum kapatılamadı');
   }
 }
 
@@ -125,7 +126,7 @@ async function updateUser() {
     editingUser.value = null;
     await fetchAll();
   } else {
-    message.warning('Kullanıcı güncellenemedi');
+    message.error('Kullanıcı güncellenemedi');
   }
 }
 
@@ -181,10 +182,10 @@ onMounted(() => fetchAll());
       <div class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5 flex flex-col gap-4">
         <h2 class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]">Yeni Kullanıcı</h2>
 
-        <input v-model="newUsername" type="text" placeholder="Kullanıcı adı"
+        <input v-model="newUsername" type="text" placeholder="Kullanıcı adı" maxlength="25"
           class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] focus:outline-none text-sm" />
 
-        <input v-model="newPin" type="password" placeholder="PIN"
+        <input v-model="newPin" type="password" placeholder="PIN" maxlength="25"
           class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] focus:outline-none text-sm" />
 
         <div class="flex gap-2">

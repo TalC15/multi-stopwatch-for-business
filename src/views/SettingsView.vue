@@ -140,7 +140,10 @@ function defaultSettings(preset) {
 }
 
 function addPresetTime() {
-  if(String(presetTime.value).trim()==='') return message.warning('bir süre belirtmediniz')
+  if(!presetTime.value||String(presetTime.value).trim()==='') return message.warning('bir süre belirtmediniz')
+  if(presetTime.value>1440) return message.warning("çok uzun süre(en fazla 1440)")
+  if(presetTime.value<0) return message.warning("süre negatif olamaz")
+  if (!/^\d+$/.test(presetTime.value)) return message.warning("geçersiz süre")
   const isPresetTimes = store?.presetTimes.map((a) => a);
   if (isPresetTimes?.includes(presetTime.value))
     return message.warning("Bu zaman etiketi zaten mevcut");
@@ -154,7 +157,8 @@ function addPresetTime() {
 }
 
 function addPresetName() {
-  if(presetName.value.trim()==='') return message.warning('bir isim koymadınız')
+  if(!presetName.value || presetName.value.trim()==='') return message.warning('bir isim koymadınız')
+  if(presetName.value.length>35) return message.warning('çok uzun isim')
   const isPresetNames = store?.presetNames.map((a) => a);
   if (isPresetNames?.includes(presetName.value))
     return message.warning("Bu isim etiketi zaten mevcut");
@@ -350,6 +354,7 @@ function removePresetName(bIndex) {
           v-model="presetName"
           type="text"
           placeholder="İsim etiketi oluşturun"
+          maxlength="35"
           :class="[
             'no-spinner w-full rounded-2xl border  bg-white/10 h-12 pl-12 pr-4  backdrop-blur-md outline-none transition-all duration-300 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/20',
             themeStore.isDark

@@ -8,32 +8,44 @@
       cardStyle.border,
     ]"
   >
-    <div class="flex justify-between items-start mb-1">
-      <div>
-        <h3 :class="['text-lg font-bold leading-tight', cardStyle.title]">
-          {{ timer.name }}
-        </h3>
-        <p
-          v-if="timer.targetMinutes"
-          :class="['text-sm mt-0.5', cardStyle.subtitle]"
-        >
-          Target: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
-        </p>
-      </div>
-      <span
-        :class="[
-          'text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1.5',
-          cardStyle.badge,
-        ]"
-      >
-        <span
-          v-if="timer.status === 'running' && !timer.reachedTarget"
-          class="w-2 h-2 rounded-full bg-current animate-pulse"
-        ></span>
-        <span v-if="timer.reachedTarget">⚠</span>
-        {{ statusLabel }}
-      </span>
-    </div>
+
+<div class="flex items-start gap-2 justify-between mb-1">
+  <div class="flex-1 min-w-0">
+    <h3
+      :class="[
+        'text-lg font-bold leading-tight wrap-break-word whitespace-normal',
+        cardStyle.title
+      ]"
+    >
+      {{ timer.name }}
+    </h3>
+
+    <p
+      v-if="timer.targetMinutes"
+      :class="['text-sm mt-0.5', cardStyle.subtitle]"
+    >
+      Target: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
+    </p>
+  </div>
+
+  <span
+    :class="[
+      'shrink-0 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1.5',
+      cardStyle.badge,
+    ]"
+  >
+    <span
+      v-if="timer.status === 'running' && !timer.reachedTarget"
+      class="w-2 h-2 rounded-full bg-current animate-pulse"
+    ></span>
+
+    <span v-if="timer.reachedTarget">⚠</span>
+
+    {{ statusLabel }}
+  </span>
+</div>
+
+
     <div class="flex items-center justify-between">
       <button
         @click="store.updateIsPay(timer.id, !timer.isPay)"
