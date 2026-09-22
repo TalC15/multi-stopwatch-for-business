@@ -2,6 +2,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
+import { disconnectSocket, connectSocket } from '@/services/socket';
 import {
   apiFetch,
   getAccessToken,
@@ -81,8 +82,11 @@ async function leaveWorkspace() {
     if (response.ok) {
       message.success("Çalışma gurubundan ayrıldınız");
       workspace.value = null;
+      // Soket eski workspace odasında kalmasın diye bağlantıyı sıfırla
+      disconnectSocket();
+      connectSocket();
     } else {
-      message.warning(data.error || "Ayrılma başarısız");
+      message.error(data.error || "Ayrılma başarısız");
     }
   }
   leaveLoading.value = false;

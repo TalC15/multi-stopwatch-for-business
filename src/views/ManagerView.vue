@@ -2,6 +2,7 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
+import { disconnectSocket, connectSocket } from '@/services/socket';
 import { apiFetch, getAccessToken } from "@/services/backendSync";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 
@@ -122,8 +123,11 @@ async function leaveWorkspace() {
       message.success("Workspace'den ayrıldınız");
       workspace.value = null;
       users.value = [];
+      // Soket eski workspace odasında kalmasın diye bağlantıyı sıfırla
+      disconnectSocket();
+      connectSocket();
     } else {
-      message.warning(data.error);
+      message.error(data.error || 'Ayrılma başarısız');
     }
   }
   leaveLoading.value = false;
