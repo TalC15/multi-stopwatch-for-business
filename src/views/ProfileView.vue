@@ -10,7 +10,9 @@ import {
   cancelTelegramChatId,
   telegramControl,
 } from "@/services/backendSync";
+import { useStopwatchStore } from "../stores/stopwatchStore";
 
+const store = useStopwatchStore()
 const user = getUser();
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
@@ -197,7 +199,7 @@ onMounted(() => {
               {{ user?.username || "Kullanıcı" }}
             </span>
 
-            <span class="text-xs text-[var(--color-text-secondary)] capitalize">
+            <span :class="[store.roleStyles[user?.role].text,'text-[13px] capitalize']">
               {{ user?.role || "Rol belirtilmemiş" }}
             </span>
           </div>

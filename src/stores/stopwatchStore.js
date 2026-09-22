@@ -25,7 +25,23 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   const duration = ref(
     JSON.parse(localStorage.getItem("defaultDuration")) || 0,
   );
-  const name = ref(JSON.parse(localStorage.getItem("defaultName")) || "kronometre");
+  const name = ref(
+    JSON.parse(localStorage.getItem("defaultName")) || "kronometre",
+  );
+
+  const roleStyles = {
+    worker: {
+      text: "text-teal-400",
+    },
+
+    manager: {
+      text: "text-indigo-400",
+    },
+
+    superadmin: {
+      text: "text-amber-400",
+    },
+  };
 
   watch(
     stopwatches,
@@ -106,7 +122,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   // ─── Actions ──────────────────────────────────────────────────────────────
 
   const addTimer = async (timer) => {
-    console.log('[DEBUG] addTimer çağrıldı:', JSON.stringify(timer));
+    console.log("[DEBUG] addTimer çağrıldı:", JSON.stringify(timer));
     const targetMs = timer.duration * 60 * 1000;
     const newTimer = {
       id: crypto.randomUUID(),
@@ -122,17 +138,20 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       remaining: timer.type === "down" ? targetMs : null,
       reachedTarget: false,
     };
-    console.log('[DEBUG] newTimer (frozen):', JSON.stringify(newTimer));
+    console.log("[DEBUG] newTimer (frozen):", JSON.stringify(newTimer));
     stopwatches.value.push(newTimer);
 
     // DB'ye kaydet
     if (isLoggedIn()) {
       await dbCreateTimer(newTimer);
       if (newTimer.isShared) {
-        console.log('[DEBUG] emitTimerEvent çağrılıyor');
+        console.log("[DEBUG] emitTimerEvent çağrılıyor");
         emitTimerEvent("created", newTimer);
       } else {
-        console.log('[DEBUG] isShared false, emit yapılmadı - newTimer.isShared:', newTimer.isShared);
+        console.log(
+          "[DEBUG] isShared false, emit yapılmadı - newTimer.isShared:",
+          newTimer.isShared,
+        );
       }
     }
 
@@ -238,9 +257,16 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     }
   };
   // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
-    // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
+  // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
   onTimerEvent(({ event, data }) => {
-    console.log("[Socket] Event alındı:", event, "id:", data?.id, "zaman:", new Date().toISOString());
+    console.log(
+      "[Socket] Event alındı:",
+      event,
+      "id:",
+      data?.id,
+      "zaman:",
+      new Date().toISOString(),
+    );
     if (event === "created") {
       // Zaten varsa ekleme
       if (!stopwatches.value.find((t) => t.id === data.id)) {
@@ -293,7 +319,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   });
 
   // ─── DB'den ortak timer'ları yükle (sayfa açılışında) ────────────────────
-    const loadSharedTimers = async () => {
+  const loadSharedTimers = async () => {
     if (!isLoggedIn()) return;
     const dbTimers = await dbGetSharedTimers();
     // null → istek başarısız oldu, local veriye dokunma (güvenli taraf)
@@ -409,6 +435,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     presetNames,
     duration,
     name,
+    roleStyles,
     addTimer,
     startTimer,
     pauseTimer,

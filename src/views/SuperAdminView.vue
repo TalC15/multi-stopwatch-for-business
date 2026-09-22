@@ -3,10 +3,12 @@ import { ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { message } from '@/composables/message';
 import { apiFetch, getAccessToken } from '@/services/backendSync';
+import { useStopwatchStore } from '../stores/stopwatchStore';
 
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
+const store = useStopwatchStore()
 const users = ref([]);
 const workspaces = ref([]);
 const loading = ref(false);
@@ -226,7 +228,7 @@ onMounted(() => fetchAll());
           <div v-if="editingUser?.id !== user.id" class="flex items-center justify-between">
             <div class="flex flex-col gap-0.5">
               <span class="font-medium text-[var(--color-text-primary)] text-sm">{{ user.username }}</span>
-              <span class="text-xs text-[var(--color-text-muted)]">{{ user.role }} — {{ workspaceName(user.workspace_id) }}</span>
+              <span class="text-xs text-[var(--color-text-muted)]"><span :class="[store.roleStyles[user?.role].text,'text-[11px]']">{{ user?.role }}</span> — {{ workspaceName(user.workspace_id) }}</span>
             </div>
            <div class="flex gap-2">
               <button @click="forceLogout(user.id, user.username)"

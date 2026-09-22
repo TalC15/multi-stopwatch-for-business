@@ -332,7 +332,7 @@ onMounted(() => {
         <button
           @click="activeTab = 'up'"
           :class="[
-            'flex-1 py-3 flex flex-col items-center gap-1 transition-colors',
+            'flex-1 py-3  flex flex-col items-center gap-1 transition-colors',
             activeTab === 'up'
               ? 'text-indigo-700 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/30'
               : 'text-[var(--color-text-muted)]',
@@ -341,7 +341,7 @@ onMounted(() => {
           <!-- Stopwatch icon with number -->
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            class="h-6 w-6"
+            class="h-7 w-7"
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"

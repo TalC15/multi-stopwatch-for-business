@@ -3,10 +3,12 @@ import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
 import { apiFetch, getAccessToken } from "@/services/backendSync";
+import { useStopwatchStore } from "../stores/stopwatchStore";
 
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
+const store = useStopwatchStore()
 const users = ref([]);
 const sameWorkspaceUsers = ref([]);
 const workspace = ref(null);
@@ -39,7 +41,7 @@ async function fetchWorkspace() {
   if (response) {
     const data = await response.json();
     workspace.value = data.workspace;
-    workspaceLoadingDiv.value = false
+    workspaceLoadingDiv.value = false;
   }
 }
 
@@ -216,6 +218,8 @@ async function toggleSharedMode() {
   sharedModeLoading.value = false;
 }
 
+
+
 onMounted(async () => {
   await fetchWorkspace();
   await fetchUsers();
@@ -386,7 +390,8 @@ onMounted(async () => {
             </div>
           </div>
         </div>
-        <div v-else
+        <div
+          v-else
           class="text-center py-4 text-[var(--color-text-muted)] text-sm"
         >
           Yükleniyor...
@@ -461,11 +466,15 @@ onMounted(async () => {
           <div class="flex flex-col gap-0.5">
             <span
               class="font-medium text-[var(--color-text-primary)] text-sm"
-              >{{ user.username }}</span
+              >{{ user?.username }}</span
             >
-            <span class="text-xs text-[var(--color-text-muted)]">{{
-              user.role
-            }}</span>
+            <span
+              :class="[
+                store.roleStyles[user?.role].text,
+                'text-[11px]',
+              ]"
+              >{{ user?.role }}</span
+            >
           </div>
           <button
             @click="deleteUser(user.id, user.username)"

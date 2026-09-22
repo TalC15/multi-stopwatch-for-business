@@ -1,5 +1,7 @@
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 import router from "../router";
+// Aynı anda birden fazla refresh isteği atılmasın diye devam eden refresh'i paylaş
+let refreshPromise = null;
 // Token yönetimi
 export function getAccessToken() {
   return localStorage.getItem("accessToken");
@@ -42,7 +44,7 @@ function authHeader() {
 }
 
 // Token yenile
-export async function refreshAccessToken() {
+async function performRefresh() {
   const refreshToken = getRefreshToken();
   if (!refreshToken) return { ok: false, hardFail: true };
 
@@ -59,14 +61,21 @@ export async function refreshAccessToken() {
       return { ok: true };
     }
 
-    // 401/403 → oturum gerçekten geçersiz, çıkış yapılmalı
-    // Diğer (503, 500 vb.) → geçici sorun, oturum SİLİNMEMELİ
     const hardFail = response.status === 401 || response.status === 403;
     return { ok: false, hardFail };
   } catch {
-    // Ağ hatası (internet yok, sunucuya ulaşılamadı) → geçici, oturum SİLİNMEMELİ
     return { ok: false, hardFail: false };
   }
+}
+
+// Aynı anda birden fazla apiFetch 401 alırsa, hepsi TEK bir refresh'i paylaşsın
+export async function refreshAccessToken() {
+  if (!refreshPromise) {
+    refreshPromise = performRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
 }
 
 // Genel fetch — token süresi dolunca otomatik yeniler
