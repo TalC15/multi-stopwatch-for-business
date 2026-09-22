@@ -293,17 +293,23 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   });
 
   // ─── DB'den ortak timer'ları yükle (sayfa açılışında) ────────────────────
-  const loadSharedTimers = async () => {
+    const loadSharedTimers = async () => {
     if (!isLoggedIn()) return;
     const dbTimers = await dbGetSharedTimers();
-    if (!dbTimers || dbTimers.length === 0) return;
+    // null → istek başarısız oldu, local veriye dokunma (güvenli taraf)
+    if (dbTimers === null) return;
 
     const now = Date.now();
+    const dbIds = new Set(dbTimers.map((t) => t.id));
+
+    // DB'de artık aktif/paylaşılan olarak görünmeyen (silinmiş, paylaşımdan
+    // çıkarılmış) ama local'de hâlâ duran "hayalet" ortak timer'ları temizle —
+    // biz kapalıyken başka biri silmiş/değiştirmiş olabilir.
+    stopwatches.value = stopwatches.value.filter(
+      (t) => !t.isShared || dbIds.has(t.id),
+    );
 
     dbTimers.forEach((dbTimer) => {
-      // Zaten local'de varsa dokunma — canlı/güncel veri DB'den daha değerli
-      if (stopwatches.value.find((t) => t.id === dbTimer.id)) return;
-
       const targetMinutes = dbTimer.target_minutes
         ? Number(dbTimer.target_minutes)
         : null;
@@ -327,8 +333,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
         reachedTarget: false,
       };
 
-      // running olarak DB'de kayıtlıysa, ends_at üzerinden bu cihazın
-      // kendi saatine göre yeniden hesapla ve gerçekten çalıştır.
       if (dbTimer.status === "running" && dbTimer.ends_at) {
         const endsAtMs = new Date(dbTimer.ends_at).getTime();
         const remaining = endsAtMs - now;
@@ -343,7 +347,18 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
         }
       }
 
-      stopwatches.value.push(timer);
+      // Mount anında DB her zaman otoriter kaynaktır — sayfa yeni açıldığı
+      // için korunması gereken "canlı" bir local değişiklik olamaz, o yüzden
+      // var olan kaydı da güvenle DB verisiyle değiştiriyoruz (sadece ekleme
+      // değil, gerçek bir senkronizasyon/reconciliation yapıyoruz).
+      const existingIndex = stopwatches.value.findIndex(
+        (t) => t.id === dbTimer.id,
+      );
+      if (existingIndex === -1) {
+        stopwatches.value.push(timer);
+      } else {
+        stopwatches.value[existingIndex] = timer;
+      }
     });
 
     if (stopwatches.value.some((t) => t.status === "running")) {

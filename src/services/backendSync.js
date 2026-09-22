@@ -201,9 +201,10 @@ export async function dbGetSharedTimers() {
   const response = await apiFetch(`${BASE_URL}/timers/shared`, {
     headers: authHeader(),
   });
-  if (!response) return [];
+  // token yok ya da istek başarısız (503/500 vb.) → null: "bilinmiyor", local veriyi silme
+  if (!response || !response.ok) return null;
   const data = await response.json();
-  return data.timers || [];
+  return data.timers || []; // gerçekten boşsa [] — bu güvenle "hiç yok" demek
 }
 
 // Timer başlat
