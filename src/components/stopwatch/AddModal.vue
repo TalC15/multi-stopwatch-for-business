@@ -9,8 +9,6 @@ const emit = defineEmits(["close"]);
 const store = useStopwatchStore();
 const user = getUser()
 
-console.log('fffd',user)
-
 const presetTimes = store.presetTimes;
 const presetNames = store.presetNames;
 

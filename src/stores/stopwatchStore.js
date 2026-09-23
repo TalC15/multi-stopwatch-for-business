@@ -12,7 +12,7 @@ import {
   dbDeleteTimer,
   dbGetSharedTimers,
 } from "../services/backendSync";
-import { emitTimerEvent, onTimerEvent } from "../services/socket";
+import { onTimerEvent } from "../services/socket";
 
 export const useStopwatchStore = defineStore("stopwatch", () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem("timers")) || []);
@@ -144,15 +144,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     // DB'ye kaydet
     if (isLoggedIn()) {
       await dbCreateTimer(newTimer);
-      if (newTimer.isShared) {
-        console.log("[DEBUG] emitTimerEvent çağrılıyor");
-        emitTimerEvent("created", newTimer);
-      } else {
-        console.log(
-          "[DEBUG] isShared false, emit yapılmadı - newTimer.isShared:",
-          newTimer.isShared,
-        );
-      }
     }
 
     return newTimer.id;
@@ -182,17 +173,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
         ends_at: endsAt,
         accumulated_ms: timer.accumulatedTime,
       });
-
-      if (timer.isShared) {
-        // Diğer cihazlara SADECE senkronize edilecek bilgiyi gönder.
-        // startTime/accumulatedTime bu cihaza özeldir, gönderilmez.
-        emitTimerEvent("updated", {
-          id: timer.id,
-          status: timer.status,
-          endsAt,
-          accumulatedTimeAtStart: timer.accumulatedTime,
-        });
-      }
     }
   };
 
@@ -213,15 +193,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
           paused_count: pausedCount,
           accumulated_ms: timer.accumulatedTime,
         });
-
-        if (timer.isShared) {
-          emitTimerEvent("updated", {
-            id: timer.id,
-            status: timer.status,
-            endsAt: null,
-            accumulatedTimeAtStart: timer.accumulatedTime,
-          });
-        }
       }
     }
   };
@@ -232,10 +203,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     if (isLoggedIn()) {
       syncTimerCancel(timer.id);
       dbDeleteTimer(timer.id);
-
-      if (timer.isShared) {
-        emitTimerEvent("deleted", { id: timer.id });
-      }
     }
 
     stopwatches.value = stopwatches.value.filter((t) => t.id !== timer.id);
@@ -251,9 +218,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     timer.isPay = isPay;
     if (isLoggedIn()) {
       dbUpdateTimer(id, { is_pay: isPay });
-      if (timer.isShared) {
-        emitTimerEvent("updated", { id: timer.id, isPay });
-      }
     }
   };
   // Diğer kullanıcılardan gelen ortak timer olaylarını dinle
