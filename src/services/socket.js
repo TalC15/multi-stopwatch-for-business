@@ -13,6 +13,8 @@ const socketConnectedListeners = new Set();
 let hasConnectedBefore = false;
 let currentConnectionInfo = null;
 
+
+
 function notifySocketConnected(connectionInfo) {
   socketConnectedListeners.forEach((callback) => {
     Promise.resolve()

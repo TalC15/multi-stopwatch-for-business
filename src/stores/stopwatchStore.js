@@ -70,14 +70,11 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
             !timer.reachedTarget
           ) {
             timer.reachedTarget = true;
+
             notifyTimerEnd(timer.id, timer.name, timer.isPay);
-            // DB güncelle — timer tamamlandı
-            if (isLoggedIn())
-              dbUpdateTimer(timer.id, {
-                status: "completed",
-                ended_at: new Date().toISOString(),
-                duration_ms: elapsed,
-              });
+
+            // Count-Up hedefe ulaşınca sona ermez.
+            // Timer çalışmaya devam ettiği için DB status'u "running" kalır.
           }
         } else {
           const total = timer.targetMinutes * 60 * 1000;
@@ -289,6 +286,15 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
           timer.accumulatedTime += Date.now() - timer.startTime;
         }
         timer.startTime = null;
+      } else if (data.status === "expired") {
+        const totalMs = Number(timer.targetMinutes || 0) * 60 * 1000;
+
+        timer.status = "expired";
+        timer.startTime = null;
+        timer.accumulatedTime = totalMs;
+        timer.elapsed = totalMs;
+        timer.remaining = 0;
+        timer.reachedTarget = true;
       }
     } else if (event === "deleted") {
       stopwatches.value = stopwatches.value.filter((t) => t.id !== data.id);
@@ -333,6 +339,14 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
 
           const accumulatedMs = Number(dbTimer.accumulated_ms || 0);
 
+          const targetMs = targetMinutes ? targetMinutes * 60 * 1000 : 0;
+
+          const countdownCompleted =
+            dbTimer.type === "down" && dbTimer.status === "completed";
+
+          const countUpTargetReached =
+            dbTimer.type === "up" && targetMinutes && accumulatedMs >= targetMs;
+
           const timer = {
             id: dbTimer.id,
             name: dbTimer.name,
@@ -341,18 +355,26 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
             isPay: dbTimer.is_pay || false,
             isShared: true,
 
-            status: dbTimer.status === "running" ? "paused" : dbTimer.status,
+            status: countdownCompleted
+              ? "expired"
+              : dbTimer.status === "running"
+                ? "paused"
+                : dbTimer.status,
 
             startTime: null,
-            accumulatedTime: accumulatedMs,
-            elapsed: accumulatedMs,
+
+            accumulatedTime: countdownCompleted ? targetMs : accumulatedMs,
+
+            elapsed: countdownCompleted ? targetMs : accumulatedMs,
 
             remaining:
               dbTimer.type === "down" && targetMinutes
-                ? Math.max(targetMinutes * 60 * 1000 - accumulatedMs, 0)
+                ? countdownCompleted
+                  ? 0
+                  : Math.max(targetMs - accumulatedMs, 0)
                 : null,
 
-            reachedTarget: false,
+            reachedTarget: Boolean(countdownCompleted || countUpTargetReached),
 
             pausedCount: Number(dbTimer.paused_count || 0),
           };
@@ -360,24 +382,44 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
           // Running timer'ı server'ın mutlak ends_at değerinden yeniden kur.
           if (dbTimer.status === "running" && dbTimer.ends_at) {
             const endsAtMs = new Date(dbTimer.ends_at).getTime();
+
             const remaining = endsAtMs - now;
 
-            if (remaining > 0 || dbTimer.type === "up") {
+            // Count-Up target'ı geçse bile çalışmaya devam eder.
+            if (dbTimer.type === "up") {
               timer.status = "running";
               timer.startTime = now;
 
               if (targetMinutes) {
-                timer.accumulatedTime = targetMinutes * 60 * 1000 - remaining;
+                timer.accumulatedTime = Math.max(0, targetMs - remaining);
 
                 timer.elapsed = timer.accumulatedTime;
 
-                if (timer.type === "down") {
-                  timer.remaining = Math.max(remaining, 0);
-                }
+                timer.reachedTarget =
+                  remaining <= 0 || timer.accumulatedTime >= targetMs;
               }
-            } else {
+            }
+
+            // Countdown henüz bitmediyse devam et.
+            else if (remaining > 0) {
+              timer.status = "running";
+              timer.startTime = now;
+
+              timer.accumulatedTime = Math.max(0, targetMs - remaining);
+
+              timer.elapsed = timer.accumulatedTime;
+
+              timer.remaining = Math.max(remaining, 0);
+            }
+
+            // Countdown biz offline'ken bittiyse.
+            else {
               timer.status = "expired";
+              timer.startTime = null;
+              timer.accumulatedTime = targetMs;
+              timer.elapsed = targetMs;
               timer.remaining = 0;
+              timer.reachedTarget = true;
             }
           }
 
@@ -455,24 +497,24 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     }, delay);
   };
   onSocketConnected(({ isReconnect }) => {
-  if (isReconnect) {
-    // Gerçek reconnect veya manuel socket yeniden oluşturma:
-    // DB kesinlikle tekrar okunmalı.
-    scheduleSharedTimersReconciliation({
-      force: true,
-    });
+    if (isReconnect) {
+      // Gerçek reconnect veya manuel socket yeniden oluşturma:
+      // DB kesinlikle tekrar okunmalı.
+      scheduleSharedTimersReconciliation({
+        force: true,
+      });
 
-    return;
-  }
+      return;
+    }
 
-  // İlk socket bağlantısı.
-  // HomeView henüz başarılı snapshot alamadıysa tamamla.
-  if (!hasSuccessfulSharedSnapshot) {
-    scheduleSharedTimersReconciliation({
-      force: false,
-    });
-  }
-});
+    // İlk socket bağlantısı.
+    // HomeView henüz başarılı snapshot alamadıysa tamamla.
+    if (!hasSuccessfulSharedSnapshot) {
+      scheduleSharedTimersReconciliation({
+        force: false,
+      });
+    }
+  });
 
   // ─── Rehydrate ────────────────────────────────────────────────────────────
   const rehydrateTimers = () => {
