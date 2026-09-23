@@ -137,6 +137,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       elapsed: 0,
       remaining: timer.type === "down" ? targetMs : null,
       reachedTarget: false,
+      pausedCount: 0,
     };
     console.log("[DEBUG] newTimer (frozen):", JSON.stringify(newTimer));
     stopwatches.value.push(newTimer);
@@ -176,26 +177,37 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
     }
   };
 
-  const pauseTimer = (id, pausedCount) => {
-    const timer = stopwatches.value.find((t) => t.id === id);
-    if (timer && timer.status === "running") {
-      timer.accumulatedTime += Date.now() - timer.startTime;
-      timer.startTime = null;
-      timer.status = "paused";
-      pausedCount++;
-      localStorage.setItem(`pausedCount${id}`, JSON.stringify(pausedCount));
-      cancelTimerSound(id);
+  const pauseTimer = (id) => {
+  const timer = stopwatches.value.find((t) => t.id === id);
 
-      if (isLoggedIn()) {
-        syncTimerCancel(id);
-        dbUpdateTimer(timer.id, {
-          status: "paused",
-          paused_count: pausedCount,
-          accumulated_ms: timer.accumulatedTime,
-        });
+  if (timer && timer.status === "running") {
+    timer.accumulatedTime += Date.now() - timer.startTime;
+    timer.startTime = null;
+    timer.status = "paused";
+
+    // Önce local state anında güncellenir.
+    timer.pausedCount = Number(timer.pausedCount || 0) + 1;
+
+    cancelTimerSound(id);
+
+    if (isLoggedIn()) {
+      syncTimerCancel(id);
+
+      const updates = {
+        status: "paused",
+        accumulated_ms: timer.accumulatedTime,
+      };
+
+      // Personal timer'ın pause sayısı kendi local state'inden gelir.
+      // Shared timer'da ise sayıyı backend hesaplar.
+      if (!timer.isShared) {
+        updates.paused_count = timer.pausedCount;
       }
+
+      dbUpdateTimer(timer.id, updates);
     }
-  };
+  }
+};
 
   const deleteTimer = (timer, deger) => {
     cancelTimerSound(timer.id);
@@ -207,7 +219,6 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
 
     stopwatches.value = stopwatches.value.filter((t) => t.id !== timer.id);
     localStorage.removeItem(`isPay${timer.id}`);
-    localStorage.removeItem(`pausedCount${timer.id}`);
     hapticTap();
     message.success(`${timer.name} ${deger} silindi`);
   };
@@ -245,6 +256,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       // zaman ise mutlak endsAt'ten bu cihazın kendi saatine göre yeniden kurulur.
       if (data.status !== undefined) timer.status = data.status;
       if (data.isPay !== undefined) timer.isPay = data.isPay;
+      if (data.pausedCount !== undefined) timer.pausedCount = Number(data.pausedCount);
       if (data.reachedTarget !== undefined)
         timer.reachedTarget = data.reachedTarget;
 
@@ -321,6 +333,7 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
             ? Math.max(targetMinutes * 60 * 1000 - accumulatedMs, 0)
             : null,
         reachedTarget: false,
+        pausedCount: Number(dbTimer.paused_count || 0),
       };
 
       if (dbTimer.status === "running" && dbTimer.ends_at) {

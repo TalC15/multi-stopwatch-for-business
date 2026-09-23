@@ -28,7 +28,7 @@ function allTimersPause() {
     filteredTimers.value.map((val) => store.startTimer(val.id));
     isPausedAll.value = false;
   } else {
-    filteredTimers.value.map((val) => store.pauseTimer(val.id, 0)); //şuanlık ikinci parametre sıfır ancak ileride düzeltilmeli
+    filteredTimers.value.map((val) => store.pauseTimer(val.id));
     isPausedAll.value = true;
   }
 }

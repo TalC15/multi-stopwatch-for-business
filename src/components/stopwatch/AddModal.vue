@@ -44,7 +44,7 @@ const save = async () => {
     return message.warning("süre negatif olamaz")
   if(store.duration>1440)
     return message.warning("çok uzun süre(en fazla 1440)")
-  if (!user?.workspace_id)
+  if (props.forceShared && !user?.workspace_id)
     return message.warning("ortak kronometre oluşturmak için bir workspace'e katılmalısınız")
   if(props.forceShared && !sharedModeAvailable.value)
     return message.warning("yönetici izni yok")

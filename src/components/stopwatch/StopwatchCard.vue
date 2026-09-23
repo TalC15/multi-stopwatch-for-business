@@ -8,43 +8,41 @@
       cardStyle.border,
     ]"
   >
+    <div class="flex items-start gap-2 justify-between mb-1">
+      <div class="flex-1 min-w-0">
+        <h3
+          :class="[
+            'text-lg font-bold leading-tight wrap-break-word whitespace-normal',
+            cardStyle.title,
+          ]"
+        >
+          {{ timer.name }}
+        </h3>
 
-<div class="flex items-start gap-2 justify-between mb-1">
-  <div class="flex-1 min-w-0">
-    <h3
-      :class="[
-        'text-lg font-bold leading-tight wrap-break-word whitespace-normal',
-        cardStyle.title
-      ]"
-    >
-      {{ timer.name }}
-    </h3>
+        <p
+          v-if="timer.targetMinutes"
+          :class="['text-sm mt-0.5', cardStyle.subtitle]"
+        >
+          Target: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
+        </p>
+      </div>
 
-    <p
-      v-if="timer.targetMinutes"
-      :class="['text-sm mt-0.5', cardStyle.subtitle]"
-    >
-      Target: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
-    </p>
-  </div>
+      <span
+        :class="[
+          'shrink-0 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1.5',
+          cardStyle.badge,
+        ]"
+      >
+        <span
+          v-if="timer.status === 'running' && !timer.reachedTarget"
+          class="w-2 h-2 rounded-full bg-current animate-pulse"
+        ></span>
 
-  <span
-    :class="[
-      'shrink-0 text-xs font-black px-3 py-1.5 rounded-full flex items-center gap-1.5',
-      cardStyle.badge,
-    ]"
-  >
-    <span
-      v-if="timer.status === 'running' && !timer.reachedTarget"
-      class="w-2 h-2 rounded-full bg-current animate-pulse"
-    ></span>
+        <span v-if="timer.reachedTarget">⚠</span>
 
-    <span v-if="timer.reachedTarget">⚠</span>
-
-    {{ statusLabel }}
-  </span>
-</div>
-
+        {{ statusLabel }}
+      </span>
+    </div>
 
     <div class="flex items-center justify-between">
       <button
@@ -287,9 +285,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 
 const props = defineProps(["timer"]);
 const store = useStopwatchStore();
-const pausedCount = ref(
-  localStorage.getItem(`pausedCount${props.timer.id}`) || 0,
-);
+const pausedCount = computed(() => Number(props.timer.pausedCount || 0));
 const audioRadar = new Audio(radarAlarm);
 const audioDigital = new Audio(digitalAlarm);
 const isReachedTime = computed(() => {
@@ -386,8 +382,7 @@ const statusLabel = computed(() => {
 
 const toggleTimer = () => {
   if (props.timer.status === "running") {
-    store.pauseTimer(props.timer.id, pausedCount.value);
-    pausedCount.value = localStorage.getItem(`pausedCount${props.timer.id}`);
+    store.pauseTimer(props.timer.id);
     audioRadar.pause();
     audioDigital.pause();
     hapticTap();
