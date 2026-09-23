@@ -1,5 +1,5 @@
 import { io } from "socket.io-client";
-import { getUser } from "./backendSync";
+import { getUser, getAccessToken } from "./backendSync";
 
 const SOCKET_URL = "https://multi-stopwatch-backend.onrender.com";
 
@@ -12,8 +12,6 @@ const socketConnectedListeners = new Set();
 
 let hasConnectedBefore = false;
 let currentConnectionInfo = null;
-
-
 
 function notifySocketConnected(connectionInfo) {
   socketConnectedListeners.forEach((callback) => {
@@ -28,7 +26,13 @@ function notifySocketConnected(connectionInfo) {
 export function connectSocket() {
   if (socket) return socket;
 
-  socket = io(SOCKET_URL);
+  socket = io(SOCKET_URL, {
+    auth: (callback) => {
+      callback({
+        token: getAccessToken(),
+      });
+    },
+  });
 
   // Yeni socket oluşturulduğunda kayıtlı timer listener'larını tekrar bağla.
   timerEventListeners.forEach((callback) => {
@@ -57,10 +61,7 @@ export function connectSocket() {
     if (user?.workspace_id) {
       socket.emit("join-workspace", user.workspace_id);
 
-      console.log(
-        "[Socket] join-workspace gönderildi:",
-        user.workspace_id,
-      );
+      console.log("[Socket] join-workspace gönderildi:", user.workspace_id);
     }
 
     notifySocketConnected(connectionInfo);
@@ -92,7 +93,6 @@ export function connectSocket() {
 export function getSocket() {
   return socket;
 }
-
 
 export function onTimerEvent(callback) {
   if (!timerEventListeners.has(callback)) {
