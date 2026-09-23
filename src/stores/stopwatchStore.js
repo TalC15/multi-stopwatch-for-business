@@ -12,7 +12,7 @@ import {
   dbDeleteTimer,
   dbGetSharedTimers,
 } from "../services/backendSync";
-import { onTimerEvent } from "../services/socket";
+import { onTimerEvent, onSocketConnected } from "../services/socket";
 
 export const useStopwatchStore = defineStore("stopwatch", () => {
   const stopwatches = ref(JSON.parse(localStorage.getItem("timers")) || []);
@@ -178,36 +178,36 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   };
 
   const pauseTimer = (id) => {
-  const timer = stopwatches.value.find((t) => t.id === id);
+    const timer = stopwatches.value.find((t) => t.id === id);
 
-  if (timer && timer.status === "running") {
-    timer.accumulatedTime += Date.now() - timer.startTime;
-    timer.startTime = null;
-    timer.status = "paused";
+    if (timer && timer.status === "running") {
+      timer.accumulatedTime += Date.now() - timer.startTime;
+      timer.startTime = null;
+      timer.status = "paused";
 
-    // Önce local state anında güncellenir.
-    timer.pausedCount = Number(timer.pausedCount || 0) + 1;
+      // Önce local state anında güncellenir.
+      timer.pausedCount = Number(timer.pausedCount || 0) + 1;
 
-    cancelTimerSound(id);
+      cancelTimerSound(id);
 
-    if (isLoggedIn()) {
-      syncTimerCancel(id);
+      if (isLoggedIn()) {
+        syncTimerCancel(id);
 
-      const updates = {
-        status: "paused",
-        accumulated_ms: timer.accumulatedTime,
-      };
+        const updates = {
+          status: "paused",
+          accumulated_ms: timer.accumulatedTime,
+        };
 
-      // Personal timer'ın pause sayısı kendi local state'inden gelir.
-      // Shared timer'da ise sayıyı backend hesaplar.
-      if (!timer.isShared) {
-        updates.paused_count = timer.pausedCount;
+        // Personal timer'ın pause sayısı kendi local state'inden gelir.
+        // Shared timer'da ise sayıyı backend hesaplar.
+        if (!timer.isShared) {
+          updates.paused_count = timer.pausedCount;
+        }
+
+        dbUpdateTimer(timer.id, updates);
       }
-
-      dbUpdateTimer(timer.id, updates);
     }
-  }
-};
+  };
 
   const deleteTimer = (timer, deger) => {
     cancelTimerSound(timer.id);
@@ -256,7 +256,8 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
       // zaman ise mutlak endsAt'ten bu cihazın kendi saatine göre yeniden kurulur.
       if (data.status !== undefined) timer.status = data.status;
       if (data.isPay !== undefined) timer.isPay = data.isPay;
-      if (data.pausedCount !== undefined) timer.pausedCount = Number(data.pausedCount);
+      if (data.pausedCount !== undefined)
+        timer.pausedCount = Number(data.pausedCount);
       if (data.reachedTarget !== undefined)
         timer.reachedTarget = data.reachedTarget;
 
@@ -295,79 +296,183 @@ export const useStopwatchStore = defineStore("stopwatch", () => {
   });
 
   // ─── DB'den ortak timer'ları yükle (sayfa açılışında) ────────────────────
+  let sharedTimersLoadPromise = null;
+  let hasSuccessfulSharedSnapshot = false;
+  let sharedReconcileTimer = null;
   const loadSharedTimers = async () => {
-    if (!isLoggedIn()) return;
-    const dbTimers = await dbGetSharedTimers();
-    // null → istek başarısız oldu, local veriye dokunma (güvenli taraf)
-    if (dbTimers === null) return;
+    if (!isLoggedIn()) return false;
 
-    const now = Date.now();
-    const dbIds = new Set(dbTimers.map((t) => t.id));
+    // Aynı anda ikinci shared timer isteğini başlatma.
+    // Devam eden isteğin sonucunu paylaş.
+    if (sharedTimersLoadPromise) {
+      return sharedTimersLoadPromise;
+    }
 
-    // DB'de artık aktif/paylaşılan olarak görünmeyen (silinmiş, paylaşımdan
-    // çıkarılmış) ama local'de hâlâ duran "hayalet" ortak timer'ları temizle —
-    // biz kapalıyken başka biri silmiş/değiştirmiş olabilir.
-    stopwatches.value = stopwatches.value.filter(
-      (t) => !t.isShared || dbIds.has(t.id),
-    );
+    const request = (async () => {
+      try {
+        const dbTimers = await dbGetSharedTimers();
 
-    dbTimers.forEach((dbTimer) => {
-      const targetMinutes = dbTimer.target_minutes
-        ? Number(dbTimer.target_minutes)
-        : null;
-      const accumulatedMs = dbTimer.accumulated_ms || 0;
-
-      const timer = {
-        id: dbTimer.id,
-        name: dbTimer.name,
-        targetMinutes,
-        type: dbTimer.type,
-        isPay: dbTimer.is_pay || false,
-        isShared: true,
-        status: dbTimer.status === "running" ? "paused" : dbTimer.status,
-        startTime: null,
-        accumulatedTime: accumulatedMs,
-        elapsed: accumulatedMs,
-        remaining:
-          dbTimer.type === "down" && targetMinutes
-            ? Math.max(targetMinutes * 60 * 1000 - accumulatedMs, 0)
-            : null,
-        reachedTarget: false,
-        pausedCount: Number(dbTimer.paused_count || 0),
-      };
-
-      if (dbTimer.status === "running" && dbTimer.ends_at) {
-        const endsAtMs = new Date(dbTimer.ends_at).getTime();
-        const remaining = endsAtMs - now;
-        if (remaining > 0 || dbTimer.type === "up") {
-          timer.status = "running";
-          timer.startTime = now;
-          if (targetMinutes) {
-            timer.accumulatedTime = targetMinutes * 60 * 1000 - remaining;
-          }
-        } else {
-          timer.status = "expired";
+        // null → istek başarısız.
+        // Local shared state'e dokunma.
+        if (dbTimers === null) {
+          return false;
         }
-      }
 
-      // Mount anında DB her zaman otoriter kaynaktır — sayfa yeni açıldığı
-      // için korunması gereken "canlı" bir local değişiklik olamaz, o yüzden
-      // var olan kaydı da güvenle DB verisiyle değiştiriyoruz (sadece ekleme
-      // değil, gerçek bir senkronizasyon/reconciliation yapıyoruz).
-      const existingIndex = stopwatches.value.findIndex(
-        (t) => t.id === dbTimer.id,
-      );
-      if (existingIndex === -1) {
-        stopwatches.value.push(timer);
-      } else {
-        stopwatches.value[existingIndex] = timer;
-      }
-    });
+        const now = Date.now();
+        const dbIds = new Set(dbTimers.map((t) => t.id));
 
-    if (stopwatches.value.some((t) => t.status === "running")) {
-      startTick();
+        // Server'da artık bulunmayan shared timer'ları temizle.
+        stopwatches.value = stopwatches.value.filter(
+          (t) => !t.isShared || dbIds.has(t.id),
+        );
+
+        dbTimers.forEach((dbTimer) => {
+          const targetMinutes = dbTimer.target_minutes
+            ? Number(dbTimer.target_minutes)
+            : null;
+
+          const accumulatedMs = Number(dbTimer.accumulated_ms || 0);
+
+          const timer = {
+            id: dbTimer.id,
+            name: dbTimer.name,
+            targetMinutes,
+            type: dbTimer.type,
+            isPay: dbTimer.is_pay || false,
+            isShared: true,
+
+            status: dbTimer.status === "running" ? "paused" : dbTimer.status,
+
+            startTime: null,
+            accumulatedTime: accumulatedMs,
+            elapsed: accumulatedMs,
+
+            remaining:
+              dbTimer.type === "down" && targetMinutes
+                ? Math.max(targetMinutes * 60 * 1000 - accumulatedMs, 0)
+                : null,
+
+            reachedTarget: false,
+
+            pausedCount: Number(dbTimer.paused_count || 0),
+          };
+
+          // Running timer'ı server'ın mutlak ends_at değerinden yeniden kur.
+          if (dbTimer.status === "running" && dbTimer.ends_at) {
+            const endsAtMs = new Date(dbTimer.ends_at).getTime();
+            const remaining = endsAtMs - now;
+
+            if (remaining > 0 || dbTimer.type === "up") {
+              timer.status = "running";
+              timer.startTime = now;
+
+              if (targetMinutes) {
+                timer.accumulatedTime = targetMinutes * 60 * 1000 - remaining;
+
+                timer.elapsed = timer.accumulatedTime;
+
+                if (timer.type === "down") {
+                  timer.remaining = Math.max(remaining, 0);
+                }
+              }
+            } else {
+              timer.status = "expired";
+              timer.remaining = 0;
+            }
+          }
+
+          // Reconciliation sırasında server/DB shared timer için otoritedir.
+          const existingIndex = stopwatches.value.findIndex(
+            (t) => t.id === dbTimer.id,
+          );
+
+          if (existingIndex === -1) {
+            stopwatches.value.push(timer);
+          } else {
+            stopwatches.value[existingIndex] = timer;
+          }
+        });
+
+        if (stopwatches.value.some((t) => t.status === "running")) {
+          startTick();
+        }
+
+        hasSuccessfulSharedSnapshot = true;
+
+        return true;
+      } catch (err) {
+        console.error("[Sync] Shared timer yükleme hatası:", err);
+
+        return false;
+      }
+    })();
+
+    sharedTimersLoadPromise = request;
+
+    try {
+      return await request;
+    } finally {
+      // Bu request hâlâ aktif request ise temizle.
+      if (sharedTimersLoadPromise === request) {
+        sharedTimersLoadPromise = null;
+      }
     }
   };
+  const scheduleSharedTimersReconciliation = ({
+    force = false,
+    delay = 300,
+  } = {}) => {
+    // Ağ hızlı hızlı gidip geliyorsa önceki planı iptal et.
+    if (sharedReconcileTimer) {
+      clearTimeout(sharedReconcileTimer);
+    }
+
+    sharedReconcileTimer = setTimeout(async () => {
+      sharedReconcileTimer = null;
+
+      // İlk socket bağlantısıysa ve HomeView zaten başarılı şekilde
+      // snapshot yüklediyse ikinci kez GET atmaya gerek yok.
+      if (!force && hasSuccessfulSharedSnapshot) {
+        console.log(
+          "[Sync] Shared snapshot zaten güncel, ilk socket fetch atlandı.",
+        );
+        return;
+      }
+
+      console.log(
+        force
+          ? "[Sync] Socket yeniden bağlandı, reconciliation başlıyor..."
+          : "[Sync] İlk shared snapshot eksik, reconciliation başlıyor...",
+      );
+
+      const success = await loadSharedTimers();
+
+      if (success) {
+        console.log("[Sync] Shared timer reconciliation tamamlandı.");
+      } else {
+        console.warn("[Sync] Shared timer reconciliation tamamlanamadı.");
+      }
+    }, delay);
+  };
+  onSocketConnected(({ isReconnect }) => {
+  if (isReconnect) {
+    // Gerçek reconnect veya manuel socket yeniden oluşturma:
+    // DB kesinlikle tekrar okunmalı.
+    scheduleSharedTimersReconciliation({
+      force: true,
+    });
+
+    return;
+  }
+
+  // İlk socket bağlantısı.
+  // HomeView henüz başarılı snapshot alamadıysa tamamla.
+  if (!hasSuccessfulSharedSnapshot) {
+    scheduleSharedTimersReconciliation({
+      force: false,
+    });
+  }
+});
 
   // ─── Rehydrate ────────────────────────────────────────────────────────────
   const rehydrateTimers = () => {
