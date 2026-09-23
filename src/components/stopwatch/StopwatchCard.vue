@@ -313,42 +313,39 @@ const displayTime = computed(() => {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 });
 
-const smoothElapsed = ref(props.timer.elapsed || 0);
+const smoothElapsed = ref(Number(props.timer.accumulatedTime || 0));
 
 let animationFrame = null;
-let startTime = 0;
-let startElapsed = 0;
+
+const getCurrentElapsed = () => {
+  const accumulated = Number(props.timer.accumulatedTime || 0);
+
+  if (
+    props.timer.status === "running" &&
+    props.timer.startTime
+  ) {
+    return accumulated + Math.max(0, Date.now() - props.timer.startTime);
+  }
+
+  return accumulated;
+};
 
 const updateSmoothElapsed = () => {
-  if (props.timer.status === "running") {
-    smoothElapsed.value = startElapsed + (performance.now() - startTime);
-  }
+  smoothElapsed.value = getCurrentElapsed();
 
   animationFrame = requestAnimationFrame(updateSmoothElapsed);
 };
 
 onMounted(() => {
-  startElapsed = props.timer.elapsed || 0;
-  startTime = performance.now();
-
+  smoothElapsed.value = getCurrentElapsed();
   updateSmoothElapsed();
 });
 
 onUnmounted(() => {
-  cancelAnimationFrame(animationFrame);
+  if (animationFrame) {
+    cancelAnimationFrame(animationFrame);
+  }
 });
-
-watch(
-  () => props.timer.status,
-  (status) => {
-    if (status === "running") {
-      startElapsed = props.timer.elapsed || 0;
-      startTime = performance.now();
-    } else {
-      smoothElapsed.value = props.timer.elapsed || 0;
-    }
-  },
-);
 
 const centiseconds = computed(() => {
   return String(Math.floor((smoothElapsed.value % 1000) / 10)).padStart(2, "0");
