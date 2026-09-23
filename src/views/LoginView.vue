@@ -119,6 +119,7 @@
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { login } from '../services/backendSync';
+import { connectSocket } from "@/services/socket";
 
 const router = useRouter();
 const username = ref('');
@@ -134,6 +135,7 @@ async function handleLogin() {
 
   if (result.success) {
     router.push('/');
+    connectSocket();
   } else {
     error.value = result.error || 'Giriş başarısız';
   }

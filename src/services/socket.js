@@ -58,12 +58,6 @@ export function connectSocket() {
 
     const user = getUser();
 
-    if (user?.workspace_id) {
-      socket.emit("join-workspace", user.workspace_id);
-
-      console.log("[Socket] join-workspace gönderildi:", user.workspace_id);
-    }
-
     notifySocketConnected(connectionInfo);
   });
 
