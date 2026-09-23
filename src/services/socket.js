@@ -93,17 +93,6 @@ export function getSocket() {
   return socket;
 }
 
-export function emitTimerEvent(event, data) {
-  const user = getUser();
-
-  if (!socket || !user?.workspace_id) return;
-
-  socket.emit("timer-event", {
-    workspaceId: user.workspace_id,
-    event,
-    data,
-  });
-}
 
 export function onTimerEvent(callback) {
   if (!timerEventListeners.has(callback)) {
