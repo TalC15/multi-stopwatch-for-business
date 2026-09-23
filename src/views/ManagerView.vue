@@ -2,14 +2,19 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
-import { disconnectSocket, connectSocket } from '@/services/socket';
-import { apiFetch, getAccessToken } from "@/services/backendSync";
+import { disconnectSocket, connectSocket } from "@/services/socket";
+import {
+  apiFetch,
+  getAccessToken,
+  getUser,
+  saveUser,
+} from "@/services/backendSync";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
-const store = useStopwatchStore()
+const store = useStopwatchStore();
 const users = ref([]);
 const sameWorkspaceUsers = ref([]);
 const workspace = ref(null);
@@ -32,6 +37,18 @@ function authHeader() {
     "Content-Type": "application/json",
     Authorization: `Bearer ${getAccessToken()}`,
   };
+}
+
+function updateWorkspaceConnection(workspaceId) {
+  const user = getUser();
+
+  if (user) {
+    user.workspace_id = workspaceId ?? null;
+    saveUser(user);
+  }
+
+  disconnectSocket();
+  connectSocket();
 }
 
 async function fetchWorkspace() {
@@ -77,6 +94,7 @@ async function createWorkspace() {
       message.success("Workspace oluşturuldu");
       newWorkspaceName.value = "";
       workspace.value = data.workspace;
+      updateWorkspaceConnection(data.workspace.id);
       await fetchUsers();
     } else {
       message.warning(data.error || "Workspace oluşturulamadı");
@@ -101,6 +119,7 @@ async function joinWorkspace() {
       message.success(`${data.workspace.name} workspace'ine katıldınız`);
       inviteCode.value = "";
       workspace.value = data.workspace;
+      updateWorkspaceConnection(data.workspace.id);
       await fetchUsers();
     } else {
       message.warning(data.error || "Geçersiz davet kodu");
@@ -124,10 +143,9 @@ async function leaveWorkspace() {
       workspace.value = null;
       users.value = [];
       // Soket eski workspace odasında kalmasın diye bağlantıyı sıfırla
-      disconnectSocket();
-      connectSocket();
+      updateWorkspaceConnection(null);
     } else {
-      message.error(data.error || 'Ayrılma başarısız');
+      message.error(data.error || "Ayrılma başarısız");
     }
   }
   leaveLoading.value = false;
@@ -221,8 +239,6 @@ async function toggleSharedMode() {
   }
   sharedModeLoading.value = false;
 }
-
-
 
 onMounted(async () => {
   await fetchWorkspace();
@@ -472,13 +488,9 @@ onMounted(async () => {
               class="font-medium text-[var(--color-text-primary)] text-sm"
               >{{ user?.username }}</span
             >
-            <span
-              :class="[
-                store.roleStyles[user?.role].text,
-                'text-[11px]',
-              ]"
-              >{{ user?.role }}</span
-            >
+            <span :class="[store.roleStyles[user?.role].text, 'text-[11px]']">{{
+              user?.role
+            }}</span>
           </div>
           <button
             @click="deleteUser(user.id, user.username)"

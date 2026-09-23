@@ -2,18 +2,19 @@
 import { ref, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
-import { disconnectSocket, connectSocket } from '@/services/socket';
+import { disconnectSocket, connectSocket } from "@/services/socket";
 import {
   apiFetch,
   getAccessToken,
   saveTelegramChatId,
   getUser,
+  saveUser,
   cancelTelegramChatId,
   telegramControl,
 } from "@/services/backendSync";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 
-const store = useStopwatchStore()
+const store = useStopwatchStore();
 const user = getUser();
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
@@ -60,10 +61,16 @@ async function joinWorkspace() {
     const data = await response.json();
     if (response.ok) {
       message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
-      user.workspace_id = data.workspace.id
-      localStorage.setItem("user",JSON.stringify(user))
+      if (user) {
+        user.workspace_id = data.workspace.id;
+        saveUser(user);
+      }
+
       inviteCode.value = "";
       workspace.value = data.workspace;
+
+      disconnectSocket();
+      connectSocket();
     } else {
       message.warning(data.error || "Geçersiz davet kodu");
     }
@@ -84,8 +91,10 @@ async function leaveWorkspace() {
     if (response.ok) {
       message.success("Çalışma gurubundan ayrıldınız");
       workspace.value = null;
-      user.workspace_id = null
-      localStorage.setItem("user",JSON.stringify(user))
+      if (user) {
+        user.workspace_id = null;
+        saveUser(user);
+      }
       // Soket eski workspace odasında kalmasın diye bağlantıyı sıfırla
       disconnectSocket();
       connectSocket();
@@ -207,7 +216,12 @@ onMounted(() => {
               {{ user?.username || "Kullanıcı" }}
             </span>
 
-            <span :class="[store.roleStyles[user?.role].text,'text-[13px] capitalize']">
+            <span
+              :class="[
+                store.roleStyles[user?.role].text,
+                'text-[13px] capitalize',
+              ]"
+            >
               {{ user?.role || "Rol belirtilmemiş" }}
             </span>
           </div>
@@ -332,7 +346,10 @@ onMounted(() => {
             </button>
           </div>
         </div>
-        <div v-else class="text-center py-4 text-[var(--color-text-muted)] text-sm">
+        <div
+          v-else
+          class="text-center py-4 text-[var(--color-text-muted)] text-sm"
+        >
           Yükleniyor...
         </div>
       </div>
