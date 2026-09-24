@@ -1,61 +1,72 @@
-import { createRouter, createWebHistory } from 'vue-router'
-import { isLoggedIn,getUser } from '../services/backendSync'
+import { createRouter, createWebHistory } from "vue-router";
+import {
+  AUTH_LOGIN_REQUIRED_EVENT,
+  isLoggedIn,
+  getUser,
+} from "../services/backendSync";
 
 const routes = [
   {
-    path: '/login',
-    name: 'Login',
-    component: () => import('../views/LoginView.vue'),
-    meta: { guest: true } // sadece giriş yapmamışlar görebilir
+    path: "/login",
+    name: "Login",
+    component: () => import("../views/LoginView.vue"),
+    meta: { guest: true }, // sadece giriş yapmamışlar görebilir
   },
   {
-    path: '/',
-    name: 'Home',
-    component: () => import('../views/HomeView.vue'),
-    meta: { requiresAuth: true }
+    path: "/",
+    name: "Home",
+    component: () => import("../views/HomeView.vue"),
+    meta: { requiresAuth: true },
   },
   {
-    path: '/settings',
-    name: 'Settings',
-    component: () => import('../views/SettingsView.vue'),
-    meta: { requiresAuth: true }
+    path: "/settings",
+    name: "Settings",
+    component: () => import("../views/SettingsView.vue"),
+    meta: { requiresAuth: true },
   },
   {
-  path: '/manager',
-  name: 'Manager',
-  component: () => import('../views/ManagerView.vue'),
-  meta: { requiresAuth: true, requiresRole: ['manager', 'superadmin'] }
-},
-{
-  path: '/superadmin',
-  name: 'SuperAdmin',
-  component: () => import('../views/SuperAdminView.vue'),
-  meta: { requiresAuth: true, requiresRole: ['superadmin'] }
-},
-{
-  path: '/profile',
-  name: 'Profile',
-  component: () => import('../views/ProfileView.vue'),
-  meta: { requiresAuth: true }
-}
-]
+    path: "/manager",
+    name: "Manager",
+    component: () => import("../views/ManagerView.vue"),
+    meta: { requiresAuth: true, requiresRole: ["manager", "superadmin"] },
+  },
+  {
+    path: "/superadmin",
+    name: "SuperAdmin",
+    component: () => import("../views/SuperAdminView.vue"),
+    meta: { requiresAuth: true, requiresRole: ["superadmin"] },
+  },
+  {
+    path: "/profile",
+    name: "Profile",
+    component: () => import("../views/ProfileView.vue"),
+    meta: { requiresAuth: true },
+  },
+];
 
 const router = createRouter({
   history: createWebHistory(),
-  routes
-})
+  routes,
+});
 
 // Auth guard
 router.beforeEach((to, from) => {
   if (to.meta.requiresAuth && !isLoggedIn()) {
-    return '/login'
+    return "/login";
   } else if (to.meta.guest && isLoggedIn()) {
-    return '/'
+    return "/";
   } else if (to.meta.requiresRole) {
-    const user = getUser()
+    const user = getUser();
     if (!user || !to.meta.requiresRole.includes(user.role)) {
-      return '/'
+      return "/";
     }
   }
-})
-export default router
+});
+
+if (typeof window !== "undefined") {
+  window.addEventListener(AUTH_LOGIN_REQUIRED_EVENT, () => {
+    router.replace("/login");
+  });
+}
+
+export default router;

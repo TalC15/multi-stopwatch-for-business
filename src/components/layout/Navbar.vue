@@ -1,14 +1,12 @@
 <script setup>
 import { logout as apiLogout, getUser } from "../../services/backendSync";
-import { disconnectSocket } from "../../services/socket";
 
 defineEmits(["open-menu"]);
 
 const user = getUser();
 
-function logout() {
-  disconnectSocket();
-  apiLogout();
+async function logout() {
+  await apiLogout();
 }
 </script>
 
@@ -119,6 +117,7 @@ function logout() {
 
     <!-- Sağ: Logout -->
     <button
+    type="button"
       @click="logout"
       class="w-9 h-9 flex items-center justify-center text-primary-light active:scale-90 transition-transform"
       aria-label="Çıkış"
