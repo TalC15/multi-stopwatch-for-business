@@ -31,6 +31,8 @@ async function withAuthMutationLock(callback) {
 
 export const AUTH_SESSION_CHANGED_EVENT = "keeptimer:auth-session-changed";
 export const AUTH_LOCAL_LOGOUT_EVENT = "keeptimer:auth-local-logout";
+export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT =
+  "keeptimer:auth-access-token-refreshed";
 
 const TAB_AUTH_SESSION_KEY = "keeptimer-tab-auth-session";
 
@@ -106,6 +108,25 @@ function isSameAuthSession(expectedGeneration, expectedRefreshToken) {
     expectedGeneration === authGeneration &&
     getRefreshToken() === expectedRefreshToken
   );
+}
+
+export async function clearAuthSessionIfCurrent(
+  expectedGeneration,
+  expectedRefreshToken,
+) {
+  return withAuthMutationLock(async () => {
+    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
+      return false;
+    }
+
+    advanceAuthGeneration();
+
+    localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken");
+    localStorage.removeItem("user");
+
+    return true;
+  });
 }
 
 // Token yönetimi
@@ -367,6 +388,11 @@ async function performRefresh(expectedGeneration, expectedRefreshToken) {
           generation: expectedGeneration,
         };
       }
+
+      // Yeni access token gerçekten aynı session'a commit edildikten
+      // sonra consumer'lara haber ver.
+      // Bu event kendi başına reconnect başlatmaz.
+      window.dispatchEvent(new Event(AUTH_ACCESS_TOKEN_REFRESHED_EVENT));
 
       return {
         ok: true,
@@ -657,14 +683,7 @@ export async function logout() {
   // İlk await'ten ÖNCE bu sekmenin hangi session'a ait olduğunu snapshot al.
   const logoutTabIdentity = getTabSessionIdentity();
 
-  const logoutAccessToken = getAccessToken();
-
   const logoutRefreshToken = getRefreshToken();
-
-  const logoutAccessIdentity = getTokenSessionIdentity(
-    logoutAccessToken,
-    "access",
-  );
 
   const logoutRefreshIdentity = getTokenSessionIdentity(
     logoutRefreshToken,
@@ -703,22 +722,17 @@ export async function logout() {
   //
   // Yalnız snapshot'ın gerçekten bu tab session'ına
   // ait access token olduğunu biliyorsak gönder.
-  if (
-    ownsActiveSession &&
-    logoutAccessToken &&
-    logoutAccessIdentity === logoutTabIdentity
-  ) {
+  if (ownsActiveSession && logoutRefreshToken) {
     void fetch(`${BASE_URL}/auth/logout`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${logoutAccessToken}`,
+        "Content-Type": "application/json",
       },
+      body: JSON.stringify({
+        refreshToken: logoutRefreshToken,
+      }),
       keepalive: true,
-    }).catch(() => {
-      // Local logout zaten tamamlandı.
-      // Expired access token server revoke konusu
-      // backend adımında ayrıca çözülecek.
-    });
+    }).catch(() => {});
   }
 
   // Logout başladıktan sonra aynı sekmede yeni login olduysa
