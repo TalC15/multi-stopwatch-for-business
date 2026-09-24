@@ -17,6 +17,17 @@ function advanceAuthGeneration() {
   return authGeneration;
 }
 
+const AUTH_LOCK_NAME = "keeptimer-auth";
+
+async function withAuthMutationLock(callback) {
+  if (typeof navigator !== "undefined" && navigator.locks?.request) {
+    return navigator.locks.request(AUTH_LOCK_NAME, callback);
+  }
+
+  // Tek WebView / desteklenmeyen ortam için fallback.
+  return callback();
+}
+
 function isSameAuthSession(expectedGeneration, expectedRefreshToken) {
   return (
     expectedGeneration === authGeneration &&
@@ -108,7 +119,6 @@ async function performRefresh(expectedGeneration, expectedRefreshToken) {
     if (response.ok) {
       const data = await response.json();
 
-      // JSON okunurken bile logout / yeni login gerçekleşmiş olabilir.
       if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
         return {
           ok: false,
@@ -118,7 +128,36 @@ async function performRefresh(expectedGeneration, expectedRefreshToken) {
         };
       }
 
-      saveTokens(data.accessToken, null);
+      // Backend beklenmedik şekilde geçerli access token
+      // döndürmediyse mevcut oturumu bozma.
+      if (typeof data?.accessToken !== "string" || !data.accessToken.trim()) {
+        return {
+          ok: false,
+          hardFail: false,
+          stale: false,
+          generation: expectedGeneration,
+        };
+      }
+
+      const committed = await withAuthMutationLock(async () => {
+        // Lock'u beklerken başka sekmede login gerçekleşmiş olabilir.
+        // Kontrolü lock İÇİNDE tekrar yapmak kritik.
+        if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
+          return false;
+        }
+
+        saveTokens(data.accessToken, null);
+        return true;
+      });
+
+      if (!committed) {
+        return {
+          ok: false,
+          hardFail: false,
+          stale: true,
+          generation: expectedGeneration,
+        };
+      }
 
       return {
         ok: true,
@@ -258,10 +297,18 @@ export async function login(username, pin) {
     if (!response.ok) {
       return { success: false, error: data.error };
     }
-    advanceAuthGeneration();
-    saveTokens(data.accessToken, data.refreshToken);
-    saveUser(data.user);
-    return { success: true, user: data.user };
+    await withAuthMutationLock(async () => {
+      advanceAuthGeneration();
+
+      saveTokens(data.accessToken, data.refreshToken);
+
+      saveUser(data.user);
+    });
+
+    return {
+      success: true,
+      user: data.user,
+    };
   } catch {
     return { success: false, error: "Sunucuya bağlanılamadı" };
   }
