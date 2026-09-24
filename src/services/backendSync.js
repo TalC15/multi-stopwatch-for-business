@@ -16,6 +16,14 @@ function advanceAuthGeneration() {
   authGeneration += 1;
   return authGeneration;
 }
+
+function isSameAuthSession(expectedGeneration, expectedRefreshToken) {
+  return (
+    expectedGeneration === authGeneration &&
+    getRefreshToken() === expectedRefreshToken
+  );
+}
+
 // Token yönetimi
 export function getAccessToken() {
   return localStorage.getItem("accessToken");
@@ -61,9 +69,13 @@ function authHeader() {
 }
 
 // Token yenile
-async function performRefresh(expectedGeneration) {
-  // Bu refresh daha başlamadan oturum değişmişse hiçbir şey yapma.
-  if (expectedGeneration !== authGeneration) {
+async function performRefresh(expectedGeneration, expectedRefreshToken) {
+  // Aynı sekmede oturum değişmiş olabilir veya başka sekmede
+  // localStorage'daki refresh token değişmiş olabilir.
+  if (
+    !expectedRefreshToken ||
+    !isSameAuthSession(expectedGeneration, expectedRefreshToken)
+  ) {
     return {
       ok: false,
       hardFail: false,
@@ -72,27 +84,19 @@ async function performRefresh(expectedGeneration) {
     };
   }
 
-  const refreshToken = getRefreshToken();
-
-  if (!refreshToken) {
-    return {
-      ok: false,
-      hardFail: true,
-      stale: false,
-      generation: expectedGeneration,
-    };
-  }
-
   try {
     const response = await fetch(`${BASE_URL}/auth/refresh`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refreshToken }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        refreshToken: expectedRefreshToken,
+      }),
     });
 
-    // Fetch beklerken logout / başka login gerçekleşmiş olabilir.
-    // Eski cevabın yeni oturuma etkisi olmamalı.
-    if (expectedGeneration !== authGeneration) {
+    // Fetch beklerken aynı veya başka sekmede oturum değişmiş olabilir.
+    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
       return {
         ok: false,
         hardFail: false,
@@ -104,8 +108,8 @@ async function performRefresh(expectedGeneration) {
     if (response.ok) {
       const data = await response.json();
 
-      // response.json() beklenirken de oturum değişmiş olabilir.
-      if (expectedGeneration !== authGeneration) {
+      // JSON okunurken bile logout / yeni login gerçekleşmiş olabilir.
+      if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
         return {
           ok: false,
           hardFail: false,
@@ -124,6 +128,17 @@ async function performRefresh(expectedGeneration) {
       };
     }
 
+    // Response geldikten sonra session değişmişse eski 401/403
+    // yeni kullanıcıyı logout ettirmemeli.
+    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
+      return {
+        ok: false,
+        hardFail: false,
+        stale: true,
+        generation: expectedGeneration,
+      };
+    }
+
     const hardFail = response.status === 401 || response.status === 403;
 
     return {
@@ -133,8 +148,7 @@ async function performRefresh(expectedGeneration) {
       generation: expectedGeneration,
     };
   } catch {
-    // Network hatası gelirken kullanıcı başka oturuma geçmiş olabilir.
-    if (expectedGeneration !== authGeneration) {
+    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
       return {
         ok: false,
         hardFail: false,
@@ -154,7 +168,6 @@ async function performRefresh(expectedGeneration) {
 
 // Aynı anda birden fazla apiFetch 401 alırsa, hepsi TEK bir refresh'i paylaşsın
 export async function refreshAccessToken(expectedGeneration = authGeneration) {
-  // Çağıran işlem artık eski bir oturuma aitse refresh başlatma.
   if (expectedGeneration !== authGeneration) {
     return {
       ok: false,
@@ -164,17 +177,36 @@ export async function refreshAccessToken(expectedGeneration = authGeneration) {
     };
   }
 
-  // Aynı oturuma ait mevcut refresh varsa onu paylaş.
-  if (refreshState && refreshState.generation === expectedGeneration) {
+  const expectedRefreshToken = getRefreshToken();
+
+  if (!expectedRefreshToken) {
+    return {
+      ok: false,
+      hardFail: true,
+      stale: false,
+      generation: expectedGeneration,
+    };
+  }
+
+  // Aynı generation yetmez.
+  // Başka sekmede logout/login olduysa refresh token değişmiş olabilir.
+  if (
+    refreshState &&
+    refreshState.generation === expectedGeneration &&
+    refreshState.refreshToken === expectedRefreshToken
+  ) {
     return refreshState.promise;
   }
 
-  const promise = performRefresh(expectedGeneration).finally(() => {
-    // Çok önemli:
-    // Bu eski refresh tamamlanırken yeni oturumun refresh'i
-    // başlamış olabilir. Yeni refreshState'i temizleme.
+  const promise = performRefresh(
+    expectedGeneration,
+    expectedRefreshToken,
+  ).finally(() => {
+    // Eski refresh tamamlanırken yeni session için başka refresh
+    // başlamış olabilir. Yalnız kendi state'imizi temizleyebiliriz.
     if (
       refreshState?.generation === expectedGeneration &&
+      refreshState?.refreshToken === expectedRefreshToken &&
       refreshState?.promise === promise
     ) {
       refreshState = null;
@@ -183,6 +215,7 @@ export async function refreshAccessToken(expectedGeneration = authGeneration) {
 
   refreshState = {
     generation: expectedGeneration,
+    refreshToken: expectedRefreshToken,
     promise,
   };
 
