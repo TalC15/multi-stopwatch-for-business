@@ -1,5 +1,5 @@
 import { io } from "socket.io-client";
-import { getUser, getAccessToken } from "./backendSync";
+import { getAccessToken,refreshAccessToken,clearTokens, } from "./backendSync";
 
 const SOCKET_URL = "https://multi-stopwatch-backend.onrender.com";
 
@@ -55,8 +55,6 @@ export function connectSocket() {
       "zaman:",
       new Date().toISOString(),
     );
-
-    const user = getUser();
 
     notifySocketConnected(connectionInfo);
   });

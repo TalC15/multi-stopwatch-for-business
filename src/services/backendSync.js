@@ -1,7 +1,21 @@
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 import router from "../router";
-// Aynı anda birden fazla refresh isteği atılmasın diye devam eden refresh'i paylaş
-let refreshPromise = null;
+// Her login / token temizleme yeni bir auth oturumu olarak değerlendirilir.
+// Access token refresh olmak authGeneration'ı değiştirmez.
+let authGeneration = 0;
+
+// Devam eden refresh hangi auth oturumuna ait, onu da takip et.
+// Eski bir refresh'in yeni oturumun refresh state'ini bozmasını engeller.
+let refreshState = null;
+
+export function getAuthGeneration() {
+  return authGeneration;
+}
+
+function advanceAuthGeneration() {
+  authGeneration += 1;
+  return authGeneration;
+}
 // Token yönetimi
 export function getAccessToken() {
   return localStorage.getItem("accessToken");
@@ -17,6 +31,9 @@ export function saveTokens(accessToken, refreshToken) {
 }
 
 export function clearTokens() {
+  // Bekleyen eski auth işlemlerini geçersiz kıl.
+  advanceAuthGeneration();
+
   localStorage.removeItem("accessToken");
   localStorage.removeItem("refreshToken");
   localStorage.removeItem("user");
@@ -44,9 +61,27 @@ function authHeader() {
 }
 
 // Token yenile
-async function performRefresh() {
+async function performRefresh(expectedGeneration) {
+  // Bu refresh daha başlamadan oturum değişmişse hiçbir şey yapma.
+  if (expectedGeneration !== authGeneration) {
+    return {
+      ok: false,
+      hardFail: false,
+      stale: true,
+      generation: expectedGeneration,
+    };
+  }
+
   const refreshToken = getRefreshToken();
-  if (!refreshToken) return { ok: false, hardFail: true };
+
+  if (!refreshToken) {
+    return {
+      ok: false,
+      hardFail: true,
+      stale: false,
+      generation: expectedGeneration,
+    };
+  }
 
   try {
     const response = await fetch(`${BASE_URL}/auth/refresh`, {
@@ -55,27 +90,103 @@ async function performRefresh() {
       body: JSON.stringify({ refreshToken }),
     });
 
+    // Fetch beklerken logout / başka login gerçekleşmiş olabilir.
+    // Eski cevabın yeni oturuma etkisi olmamalı.
+    if (expectedGeneration !== authGeneration) {
+      return {
+        ok: false,
+        hardFail: false,
+        stale: true,
+        generation: expectedGeneration,
+      };
+    }
+
     if (response.ok) {
       const data = await response.json();
+
+      // response.json() beklenirken de oturum değişmiş olabilir.
+      if (expectedGeneration !== authGeneration) {
+        return {
+          ok: false,
+          hardFail: false,
+          stale: true,
+          generation: expectedGeneration,
+        };
+      }
+
       saveTokens(data.accessToken, null);
-      return { ok: true };
+
+      return {
+        ok: true,
+        hardFail: false,
+        stale: false,
+        generation: expectedGeneration,
+      };
     }
 
     const hardFail = response.status === 401 || response.status === 403;
-    return { ok: false, hardFail };
+
+    return {
+      ok: false,
+      hardFail,
+      stale: false,
+      generation: expectedGeneration,
+    };
   } catch {
-    return { ok: false, hardFail: false };
+    // Network hatası gelirken kullanıcı başka oturuma geçmiş olabilir.
+    if (expectedGeneration !== authGeneration) {
+      return {
+        ok: false,
+        hardFail: false,
+        stale: true,
+        generation: expectedGeneration,
+      };
+    }
+
+    return {
+      ok: false,
+      hardFail: false,
+      stale: false,
+      generation: expectedGeneration,
+    };
   }
 }
 
 // Aynı anda birden fazla apiFetch 401 alırsa, hepsi TEK bir refresh'i paylaşsın
-export async function refreshAccessToken() {
-  if (!refreshPromise) {
-    refreshPromise = performRefresh().finally(() => {
-      refreshPromise = null;
-    });
+export async function refreshAccessToken(expectedGeneration = authGeneration) {
+  // Çağıran işlem artık eski bir oturuma aitse refresh başlatma.
+  if (expectedGeneration !== authGeneration) {
+    return {
+      ok: false,
+      hardFail: false,
+      stale: true,
+      generation: expectedGeneration,
+    };
   }
-  return refreshPromise;
+
+  // Aynı oturuma ait mevcut refresh varsa onu paylaş.
+  if (refreshState && refreshState.generation === expectedGeneration) {
+    return refreshState.promise;
+  }
+
+  const promise = performRefresh(expectedGeneration).finally(() => {
+    // Çok önemli:
+    // Bu eski refresh tamamlanırken yeni oturumun refresh'i
+    // başlamış olabilir. Yeni refreshState'i temizleme.
+    if (
+      refreshState?.generation === expectedGeneration &&
+      refreshState?.promise === promise
+    ) {
+      refreshState = null;
+    }
+  });
+
+  refreshState = {
+    generation: expectedGeneration,
+    promise,
+  };
+
+  return promise;
 }
 
 // Genel fetch — token süresi dolunca otomatik yeniler
@@ -114,6 +225,7 @@ export async function login(username, pin) {
     if (!response.ok) {
       return { success: false, error: data.error };
     }
+    advanceAuthGeneration();
     saveTokens(data.accessToken, data.refreshToken);
     saveUser(data.user);
     return { success: true, user: data.user };
@@ -305,7 +417,7 @@ export async function telegramControl(user_id) {
       headers: authHeader(),
       body: JSON.stringify({ user_id }),
     });
-    if (!response) return {success:false};
+    if (!response) return { success: false };
     const data = await response.json();
     return data;
   } catch (err) {
