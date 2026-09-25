@@ -6,6 +6,57 @@
 
 ---
 
+## 2026-09-25 — Phase 1: temiz üç modlu veri deposu temeli
+
+### Neden
+
+Uygulamanın eski `localStorage["timers"]` kayıtları yalnız geliştirme verisidir;
+yeni sistem için korunmaları gerekmiyor. Yeni kullanıcının yerel ve offline
+verileri ise devreye alındıktan sonra kalıcı ve kapsamı doğru olmalıdır.
+
+### Değişenler
+
+- `src/domain/timerDataMode.js`: `standalone`, `workspace-personal`, `shared`
+  modları ve açık kullanıcı/workspace/oluşturucu bağlamı doğrulaması.
+- `src/data/timerDb.js`: ayrı `keeptimer-data` IndexedDB'sinde Dexie v1
+  `timers` tablosu; ilerideki şema sürümleri için normal version mekanizması.
+- `src/data/timerRepository.js`: standalone yerel kayıt ve silme; kullanıcı ve
+  workspace kapsamlı kişisel okuma/yazma; yalnız başarılı workspace sunucu
+  görüntüsünden shared cache güncelleme. Timer ID'siyle mod, kullanıcı veya
+  workspace değiştirilemez; shared yaratıcısının `userId` değeri sabittir.
+- `src/data/timerRepository.test.js`: bağımsız mod, yeniden açılışta kalıcılık,
+  hesap/workspace izolasyonu, hedef süresi ve shared snapshot sınırları testleri.
+- `package.json`, `package-lock.json`: Dexie, test yardımcısı ve `npm test`.
+
+### Invariants
+
+- `src/main.js` ve çalışan `stopwatchStore.js` değiştirilmedi; canlı verinin
+  kaynağı hâlâ mevcut `localStorage` store'dur. Yeni repository henüz
+  uygulama açılışına veya canlı timer eylemlerine bağlanmaz.
+- Eski veriye ait import, backup, marker, pending-classification ve ID
+  eşleştirme kodu bulunmaz. Eski geliştirme timer'ları yeni sisteme taşınmaz.
+- Gelecekte yeni IndexedDB verileri kullanılmaya başlandıktan sonra yerel
+  standalone kayıtlar ve kişisel outbox işlemleri yeniden açılışta korunmalıdır.
+- Frontend kapsam denetimi backend yetkisinin yerine geçmez. Auth ve socket
+  mekanizmaları ile kullanıcı, workspace ve session kayıtlarına dokunulmadı.
+- Mevcut Supabase timer kayıtları silinmedi; SQL sıfırlama gerekmedi.
+
+### Testler
+
+- `npm ci`, `npm test` (5/5), `npm run build`: geçti.
+- Patch sağlanan kaynak ZIP'ine ve ek `/timer/cancel` changelog kaydı bulunan
+  kopyaya temiz uygulandı; gerçek Git HEAD burada yok, ayrıca doğrulanmalıdır.
+
+### Ertelenenler
+
+- Backend kişisel API/yetkileri, outbox, senkronizasyon, store entegrasyonu,
+  standalone ağ engelleri ve shared eylemlerinin sunucu otoritesi sonraki
+  fazlardadır. Phase 1 tek başına üretime alınmaz.
+- Gelecekte planlı geçişte eski timer verileri terk edilebilir; auth için
+  kullanılan `localStorage` anahtarları silinmemelidir.
+
+---
+
 ## 2026-09-24 — Auth / Session / Socket hardening tamamlandı
 
 ### Durum
@@ -379,3 +430,54 @@ Gelecekte korunması gereken kurallar.
 ### Ertelenenler
 Bilerek sonraya bırakılan işler.
 ```
+
+---
+
+## 2026-09-24 — Timer notification cancel authorization hardened
+
+### Neden
+
+`POST /timer/cancel` endpoint'i yalnızca authenticated olmayı kontrol ediyor, gönderilen `timerId` üzerinde kullanıcının yetkisi olup olmadığını doğrulamadan scheduler kaydını iptal ediyordu.
+
+Bu nedenle authenticated bir kullanıcı başka bir kullanıcının personal timer'ına ait notification scheduler'ını `timerId` bilgisini biliyorsa iptal edebiliyordu.
+
+### Değişenler
+
+- `backend/src/server.js`
+- `POST /timer/cancel` artık timer kaydını DB'den okuyor.
+- Yalnız `record_status = active` timer kabul ediliyor.
+- Yetki kuralı `/timer/start` ile aynı hale getirildi:
+  - `superadmin`: izinli
+  - shared timer: kullanıcının aynı workspace'te olması gerekli
+  - personal timer: yalnız timer sahibi izinli
+- Yetki doğrulanmadan `cancelTimer(timerId)` çağrılmıyor.
+- Timer bulunamazsa `404`, DB okuma problemi varsa `500`, yetki yoksa `403` dönüyor.
+
+### Invariants
+
+- Authentication tek başına bir timer üzerinde işlem yetkisi anlamına gelmez.
+- Notification start/cancel işlemleri timer CRUD authorization kurallarıyla uyumlu kalmalıdır.
+- Shared timer işlemlerinde workspace sınırı korunmalıdır.
+- Personal timer işlemlerinde sahiplik korunmalıdır.
+
+### Testler
+
+1. Kullanıcı A'ya ait `isShared: false` personal timer ID'si alındı.
+2. Farklı browser context'te Kullanıcı B ile `POST /timer/cancel` çağrıldı.
+3. Sonuç:
+   - HTTP `403`
+   - `Bu timer için bildirimi iptal etme yetkiniz yok`
+4. Aynı timer için Kullanıcı A kendi access token'ı ile `POST /timer/cancel` çağırdı.
+5. Sonuç:
+   - HTTP `200`
+   - `{ success: true }`
+
+Her iki test geçti.
+
+### Commit
+
+`fix(timer): authorize notification cancellation`
+
+### Ertelenenler
+
+Timer offline-first / IndexedDB / repository / outbox / sync-engine mimarisi ayrı faz olarak ele alınacak.
