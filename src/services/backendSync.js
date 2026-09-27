@@ -1,4 +1,4 @@
-const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
+export const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
 // Her login / token temizleme yeni bir auth oturumu olarak değerlendirilir.
 // Access token refresh olmak authGeneration'ı değiştirmez.
@@ -502,9 +502,11 @@ export async function refreshAccessToken(
 
 // Genel fetch — token süresi dolunca otomatik yeniler
 export async function apiFetch(url, options = {}) {
+  // Optional caller scope guard: personal sync must also retain its workspace.
+  const requestIsCurrent = () => !options.isRequestCurrent || options.isRequestCurrent();
   const context = await captureApiRequestContext(options);
 
-  if (!context.ok) {
+  if (!context.ok || !requestIsCurrent()) {
     return null;
   }
 
@@ -525,7 +527,7 @@ export async function apiFetch(url, options = {}) {
   // auth session değişmiş olabilir.
   //
   // 200 dahil hiçbir eski response yeni session'a ulaşmamalı.
-  if (!isApiRequestContextCurrent(context)) {
+  if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
     return null;
   }
 
@@ -552,7 +554,7 @@ export async function apiFetch(url, options = {}) {
 
       // Retry beklenirken session değiştiyse
       // eski cevabı yeni kullanıcıya verme.
-      if (!isApiRequestContextCurrent(context)) {
+      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
         return null;
       }
 
@@ -566,7 +568,7 @@ export async function apiFetch(url, options = {}) {
     );
     if (result.ok) {
       // Refresh beklerken session değişmiş olabilir.
-      if (!isApiRequestContextCurrent(context)) {
+      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
         return null;
       }
 
@@ -593,7 +595,7 @@ export async function apiFetch(url, options = {}) {
 
       // Retry beklerken login/logout/session değiştiyse
       // cevabı discard et.
-      if (!isApiRequestContextCurrent(context)) {
+      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
         return null;
       }
 

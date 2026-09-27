@@ -32,6 +32,10 @@ function timerFields(timer) {
     reachedTarget: Boolean(timer.reachedTarget),
     pausedCount: timer.pausedCount ?? 0,
     syncState: timer.syncState ?? null,
+    syncRevision: timer.syncRevision ?? null,
+    syncDeleted: timer.syncDeleted === true,
+    endedAt: timer.endedAt ?? null,
+    durationMs: timer.durationMs ?? null,
     createdAt: timer.createdAt ?? null,
     updatedAt: timer.updatedAt ?? null,
   };
@@ -63,6 +67,13 @@ export async function saveTimer(timer, context) {
     )) {
       throw new Error("A timer ID cannot change data mode or ownership");
     }
+    if (existing?.syncDeleted) throw new Error("A deleted personal timer cannot be restored");
+    // Server acknowledgements own this metadata; stale UI objects cannot reset it.
+    if (existing && mode === TIMER_DATA_MODE.WORKSPACE_PERSONAL) {
+      record.syncRevision = existing.syncRevision ?? null;
+      record.syncState = existing.syncState ?? record.syncState;
+      record.syncDeleted = existing.syncDeleted === true;
+    }
     if (existing?.createdAt && !record.createdAt) record.createdAt = existing.createdAt;
     await timerDb.timers.put(record);
     return record;
@@ -91,7 +102,8 @@ export async function getWorkspacePersonalTimer(id, context) {
   requireScope(context);
   const timer = await timerDb.timers.get(id);
   return timer?.dataMode === TIMER_DATA_MODE.WORKSPACE_PERSONAL &&
-    timer.userId === context.userId && timer.workspaceId === context.workspaceId
+    timer.userId === context.userId && timer.workspaceId === context.workspaceId &&
+    !timer.syncDeleted
     ? timer : undefined;
 }
 
@@ -101,7 +113,7 @@ export async function listWorkspacePersonalTimers(context) {
     .where("[userId+workspaceId]")
     .equals([context.userId, context.workspaceId])
     .toArray();
-  return scoped.filter((timer) => timer.dataMode === TIMER_DATA_MODE.WORKSPACE_PERSONAL);
+  return scoped.filter((timer) => timer.dataMode === TIMER_DATA_MODE.WORKSPACE_PERSONAL && !timer.syncDeleted);
 }
 
 export async function listSharedTimerCache({ workspaceId }) {

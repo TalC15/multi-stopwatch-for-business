@@ -481,3 +481,145 @@ Her iki test geçti.
 ### Ertelenenler
 
 Timer offline-first / IndexedDB / repository / outbox / sync-engine mimarisi ayrı faz olarak ele alınacak.
+
+---
+
+## 2026-09-26 — Phase 3: kalıcı kişisel outbox ve bağımsız sync motoru
+
+### Neden
+
+Phase 1 yerel repository ve Phase 2 kişisel API üzerine, UI'ya bağlanmadan
+atomik ve kalıcı kişisel senkronizasyon altyapısı eklemek.
+
+### Değişenler
+
+- `src/data/timerDb.js`: v1 korunarak v2 `personalOutbox` tablosu.
+- `src/data/timerRepository.js`: sync metadata korunması, silinen kişisel
+  kayıtların normal okumalardan çıkarılması ve yeniden oluşturma engeli.
+- `src/sync/personalSyncModel.js`, `personalOutbox.js`, `personalSyncApi.js`,
+  `personalSyncEngine.js`: açık canonical dönüşüm, atomik işlemler, kalıcı
+  request body/revision/mutationId, Web Locks ile sıralı flush/pull.
+- `src/services/backendSync.js`: BASE_URL export ve isteğe bağlı scope guard.
+  Auth kilidi/refresh beklenirken değişen workspace'in eski kişisel isteği
+  göndermemesi gerçek apiFetch testleriyle doğrulandı; legacy çağrılar korunur.
+- Üç yeni test dosyası ve `src/sync/testSupport/fixtures.js`.
+- `docs/PHASE3_PERSONAL_SYNC.md`: mimari, testler, sınırlar ve Phase 4 sözleşmesi.
+
+### Invariants
+
+- Yalnız workspace-personal işlemler outbox'a girer; kullanıcı/workspace
+  kapsamı sabittir. Standalone/shared dışarıda kalır.
+- Bilinmeyen sunucu sonucunda aynı JSON body, mutationId ve revision tekrar
+  kullanılır. Önceki işlem çözülmeden aynı timer'ın sonraki işlemi gönderilmez.
+- 409/404 conflict kalıcıdır; GET'te yokluk create/ack sayılmaz. Yerel
+  değişiklikler ve diğer hesapların kuyrukları korunur.
+- Local update/outbox ve server ack/local revision transaction'ları atomiktir.
+- UI/store/main/socket entegrasyonu yapılmadı; backend/SQL değişmedi.
+
+### Testler
+
+- Mevcut 8 test korunarak `npm test`: 80 başarılı, 0 başarısız, 0 atlanan.
+- Dexie v1→v2, yeniden açma, create/update/delete rollback, auth/workspace
+  geçişleri, iki engine kilidi, kayıp cevap/timeout, revision sırası,
+  gerçek apiFetch refresh ve HTTP hata senaryoları doğrulandı.
+- İlk normal build, ortamın boş CPU listesi nedeniyle PWA terser adımında
+  başarısız oldu. Proje değiştirilmeden yalnız test sürecine tek CPU fallback
+  sağlayan preload ile Vite ve PWA service worker üretimi başarılı oldu.
+- Patch temiz ZIP kopyasına uygulanıp dosya içerikleri doğrulandı.
+
+### Commit ve sınırlar
+
+Commit, push, merge, canlı SQL veya deploy yapılmadı. ZIP'ten gerçek commit
+kimliği doğrulanamaz. Phase 2'nin yayın durumu için görev metni eski changelog
+kaydından üstündür; bu tur canlı doğrulama yapılmadı.
+
+Web Locks olmayan ortamda flush/pull güvenli biçimde `unsupported-locks`
+döndürür; yerel kuyruk korunur. Gerçek tarayıcı/Capacitor cihaz testi yapılmadı.
+Conflict çözüm UI'ı, background scheduler, store entegrasyonu ve Phase 4–6
+bilerek eklenmedi.
+
+
+---
+
+## 2026-09-27 — Phase 3 kod incelemesi, düzeltmeler ve yerel doğrulama
+
+### Neden
+
+Astra tarafından hazırlanan Phase 3 kodları ek incelemelerden
+geçirildi. UUID biçimi, sayaç ismi uzunluğu, cihazlar arası
+silme uzlaştırması ve mevcut backend sözleşmesi değerlendirildi.
+
+Amaç, altı aşamalı ana mimari planın dışına çıkmadan Phase 3
+kodlarını sadeleştirmek ve yerel ortamda doğrulamaktı.
+
+### Yapılan değişiklikler
+
+- `src/sync/personalSyncModel.js`:
+  UUID doğrulaması yalnızca kanonik küçük harfli UUID kabul
+  edecek şekilde düzenlendi. Geçerli UUID sürümleri gereksiz
+  yere yalnızca v4 ile sınırlandırılmadı.
+
+- Kişisel sayaç isimlerine en fazla 35 karakter sınırı
+  getirildi. İlgili doğrulama testleri eklendi.
+
+- Önceki inceleme sürümünde eklenen `syncHidden` ile otomatik
+  gizleme yaklaşımı kaldırıldı.
+
+  Mevcut GET endpoint'inin eksiksiz kayıt döndürdüğü
+  garanti edilmeden, sunucu listesindeki yokluk nedeniyle
+  yerel sayaçların otomatik gizlenmesi doğru bulunmadı.
+
+- Kalıcı outbox, atomik IndexedDB işlemleri, değişmez
+  mutationId, revizyon yönetimi ve kullanıcı/workspace
+  izolasyonu korundu.
+
+- Web Locks, mevcut auth sistemi ve backend değiştirilmedi.
+
+### Korunan mimari kurallar
+
+- Standalone sayaçlar yalnızca IndexedDB'de tutulur.
+- Yalnız workspace-personal işlemler outbox'a alınır.
+- Shared sayaçlar Phase 3 outbox'ına alınmaz.
+- Bekleyen kişisel değişiklikler ve tombstone kayıtları
+  sunucudan gelen eksik liste nedeniyle silinmez.
+- Belirsiz sonuçlarda aynı mutationId ve değişmez HTTP
+  isteği yeniden kullanılır.
+- Eski localStorage sayaçları için migrasyon yapılmaz.
+- Yeni IndexedDB verilerinin kalıcılığı korunur.
+
+### Yerel doğrulama
+
+Kullanıcının kendi Windows/frontend geliştirme ortamında:
+
+- `git apply --check`: başarılı.
+- Düzeltilmiş Phase 3 patch'i başarıyla uygulandı.
+- `npm test`: 83 test, 83 başarılı, 0 başarısız.
+- `npm run build`: başarılı.
+
+Önceki 80 başarılı test sonucu ilk teslimata aittir.
+83 başarılı test sonucu gözden geçirilmiş sürümün
+yerel ortamda çalıştırılmasıyla elde edilmiştir.
+
+### Değişiklik kapsamı
+
+- Frontend Phase 3 kodları yerel geliştirme dalına uygulandı.
+- Mevcut UI/store entegrasyonu değiştirilmedi.
+- Backend veya Supabase üzerinde yeni işlem yapılmadı.
+- Canlı deploy gerçekleştirilmedi.
+
+### Bilerek ertelenenler
+
+- Phase 4: Mevcut stopwatchStore ile local-first entegrasyonu.
+- Kişisel sayaç oluşturma, güncelleme ve silme işlemlerinin
+  yalnızca outbox üzerinden yürütülmesinin sağlanması.
+- Diğer cihazlarda silinen kişisel sayaçların eksiksiz
+  sunucu listesi garantisiyle uzlaştırılması.
+- Gerçek Android APK üzerinde Web Locks uyumluluk testi.
+- Gerçek cihazda offline/reconnect ve çoklu oturum testleri.
+- Phase 5 shared mutasyon entegrasyonu.
+- Phase 6 kapsamlı uzlaştırma testleri.
+
+### Git durumu
+
+Phase 3 değişiklikleri yerel geliştirme dalına uygulanmıştır.
+Commit ve push işlemleri henüz gerçekleştirilmemiştir.
