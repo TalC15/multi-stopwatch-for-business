@@ -16,7 +16,7 @@ const routes = [
     path: "/",
     name: "Home",
     component: () => import("../views/HomeView.vue"),
-    meta: { requiresAuth: true },
+    meta: {}, // Standalone is available without an online login.
   },
   {
     path: "/settings",

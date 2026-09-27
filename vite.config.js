@@ -9,9 +9,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       workbox: {
-        // Service Worker ses API'lerini engellemsin diye
-        // navigateFallback'i kapat
-        navigateFallback: null,
+        // App navigation must reopen offline; asset/API requests are unaffected.
+        navigateFallback: "/index.html",
         // Ses dosyaları ve API çağrıları SW'dan geçmesin
         runtimeCaching: [],
       },

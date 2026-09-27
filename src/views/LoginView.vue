@@ -76,6 +76,7 @@
         <p class="text-sm text-[var(--color-text-secondary)] mt-1">Hesabınıza giriş yapın</p>
       </div>
 
+      <RouterLink to="/" class="text-sm text-center text-indigo-500">Cihazdaki sayaçlarla devam et</RouterLink>
       <!-- Form -->
       <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-1">

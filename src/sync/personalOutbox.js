@@ -2,7 +2,7 @@ import { timerDb } from "../data/timerDb.js";
 import { saveTimer } from "../data/timerRepository.js";
 import {
   requirePersonal, requireScope, requireUuid, isRevision, personalStateFromLocal,
-  validateAcknowledgement, validateServerTimer, localFromServer,
+  validateAcknowledgement, validateServerTimer, localFromServer, validatePersonalTombstone,
 } from "./personalSyncModel.js";
 
 const scoped = (scope) => timerDb.personalOutbox.where("[userId+workspaceId]").equals([scope.userId, scope.workspaceId]);
@@ -145,12 +145,15 @@ export async function markPersonalOperation(op, status, error, assertCurrent, no
 }
 
 // GET is not an ack. Existing dirty/unbased/deleted records are left untouched.
-export async function importPersonalSnapshot(rows, scope, assertCurrent) {
+export async function importPersonalSnapshot(rows, scope, assertCurrent, tombstones = []) {
   requireScope(scope);
   if (typeof assertCurrent !== "function" || !Array.isArray(rows)) throw new Error("Authenticated snapshot required");
   rows = rows.map((row) => ({ ...row }));
   scope = { userId: scope.userId, workspaceId: scope.workspaceId };
   rows.forEach((row) => validateServerTimer(row, scope));
+  tombstones = tombstones.map(row => ({ ...row }));
+  tombstones.forEach(row => validatePersonalTombstone(row, scope));
+  if (new Set([...rows, ...tombstones].map(row => row.id)).size !== rows.length + tombstones.length) throw new Error("Duplicate snapshot UUID");
   if (new Set(rows.map((row) => row.id)).size !== rows.length) throw new Error("Duplicate server UUID");
   return transaction(async () => {
     assertCurrent();
@@ -166,7 +169,26 @@ export async function importPersonalSnapshot(rows, scope, assertCurrent) {
         result.preserved.push(row.id);
         continue;
       }
-      await timerDb.timers.put(localFromServer(row, scope));
+      const imported = localFromServer(row, scope);
+      // Delivery of the local target alarm is device state, not evidence from GET.
+      if (imported.type === "up") imported.reachedTarget = old?.reachedTarget === true;
+      await timerDb.timers.put(imported);
+      assertCurrent();
+      result.imported.push(row.id);
+    }
+    for (const row of tombstones) {
+      const old = await timerDb.timers.get(row.id);
+      assertCurrent();
+      if (!old) continue;
+      requirePersonal(old, scope);
+      if (pending.has(row.id) || !isRevision(old.syncRevision) ||
+          old.syncRevision > row.sync_revision || !["synced", "deleted"].includes(old.syncState)) {
+        result.preserved.push(row.id);
+        continue;
+      }
+      await timerDb.timers.put({ id: old.id, dataMode: old.dataMode, userId: old.userId,
+        workspaceId: old.workspaceId, isShared: false, syncDeleted: true,
+        syncRevision: row.sync_revision, syncState: "deleted" });
       assertCurrent();
       result.imported.push(row.id);
     }

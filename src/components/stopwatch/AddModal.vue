@@ -2,12 +2,13 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { message } from "../../composables/message";
-import { apiFetch, getAccessToken, getUser } from "@/services/backendSync";
+import { apiFetch, getAccessToken, getUser, getAuthGeneration } from "@/services/backendSync";
 
 const props = defineProps(["isOpen", "defaultType", "forceShared"]);
 const emit = defineEmits(["close"]);
 const store = useStopwatchStore();
-const user = getUser()
+const user = computed(() => store.user)
+const saving = ref(false)
 
 const presetTimes = store.presetTimes;
 const presetNames = store.presetNames;
@@ -44,64 +45,69 @@ const save = async () => {
     return message.warning("süre negatif olamaz")
   if(store.duration>1440)
     return message.warning("çok uzun süre(en fazla 1440)")
-  if (props.forceShared && !user?.workspace_id)
+  if (props.forceShared && !user.value?.workspace_id)
     return message.warning("ortak kronometre oluşturmak için bir workspace'e katılmalısınız")
   if(props.forceShared && !sharedModeAvailable.value)
     return message.warning("yönetici izni yok")
   const isStopwatchNames = store?.stopwatches.map(a=>a.name)
   if(isStopwatchNames?.includes(store.name))
     return message.warning("bu isim önceden kullanılmış")
-  console.log(store.name)
-  await store.addTimer({
-    name: store.name,
-    duration: store.duration,
-    type: props.defaultType,
-    isShared: isShared.value,
-  });
+  if (saving.value || !store.ready) return;
+  saving.value = true;
+  try {
+    const createdTimerId = await store.addTimer({
+      name: store.name, duration: store.duration, type: props.defaultType, isShared: props.forceShared === true || isShared.value,
+    });
+    if (!createdTimerId) return;
+    const started = await store.startTimer(createdTimerId);
+    emit("close");
+    if (started) message.success(`${store.name} oluşturuldu`);
+    else message.warning("Sayaç kaydedildi; başlatma tamamlanamadı.");
+    store.name = JSON.parse(localStorage.getItem("defaultName")) || "kronometre";
+    store.duration = JSON.parse(localStorage.getItem("defaultDuration")) || 5;
+    isShared.value = false;
+  } finally { saving.value = false; }
 
-  emit("close");
-  const createdTimerId = store.stopwatches[store.stopwatches.length - 1].id;
-  store.startTimer(createdTimerId);
-
-  if (props.defaultType === "up") {
-    message.success(`${store.name} kronometresi oluşturuldu`);
-  } else {
-    message.success(`${store.name} zamanlayıcısı oluşturuldu`);
-  }
-
-  store.name = JSON.parse(localStorage.getItem("defaultName")) || "kronometre";
-  store.duration = JSON.parse(localStorage.getItem("defaultDuration")) || 5;
-  isShared.value = false; // sıfırla
 };
 
 async function checkSharedMode() {
-  const user = getUser();
-  if (!user?.workspace_id) return;
+  sharedModeAvailable.value = false;
+  const selectedUser = user.value;
+  const generation = getAuthGeneration();
+  if (!selectedUser?.workspace_id) return;
+  const isRequestCurrent = () => getAuthGeneration() === generation &&
+    getUser()?.id === selectedUser.id && getUser()?.workspace_id === selectedUser.workspace_id;
 
   const response = await apiFetch(`${BASE_URL}/workspace`, {
+    isRequestCurrent,
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${getAccessToken()}`,
     },
   });
 
-  if (response) {
+  if (response?.ok) {
     const data = await response.json();
-    sharedModeAvailable.value = data.workspace?.shared_mode_enabled || false;
+    if (isRequestCurrent()) sharedModeAvailable.value = data.workspace?.shared_mode_enabled === true;
   }
 }
+
+watch(() => [user.value?.id, user.value?.workspace_id], () => {
+  isShared.value = false;
+  void checkSharedMode().catch(() => {});
+});
 
 watch(
   () => props.isOpen,
   (newVal) => {
     if (newVal) {
-      checkSharedMode();
+      void checkSharedMode().catch(() => {});
       isShared.value = props.forceShared || false;
     }
   },
 );
 
-onMounted(() =>checkSharedMode());
+onMounted(() => { void checkSharedMode().catch(() => {}); });
 </script>
 
 <template>
@@ -277,6 +283,7 @@ onMounted(() =>checkSharedMode());
 
       <button
         @click="save"
+        :disabled="saving || !store.ready"
         class="w-full mt-7 py-4 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-600 text-white rounded-2xl font-black text-lg shadow-lg shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
       >
         <svg

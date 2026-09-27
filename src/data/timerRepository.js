@@ -31,6 +31,7 @@ function timerFields(timer) {
     remaining: timer.remaining ?? null,
     reachedTarget: Boolean(timer.reachedTarget),
     pausedCount: timer.pausedCount ?? 0,
+    ...(timer.dataMode === TIMER_DATA_MODE.SHARED ? { sharedAlarmDelivered: timer.sharedAlarmDelivered === true } : {}),
     syncState: timer.syncState ?? null,
     syncRevision: timer.syncRevision ?? null,
     syncDeleted: timer.syncDeleted === true,

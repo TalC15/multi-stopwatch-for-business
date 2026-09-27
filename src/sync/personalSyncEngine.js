@@ -82,9 +82,9 @@ export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks 
     },
     pull() {
       return inSessionLock(async (session) => {
-        const rows = await api.list(session);
+        const snapshot = api.snapshot ? await api.snapshot(session) : { timers: await api.list(session), tombstones: [] };
         session.assertCurrent();
-        const result = await importPersonalSnapshot(rows, session, session.assertCurrent);
+        const result = await importPersonalSnapshot(snapshot.timers, session, session.assertCurrent, snapshot.tombstones);
         session.assertCurrent();
         return { status: "done", ...result };
       });

@@ -42,7 +42,16 @@ export function mockServer() {
   const requests = [];
   const request = async (url, options) => {
     requests.push({ url, ...options });
-    if (options.method === "GET") return response(200, { timers: [...rows.values()].filter((row) => row.record_status === "active") });
+    if (options.method === "GET") {
+      if (url.includes("syncPage=1")) {
+        const after = new URL(url).searchParams.get("after");
+        const page = [...rows.values()].filter(row => !after || row.id > after).sort((a,b) => a.id < b.id ? -1 : 1).slice(0, 200);
+        return response(200, { timers: page.filter(row => row.record_status === "active" && !row.archived_at),
+          tombstones: page.filter(row => row.record_status === "deleted" || row.archived_at), nextCursor: page.at(-1)?.id ?? null });
+      }
+      return response(200, { timers: [...rows.values()].filter((row) => row.record_status === "active") });
+    }
+    if (url.endsWith("/timer/start") || url.endsWith("/timer/cancel")) return response(200, { success: true });
     const id = url.split("/").at(-1);
     const body = JSON.parse(options.body);
     const old = rows.get(id);

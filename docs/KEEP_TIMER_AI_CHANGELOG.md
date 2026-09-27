@@ -623,3 +623,31 @@ yerel ortamda çalıştırılmasıyla elde edilmiştir.
 
 Phase 3 değişiklikleri yerel geliştirme dalına uygulanmıştır.
 Commit ve push işlemleri henüz gerçekleştirilmemiştir.
+
+---
+
+## 2026-09-27 — Phase 4: store/UI ve kalıcı offline akış
+
+- Pinia store IndexedDB repository/outbox controller'ına bağlandı. Standalone timer/Telegram IO yok; kişisel tüm eylemler atomik enqueue, shared mevcut CRUD/socket yolunda. LocalStorage timer watch/import kaldırıldı; auth korunur.
+- Başlangıç, scope, online ve foreground sync; geciken cevap/session izolasyonu; aynı UUID import ve açık silme/arşiv sayfalaması eklendi. Minimal backend patch'i gereklidir.
+- Count-Up hedef bildirimi ve devam, Countdown doğru deadline, async UI hata/başarı akışı, standalone girişsiz erişim ve offline PWA navigation bağlandı.
+- Android minWebViewVersion 107 açıklandı; güvenli Web Locks fallback'i uydurulmadı. Gerçek cihaz testi yapılmadı.
+- `npm test`: 114/114; mevcut 83 korunur. Standart build PWA worker'da ortamın sıfır CPU sonucu nedeniyle durdu; yalnız doğrulama preload'u ile Vite/PWA build başarılı. Preload patch'te yoktur.
+- Tüm değişen/eklenen dosyalar, gerekçeler ve gerçek cihaz kabul adımları `docs/PHASE4_STORE_INTEGRATION.md` içindedir. Phase 5 shared authority ve Phase 6 kabul matrisi ertelendi. Commit/push/merge/SQL/deploy yapılmadı.
+
+### 2026-09-27 — Shared fix ve DELETE addendum birleşimi
+
+- Phase 4 frontend patch birleşimine shared bildirim teslim işareti ile cache/GET silme yarışı düzeltmeleri eklendi.
+- Astra, 114 temel + 8 shared fix + 5 shared delete regresyon testi = 127 başarılı sonuç bildirdi.
+- 127 test, standart build ve APK uyumluluğu kullanıcının gerçek frontend ortamında ayrıca doğrulanmalıdır.
+
+## 2026-09-27 — Phase 4 son inceleme: kapsam yarışı ve ek kalıcılık düzeltmeleri
+
+- Silinen shared kayıt, geciken PATCH cevabıyla tekrar yayımlanmaz.
+- Başarılı shared POST'un doğrulanmış sonucu cache'e yazılır; GET hatasında görünüm/bildirim sürekliliği korunur. Başka kimlik/sahip/workspace cevabı reddedilir.
+- Ondalıklı dakika sürelerinin kişisel senkronizasyon dönüşümü tam milisaniyeye sabitlenir; senkronizasyon sonrası düzenlenebilirlik korunur.
+- Profile/Manager workspace cevapları JSON okunduktan sonra özgün oturum/kapsamla doğrulanır. Auth protokolü ve backend değiştirilmedi.
+- 4 yeni controller regresyonu önce başarısız, düzeltme sonrası başarılı; 5 yeni workspace oturum testi eklendi. Frontend: **136/136**. Backend: **35 başarılı, 7 atlanan, 0 başarısız**.
+- Standart build bu ortamın boş CPU bilgisi yüzünden PWA işçisinde başarısız; yalnız ortam preload'u ile build/PWA başarılı (19 precache girdisi). Preload patch'e dahil değil.
+- Kaynak kimlikleri, dosyalar, uygulama talimatı, test sınırları ve 8/10 değerlendirme: `docs/PHASE4_FINAL_REVIEW.md`.
+- Tam frontend patch'i önceki frontend patch'lerinin yerine geçer. Phase 5, canlı SQL, commit/push/deploy yapılmadı.

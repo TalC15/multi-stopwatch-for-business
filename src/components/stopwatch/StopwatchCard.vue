@@ -377,23 +377,23 @@ const statusLabel = computed(() => {
   return "IDLE";
 });
 
-const toggleTimer = () => {
+const toggleTimer = async () => {
   if (props.timer.status === "running") {
-    store.pauseTimer(props.timer.id);
+    if (!await store.pauseTimer(props.timer.id)) return;
     audioRadar.pause();
     audioDigital.pause();
     hapticTap();
   } else {
-    store.startTimer(props.timer.id);
+    await store.startTimer(props.timer.id);
   }
 };
 
-function deleteAndStop(timer, deger) {
+async function deleteAndStop(timer, deger) {
+  if (!await store.deleteTimer(timer, deger)) return;
   audioRadar.pause();
   audioDigital.pause();
   audioRadar.currentTime = 0;
   audioDigital.currentTime = 0;
-  store.deleteTimer(timer, deger);
 }
 
 const confirmOpen = ref(false);

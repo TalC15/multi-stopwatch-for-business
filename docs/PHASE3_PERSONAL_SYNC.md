@@ -259,3 +259,12 @@ npm run build
 Başka yerel değişiklikler varsa ilk komutun sonucunu inceleyin; `--reject` veya
 zorlayıcı seçeneklerle kısmi uygulama yapmayın. Eski `KeepTimer_Phase1_Clean.patch`
 dosyasına dokunulmaz. Bu komutlar commit/push/deploy içermez.
+
+## 2026-09-27 — Phase 4 takip notu
+
+Yukarıdaki metin Phase 3 tesliminin tarihsel durumudur. Store/UI artık bağlıdır.
+Güncel sözleşme, sayfalı terminal import, test sonuçları ve Android sınırları
+`docs/PHASE4_STORE_INTEGRATION.md` içindedir.
+`importPersonalSnapshot(rows, scope, assertCurrent, tombstones = [])` açık terminal
+kayıtları kabul eder; `pull()` üretimde sayfalı snapshot kullanır.
+Eski active-only listede bulunmamak hâlâ silme kanıtı değildir.

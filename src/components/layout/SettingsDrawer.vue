@@ -1,10 +1,10 @@
 <script setup>
-import { ref } from "vue";
+import { computed } from "vue";
+import { useStopwatchStore } from "../../stores/stopwatchStore.js";
 import { RouterLink } from "vue-router";
 import { useThemeStore } from "@/stores/themeStore";
-import { saveTelegramChatId } from "@/services/backendSync";
-import { getUser } from "../../services/backendSync";
-const user = getUser();
+const store = useStopwatchStore();
+const user = computed(() => store.user);
 
 const props = defineProps(["isOpen"]);
 defineEmits(["close"]);

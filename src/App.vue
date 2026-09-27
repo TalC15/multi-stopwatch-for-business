@@ -5,6 +5,8 @@ import { isLoggedIn } from './services/backendSync';
 import AppMessage from "./components/ui/AppMessage.vue";
 import { messageState } from "./composables/message.js";
 import { onMounted } from "vue";
+import { useStopwatchStore } from "./stores/stopwatchStore.js";
+const timers = useStopwatchStore();
 import { requestNotificationPermission } from "./utils/notifications";
 // PWA'da speechSynthesis'i kullanıcı etkileşimiyle uyandır
 // Bu olmadan PWA/production modda ses çalışmıyor
@@ -35,6 +37,7 @@ function unlockAudio() {
 }
 
 onMounted(async () => {
+  void timers.initialize();
   try {
     await requestNotificationPermission();
   } catch (err) {

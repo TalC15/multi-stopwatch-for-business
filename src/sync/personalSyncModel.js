@@ -53,7 +53,7 @@ export function personalStateFromLocal(timer) {
   let endsAt = null;
   if (status === "running") {
     if (!ms(timer.startTime) || !ms(timer.accumulatedTime)) throw new Error("Running timer needs a reliable start anchor");
-    const end = timer.startTime + timer.targetMinutes * 60000 - timer.accumulatedTime;
+    const end = timer.startTime + Math.trunc(timer.targetMinutes * 60000) - timer.accumulatedTime;
     if (!Number.isFinite(end) || Math.abs(end) > 8640000000000000) throw new Error("Invalid time anchor");
     endsAt = new Date(end).toISOString();
   }
@@ -105,9 +105,10 @@ export function validateAcknowledgement(data, operation) {
 export function localFromServer(row, scope, now = Date.now()) {
   const state = validateServerTimer(row, scope);
   const accumulatedTime = state.accumulatedMs;
+  // ISO timestamps have integer milliseconds; invert the same truncation used on PUT.
   // Keep the server's time anchor even when the local clock is behind it.
   const startTime = state.status === "running"
-    ? Date.parse(state.endsAt) - state.targetMinutes * 60000 + accumulatedTime : null;
+    ? Date.parse(state.endsAt) - Math.trunc(state.targetMinutes * 60000) + accumulatedTime : null;
   const elapsed = Math.max(0, accumulatedTime + (startTime === null ? 0 : now - startTime));
   return {
     id: row.id, dataMode: "workspace-personal", userId: scope.userId, workspaceId: scope.workspaceId,
@@ -120,4 +121,17 @@ export function localFromServer(row, scope, now = Date.now()) {
     syncRevision: row.sync_revision, syncState: "synced", syncDeleted: false,
     createdAt: row.created_at ?? null, updatedAt: row.updated_at ?? null,
   };
+}
+
+// A terminal record needs identity/revision validation, not a historical timer payload.
+export function validatePersonalTombstone(row, scope) {
+  requireScope(scope);
+  requireUuid(row?.id);
+  if (row.user_id !== scope.userId || row.workspace_id !== scope.workspaceId ||
+      row.is_shared !== false || !isRevision(row.sync_revision) ||
+      !["active", "deleted"].includes(row.record_status) ||
+      (row.record_status !== "deleted" && !row.archived_at)) {
+    throw new Error("Invalid personal terminal record");
+  }
+  if (row.archived_at != null) timestamp(row.archived_at);
 }

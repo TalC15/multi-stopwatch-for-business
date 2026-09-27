@@ -1,5 +1,5 @@
 import * as backend from "../services/backendSync.js";
-import { requireScope, requireUuid, validateServerTimer, validateAcknowledgement } from "./personalSyncModel.js";
+import { requireScope, requireUuid, validateServerTimer, validateAcknowledgement, validatePersonalTombstone, requirePersonal, personalStateFromLocal } from "./personalSyncModel.js";
 
 function failure(code, status = 0) {
   return Object.assign(new Error(code), { code, status });
@@ -69,6 +69,39 @@ export function createPersonalSyncApi({ auth = backend, request = backend.apiFet
       try { data.timers.forEach((row) => validateServerTimer(row, session)); }
       catch { throw failure("unexpected-response"); }
       return data.timers;
+    },
+    async snapshot(session) {
+      const timers = [], tombstones = [], seen = new Set();
+      let after = null;
+      do {
+        const data = await send(session, `/timers/personal?syncPage=1${after ? `&after=${after}` : ""}`, "GET");
+        session.assertCurrent();
+        if (!Array.isArray(data?.timers) || !Array.isArray(data?.tombstones)) throw failure("snapshot-unavailable");
+        const rows = [...data.timers, ...data.tombstones].sort((a, b) => a.id < b.id ? -1 : 1);
+        try {
+          data.timers.forEach(row => validateServerTimer(row, session));
+          data.tombstones.forEach(row => validatePersonalTombstone(row, session));
+          for (const row of rows) {
+            if (seen.has(row.id) || (after && row.id <= after)) throw new Error("Invalid cursor");
+            seen.add(row.id);
+          }
+          if (rows.length ? data.nextCursor !== rows.at(-1).id : data.nextCursor !== null) throw new Error("Invalid next cursor");
+        } catch { throw failure("unexpected-response"); }
+        timers.push(...data.timers); tombstones.push(...data.tombstones);
+        after = data.nextCursor;
+      } while (after !== null);
+      return { timers, tombstones };
+    },
+    async syncNotification(session, timer) {
+      requirePersonal(timer, session);
+      session.assertCurrent();
+      const state = timer.syncDeleted ? null : personalStateFromLocal(timer);
+      if (state?.status === "running" && Date.parse(state.endsAt) > Date.now()) {
+        return send(session, "/timer/start", "POST", JSON.stringify({
+          timerId: timer.id, timerName: timer.name, endsAt: Date.parse(state.endsAt),
+        }));
+      }
+      return send(session, "/timer/cancel", "POST", JSON.stringify({ timerId: timer.id }));
     },
     async mutate(session, op) {
       session.assertCurrent();
