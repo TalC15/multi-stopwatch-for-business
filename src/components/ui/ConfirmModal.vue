@@ -1,5 +1,5 @@
 <script setup>
-defineProps(["isOpen", "title", "message", "confirmText", "cancelText"]);
+defineProps(["isOpen", "title", "message", "confirmText", "cancelText", "confirmDisabled"]);
 const emit = defineEmits(["confirm", "cancel"]);
 </script>
 
@@ -32,6 +32,8 @@ const emit = defineEmits(["confirm", "cancel"]);
         </button>
         <button
           @click="emit('confirm')"
+          :aria-disabled="confirmDisabled"
+          :style="confirmDisabled ? { opacity: 0.45 } : undefined"
           class="flex-1 py-3.5 rounded-2xl font-bold text-base bg-red-700 hover:bg-red-800 text-white active:scale-95 transition-all"
         >
           {{ confirmText || "Sil" }}

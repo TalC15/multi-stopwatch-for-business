@@ -122,7 +122,7 @@ export async function listSharedTimerCache({ workspaceId }) {
     throw new Error("Workspace scope is required");
   }
   const scoped = await timerDb.timers.where("workspaceId").equals(workspaceId).toArray();
-  return scoped.filter((timer) => timer.dataMode === TIMER_DATA_MODE.SHARED);
+  return scoped.filter((timer) => timer.dataMode === TIMER_DATA_MODE.SHARED && !timer.syncDeleted);
 }
 
 // The caller must supply a successfully authenticated backend snapshot for this workspace.

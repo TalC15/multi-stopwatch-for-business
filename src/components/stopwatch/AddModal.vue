@@ -35,6 +35,7 @@ const increment = () => {
 };
 
 const save = async () => {
+  if ((props.forceShared || isShared.value) && !store.requireSharedWrite()) return;
   if (!store.name)
     return message.warning("isim eklemek zorunludur");
   if (store.name.length>35)
@@ -211,6 +212,7 @@ onMounted(() => { void checkSharedMode().catch(() => {}); });
               >
               <button
                 @click="isShared = !isShared"
+                role="switch" aria-label="Ortak zaman" :aria-checked="isShared"
                 :class="[
                   'w-12 h-7 rounded-full relative transition-colors duration-300',
                   isShared ? 'bg-indigo-700' : 'bg-slate-300 dark:bg-slate-600',
@@ -283,6 +285,8 @@ onMounted(() => { void checkSharedMode().catch(() => {}); });
 
       <button
         @click="save"
+          :aria-disabled="(forceShared || isShared) && !store.sharedWritable"
+          :style="(forceShared || isShared) && !store.sharedWritable ? { opacity: 0.45 } : undefined"
         :disabled="saving || !store.ready"
         class="w-full mt-7 py-4 bg-indigo-700 hover:bg-indigo-800 disabled:bg-slate-200 disabled:text-slate-400 dark:disabled:bg-slate-800 dark:disabled:text-slate-600 text-white rounded-2xl font-black text-lg shadow-lg shadow-indigo-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
       >

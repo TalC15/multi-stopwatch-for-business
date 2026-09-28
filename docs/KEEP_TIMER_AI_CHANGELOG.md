@@ -1,5 +1,21 @@
 # KeepTimer — AI Engineering Changelog
 
+## 2026-09-28 — Phase 5: shared sunucu otoritesi ve çevrimdışı UX (yayın kapısı açık)
+
+- Shared komutları canonical v5 API üzerinden; yerel optimistic shared yazma/outbox/replay yok.
+- Tam scope/generation snapshot, revision ve kalıcı tombstone; yerel DELETE ACK ve ilk yüklemedeki silme korunur.
+- Merkezi readonly/pending durumuyla mevcut Home, iki kart, AddModal ve delete onayı; mevcut message.warning.
+- Server-time tahmini, cached offset, monoton GET ve kart clock düzeltmeleri; cihaz alarm claim'i sunucu status'undan ayrı.
+- Eski APK sürüm/güncelleme arayüzü YOK; auth, personal sync/outbox, bağımlılıklar değişmedi.
+- 137 mevcut test korunarak son frontend koşumu 183 pass / 0 fail / 0 skip.
+- Hedefli ek düzeltme: shared snapshot/ACK için success===true zorunlu; false/eksik success cache'i temizleyemez. Pozitif fakat 0 ms shared satır okunurken reddedilir. Offline B'nin A pause/delete sonrası yerel alarmı test edildi; sunucu yazması/Telegram yok, ürün politikası korunur.
+- Normal build bu ortamda os.cpus()=0 nedeniyle PWA/Terser aşamasında başarısız; sadece test ortamı CPU yardımcısıyla PWA dahil build başarılı. Standart CI build yeniden gerekli.
+- Backend 53 pass / 0 fail / 19 skip. Yeni SQL çalıştırılmadı; gerçek PG yarışları ve Phase 6 mobil kabulü tamamlandı sayılmaz.
+- Her dosyanın gerekçesi, API, sınırlamalar ve yayın kapıları: docs/PHASE5_SHARED_AUTHORITY.md ve docs/PHASE5_CONTRACT_REVIEW.md.
+- Commit/push/deploy yapılmadı.
+
+---
+
 > Amaç: Projede yapılan önemli değişiklikleri, nedenlerini, testlerini ve bilerek ertelenen işleri kalıcı biçimde kaydetmek.
 >
 > Kural: Bundan sonra onaylanan her proje değişikliğinden sonra bu dosyaya tarihli bir kayıt eklenir. Kayıt; ne değişti, neden değişti, hangi dosyalar etkilendi, hangi testler yapıldı ve neyin bilerek ertelendiğini içermelidir.

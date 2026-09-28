@@ -1,3 +1,4 @@
+import { sharedFixture } from "../sync/testSupport/sharedFixture.js";
 import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { beforeEach, afterEach, after, test } from "node:test";
@@ -7,15 +8,15 @@ import { createPersonalSyncApi } from "../sync/personalSyncApi.js";
 import { createPersonalSyncEngine } from "../sync/personalSyncEngine.js";
 import { enqueuePersonalPut, listPersonalOutbox } from "../sync/personalOutbox.js";
 import { ids, scope, timer, serverTimer, fakeAuth, fakeLocks, mockServer, response, deferred } from "../sync/testSupport/fixtures.js";
-let controllers, auth, backend, server, legacy, online, clock, signals, notifications, errors, successes, socketCallback, connectedCallback, events;
+let sharedMock, controllers, auth, backend, server, legacy, online, clock, signals, notifications, errors, successes, socketCallback, connectedCallback, events;
 const input = changes => ({ name: "Work", type: "up", duration: 1, isShared: false, ...changes });
 function makeController(request = server.request) {
   const personalApi = createPersonalSyncApi({ auth: backend, request, baseUrl: "https://mock.invalid" });
   const engine = createPersonalSyncEngine({ api: personalApi, locks: fakeLocks(), now: () => clock, online: () => online });
-  const controller = createStopwatchController({ backend, engine, personalApi,
-    socket: { onTimerEvent: callback => { socketCallback = callback; return () => {}; }, onSocketConnected: callback => { connectedCallback = callback; return () => {}; } },
+  const controller = createStopwatchController({ backend, engine, personalApi, sharedApi: sharedMock.api, monotonicNow: () => clock,
+    socket: { onTimerEvent: callback => { socketCallback = payload => sharedMock.event(callback,payload); return () => {}; }, onSocketConnected: callback => { connectedCallback = callback; return () => {}; } },
     notify: (...args) => { notifications.push(args); }, cancelSound: () => {}, haptic: () => {},
-    message: { error: text => errors.push(text), success: text => successes.push(text) },
+    message: { warning: text => errors.push(text), error: text => errors.push(text), success: text => successes.push(text) },
     storage: { getItem: key => key === "timers" ? JSON.stringify([timer({ name: "Legacy should not load" })]) : null },
     events, document: new EventTarget(), now: () => clock,
     setInterval: callback => { signals.push(callback); return signals.length; }, clearInterval: () => {},
@@ -35,6 +36,7 @@ beforeEach(async () => {
     dbDeleteTimer: async () => { legacy.push("DELETE legacy"); return { success: true }; },
     syncTimerStart: async () => { legacy.push("START notification"); }, syncTimerCancel: async () => { legacy.push("CANCEL notification"); },
   };
+  sharedMock=sharedFixture({backend,auth,now:()=>clock,serverTimer});
 });
 afterEach(async () => { controllers.forEach(c => c.dispose()); await new Promise(resolve => setImmediate(resolve)); });
 after(() => timerDb.close());
@@ -292,7 +294,7 @@ test("shared socket deletion removes cache; failed GET and unrelated liveQuery c
   backend.dbGetSharedTimers = async () => null;
   socketCallback({ event: "deleted", data: { id: ids.second } });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(await timerDb.timers.get(ids.second), undefined);
+  assert.equal((await timerDb.timers.get(ids.second))?.syncDeleted, true);
   await c.addTimer(input({ name: "Unrelated" }));
   await new Promise(resolve => setImmediate(resolve));
   await c.loadSharedTimers();
@@ -374,7 +376,7 @@ test("GET begun before shared delete cannot write its stale response back into c
   socketCallback({ event: "deleted", data: { id: ids.second } });
   release.resolve(); await stale; await new Promise(resolve => setImmediate(resolve));
   assert.ok(reads >= 2);
-  assert.equal(await timerDb.timers.get(ids.second), undefined);
+  assert.equal((await timerDb.timers.get(ids.second))?.syncDeleted, true);
   assert.equal(c.stopwatches.value.some(t => t.id === ids.second), false);
 });
 
@@ -417,13 +419,16 @@ test("successful local shared DELETE clears cache without socket and invalidates
     if (++reads === 1) { entered.resolve(); await release.promise; return [shared]; }
     return null;
   };
+  const deleteEntered=deferred(), deleteRelease=deferred();
+  backend.dbDeleteTimer=async()=>{ deleteEntered.resolve(); await deleteRelease.promise; return {success:true}; };
+  const deleting=c.deleteTimer({ id: ids.second }, "sayacı"); await deleteEntered.promise;
   const stale = c.loadSharedTimers(); await entered.promise;
-  assert.equal(await c.deleteTimer({ id: ids.second }, "sayacı"), true);
+  deleteRelease.resolve(); assert.equal(await deleting, true);
   const cachedAfterDelete = await timerDb.timers.get(ids.second);
   release.resolve(); await stale;
-  assert.equal(cachedAfterDelete, undefined);
+  assert.equal(cachedAfterDelete?.syncDeleted, true);
   await c.addTimer(input({ name: "Unrelated local write" })); await settle(c);
-  assert.equal(await timerDb.timers.get(ids.second), undefined);
+  assert.equal((await timerDb.timers.get(ids.second))?.syncDeleted, true);
   assert.equal(c.stopwatches.value.some(t => t.id === ids.second), false);
   assert.equal((await listPersonalOutbox(scope)).length, 1);
 });
@@ -438,10 +443,11 @@ test("shared deletion before initial GET finishes cannot be lost when timer is n
   const c = makeController(); await c.initialize(); await entered.promise;
   assert.equal(c.stopwatches.value.some(t => t.id === ids.second), false);
   const loading = c.loadSharedTimers();
-  socketCallback({ event: "deleted", data: { id: ids.second } });
+  socketCallback({ event: "deleted", data: {protocol:5,success:true,workspaceId:ids.workspace,generation:"1",serverNow:new Date(clock).toISOString(),
+    timer:{...shared,record_status:"deleted",shared_revision:"1"}} });
   release.resolve(); await loading;
   await c.addTimer(input({ name: "Unrelated local write" })); await settle(c);
-  assert.equal(await timerDb.timers.get(ids.second), undefined);
+  assert.equal((await timerDb.timers.get(ids.second))?.syncDeleted, true);
   assert.equal(c.stopwatches.value.some(t => t.id === ids.second), false);
   assert.equal((await listPersonalOutbox(scope)).length, 1);
 });
@@ -502,12 +508,12 @@ test("late shared PATCH response cannot republish a timer deleted while PATCH wa
   socketCallback({ event: "deleted", data: { id: ids.second } });
   release.resolve(); await updating;
   assert.equal(c.stopwatches.value.some(t => t.id === ids.second), false);
-  assert.equal(await timerDb.timers.get(ids.second), undefined);
+  assert.equal((await timerDb.timers.get(ids.second))?.syncDeleted, true);
 });
 
 test("confirmed shared create is cached even if GET fails; its target alarm remains available", async () => {
+  const c = makeController(); await c.initialize(); await c.loadSharedTimers();
   backend.dbGetSharedTimers = async () => null;
-  const c = makeController(); await c.initialize();
   const id = await c.addTimer(input({ isShared: true }));
   assert.ok(id);
   assert.equal((await timerDb.timers.get(id))?.dataMode, "shared");
@@ -517,9 +523,9 @@ test("confirmed shared create is cached even if GET fails; its target alarm rema
 });
 
 test("shared create rejects a response belonging to another workspace", async () => {
-  backend.dbGetSharedTimers = async () => null;
   backend.dbCreateTimer = async row => ({ success: true, timer: serverTimer({ id: row.id, is_shared: true, workspace_id: ids.otherWorkspace }) });
-  const c = makeController(); await c.initialize();
+  const c = makeController(); await c.initialize(); await c.loadSharedTimers();
+  backend.dbGetSharedTimers = async () => null;
   assert.equal(await c.addTimer(input({ isShared: true })), null);
   assert.equal(c.stopwatches.value.length, 0);
   assert.equal(await timerDb.timers.count(), 0);
@@ -534,18 +540,16 @@ test("fractional-minute personal timer remains editable after server round trip"
 });
 
 test("confirmed shared POST cannot be erased by an older GET if follow-up GET fails", async () => {
-  const entered = deferred(), release = deferred();
-  let reads = 0;
-  backend.dbGetSharedTimers = async () => {
-    if (++reads === 1) { entered.resolve(); await release.promise; return []; }
-    return null;
-  };
-  const c = makeController(); await c.initialize(); await entered.promise;
-  const id = await c.addTimer(input({ isShared: true }));
-  assert.ok(id);
-  assert.equal((await timerDb.timers.get(id))?.dataMode, "shared");
-  release.resolve();
-  await c.loadSharedTimers();
-  assert.equal((await timerDb.timers.get(id))?.dataMode, "shared");
-  assert.equal(c.stopwatches.value.some(t => t.id === id), true);
+  const c = makeController(); await c.initialize(); await c.loadSharedTimers();
+  const entered=deferred(), release=deferred(), posted=deferred(), ack=deferred(); let reads=0;
+  backend.dbGetSharedTimers=async()=>{ if(++reads===1) {entered.resolve();await release.promise;return [];} return null; };
+  const create=backend.dbCreateTimer;
+  backend.dbCreateTimer=async (...args)=>{posted.resolve();await ack.promise;return create(...args);};
+  const creating=c.addTimer(input({isShared:true})); await posted.promise;
+  const loading=c.loadSharedTimers(); await entered.promise;
+  ack.resolve(); const id=await creating; assert.ok(id);
+  assert.equal((await timerDb.timers.get(id))?.dataMode,"shared");
+  release.resolve(); await loading;
+  assert.equal((await timerDb.timers.get(id))?.dataMode,"shared");
+  assert.equal(c.stopwatches.value.some(t=>t.id===id),true);
 });

@@ -5,7 +5,7 @@ export function elapsedAt(timer, now) {
 }
 export function displayTimer(timer, now) {
   const elapsed = elapsedAt(timer, now);
-  const total = timer.targetMinutes * 60000;
+  const total = timer.dataMode === "shared" ? Math.trunc(timer.targetMinutes * 60000) : timer.targetMinutes * 60000;
   return { ...timer, status: timer.status === "completed" ? "expired" : timer.status,
     elapsed: timer.type === "down" ? Math.min(total, elapsed) : elapsed,
     remaining: timer.type === "down" ? Math.max(0, total - elapsed) : null };
@@ -20,17 +20,16 @@ export function thresholdState(timer, now) {
 }
 
 export function sharedTargetReached(timer, now) {
-  const target = timer.targetMinutes * 60000;
-  return timer.dataMode === "shared" && target > 0 &&
+  const target = Math.trunc(timer.targetMinutes * 60000);
+  return timer.dataMode === "shared" && timer.targetMinutes > 0 &&
     (timer.type === "down" && ["expired", "completed"].includes(timer.status) ||
       elapsedAt(timer, now) >= target);
 }
 
 export function sharedFromServer(row, now) {
-  const total = Number(row.target_minutes || 0) * 60000;
+  const total = Math.trunc(Number(row.target_minutes || 0) * 60000);
   const accumulated = Number(row.accumulated_ms || 0);
-  const completed = row.type === "down" && (row.status === "completed" ||
-    (row.status === "running" && row.ends_at && Date.parse(row.ends_at) <= now));
+  const completed = row.type === "down" && row.status === "completed";
   const running = row.status === "running" && !completed;
   const elapsed = running && row.ends_at ? Math.max(0, total - (Date.parse(row.ends_at) - now)) : completed ? total : accumulated;
   return displayTimer({ id: row.id, dataMode: "shared", userId: row.user_id ?? row.created_by,

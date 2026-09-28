@@ -1,4 +1,5 @@
-import { ref } from "vue";
+import { createSharedApi, validateSharedEnvelope } from "../services/sharedApi.js";
+import { ref, computed } from "vue";
 import { liveQuery } from "dexie";
 import { timerDb } from "../data/timerDb.js";
 import * as repository from "../data/timerRepository.js";
@@ -11,8 +12,10 @@ import { displayTimer, elapsedAt, thresholdState, sharedFromServer, sharedTarget
 export function createStopwatchController({ backend, socket, engine, personalApi,
   notify, cancelSound, haptic, message, storage = globalThis.localStorage,
   events = globalThis.window, document = globalThis.document, now = Date.now,
+  sharedApi, online = () => globalThis.navigator?.onLine !== false, monotonicNow = () => globalThis.performance?.now() ?? now(),
   setInterval: every = globalThis.setInterval, clearInterval: stopEvery = globalThis.clearInterval,
 }) {
+  sharedApi ??= createSharedApi({ backend, online });
   const preference = (key, fallback) => { try { return JSON.parse(storage?.getItem(key)) ?? fallback; } catch { return fallback; } };
   const stopwatches = ref([]), ready = ref(false), user = ref(null), syncStatus = ref("idle"), pendingCount = ref(0);
   const presetTimes = ref(preference("presetTimes", [])), presetNames = ref(preference("presetNames", []));
@@ -23,6 +26,25 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   const transitions = new Set(), failedTransitions = new Set(), actions = new Map(), notified = new Map();
   const sharedDeleted = new Set();
   let sharedEventRevision = 0;
+  const sharedState = ref("reconciling"), sharedPending = ref(false), sharedLastVerified = ref(null);
+  let sharedGeneration = -1n, sharedClock = null, lastWarning = -Infinity;
+  // Only the identity of an uncertain create, never an offline operation queue.
+  // It is reused solely on an explicit same-form retry in this session.
+  let uncertainCreate = null;
+  const sharedNow = () => sharedClock ? sharedClock.server + monotonicNow() - sharedClock.local : now();
+  const sharedWritable = computed(() => sharedState.value === "ready" && !sharedPending.value);
+  function requireSharedWrite() {
+    if (!online()) sharedState.value = "offline-readonly";
+    if (sharedWritable.value) return true;
+    if (now()-lastWarning>=2000) {
+      lastWarning=now();
+      message.warning(sharedState.value === "offline-readonly" ? "Ortak sayacı değiştirmek için internet bağlantınızı kontrol edin." :
+        sharedState.value === "auth-required" ? "Ortak sayaçlar için oturumunuzu doğrulayın." :
+        sharedState.value === "reconciling" || sharedPending.value ? "Ortak sayaçlar sunucuyla güncelleniyor…" :
+        "Sunucuya erişilemiyor; ortak sayaçlar geçici olarak salt okunur.");
+    }
+    return false;
+  }
   const removers = [];
 
   function context() {
@@ -49,12 +71,16 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   }
   function applyRows(rows, ctx) {
     if (!current(ctx)) return;
+    if (!sharedClock) {
+      const cachedClock=rows.find(t=>t.dataMode===MODE.SHARED && visible(t,ctx) && Number.isFinite(t.sharedClockOffset));
+      if (cachedClock) sharedClock={server:now()+cachedClock.sharedClockOffset,local:monotonicNow()};
+    }
     // Shared realtime display is reconciled through its existing GET/socket flow.
     const existingShared = stopwatches.value.filter(t => t.dataMode === MODE.SHARED && visible(t, ctx));
     const sharedIds = new Set(existingShared.map(t => t.id));
     stopwatches.value = [...rows.filter(t => t.dataMode !== MODE.SHARED || !sharedIds.has(t.id)), ...existingShared]
       .filter(t => visible(t, ctx) && (t.dataMode !== MODE.SHARED || !sharedDeleted.has(t.id)))
-      .map(t => displayTimer(t, now()));
+      .map(t => displayTimer(t, t.dataMode === MODE.SHARED ? sharedNow() : now()));
     ready.value = true;
     startTick();
     checkSharedAlarms(ctx);
@@ -71,6 +97,8 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     for (const timer of stopwatches.value) if (timer.dataMode !== MODE.STANDALONE) cancelSound(timer.id);
     stopwatches.value = stopwatches.value.filter(t => t.dataMode === MODE.STANDALONE);
     ready.value = false; pendingCount.value = 0; user.value = null;
+    sharedState.value = online() ? "reconciling" : "offline-readonly"; sharedPending.value=false; sharedGeneration=-1n; sharedClock=null;
+    uncertainCreate = null;
     sharedPromise = null; sharedRequested = false; sharedDeleted.clear(); sharedEventRevision++; notified.clear(); failedTransitions.clear();
   }
   async function initialize() {
@@ -127,7 +155,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
         assertCurrent(ctx);
         const displayed = stopwatches.value.find(t => t.id === id && t.dataMode === MODE.SHARED && visible(t, ctx));
         if (!cached || cached.dataMode !== MODE.SHARED || cached.workspaceId !== ctx.scope?.workspaceId ||
-            sharedDeleted.has(id) || !displayed || !sharedTargetReached(displayed, now())) return null;
+            sharedDeleted.has(id) || !displayed || !sharedTargetReached(displayed, sharedNow())) return null;
         if (cached.sharedAlarmDelivered) return "recorded";
         await timerDb.timers.put({ ...cached, sharedAlarmDelivered: true });
         assertCurrent(ctx);
@@ -146,7 +174,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   function checkSharedAlarms(ctx) {
     if (!current(ctx)) return;
     for (const timer of stopwatches.value) {
-      if (timer.dataMode === MODE.SHARED && !timer.sharedAlarmDelivered && sharedTargetReached(timer, now())) {
+      if (timer.dataMode === MODE.SHARED && !timer.sharedAlarmDelivered && sharedTargetReached(timer, sharedNow())) {
         void markSharedAlarm(timer.id, ctx);
       }
     }
@@ -171,7 +199,9 @@ export function createStopwatchController({ backend, socket, engine, personalApi
       assertCurrent(ctx); return saved;
     });
   }
-  async function action(id, transform, sharedUpdates, deleting = false, label = "sayacı") {
+  async function action(id, transform, sharedCommand, deleting = false, label = "sayacı") {
+    const selected = stopwatches.value.find(t => t.id === id);
+    if (selected?.dataMode === MODE.SHARED) return sharedMutation(id, sharedCommand, label);
     const ctx = capture();
     return serial(id, async () => {
       try {
@@ -179,27 +209,8 @@ export function createStopwatchController({ backend, socket, engine, personalApi
         const old = stopwatches.value.find(t => t.id === id);
         if (!old || !visible(old, ctx)) throw new Error("Sayaç bulunamadı");
         let record;
-        if (old.dataMode === MODE.SHARED) {
-          if (!ctx.scope) throw new Error("Ortak sayaç için oturum gerekli");
-          record = transform ? transform({ ...old }) : old;
-          if (!record) return true;
-          // Preserve legacy shared commands. Phase 5 owns further authority/refactoring.
-          const result = deleting ? await backend.dbDeleteTimer(id, { isRequestCurrent: () => current(ctx) }) : await backend.dbUpdateTimer(id, sharedUpdates(record), { isRequestCurrent: () => current(ctx) });
-          assertCurrent(ctx);
-          if (!result?.success) throw new Error(result?.error || "Ortak sayaç kaydedilemedi");
-          // A server deletion may have arrived while this PATCH was in flight.
-          if (!deleting && (sharedDeleted.has(id) || !stopwatches.value.some(t => t.id === id && t.dataMode === MODE.SHARED))) return false;
-          if (deleting) {
-            await removeSharedAfterServerDelete(id, ctx);
-            assertCurrent(ctx);
-          }
-          if (deleting || record.status !== "running") void backend.syncTimerCancel(id, { isRequestCurrent: () => current(ctx) });
-          else void backend.syncTimerStart(record, { isRequestCurrent: () => current(ctx) });
-          void loadSharedTimers();
-        } else {
-          record = await localChange(id, ctx, transform, deleting);
-          assertCurrent(ctx);
-        }
+        record = await localChange(id, ctx, transform, deleting);
+        assertCurrent(ctx);
         if (deleting) {
           stopwatches.value = stopwatches.value.filter(t => t.id !== id);
           cancelSound(id); void haptic(); message.success(`${old.name} ${label} silindi`);
@@ -226,7 +237,10 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     try {
       if (!ready.value) throw new Error("Yerel kayıtların açılmasını bekleyin");
       const ownership = getNewTimerContext(ctx.user, input.isShared === true);
-      const record = { id: crypto.randomUUID(), ...ownership, name: input.name?.trim(), type: input.type,
+      const retryCreate = input.isShared === true && uncertainCreate?.key === ctx.key &&
+        uncertainCreate.body.name === input.name?.trim() && uncertainCreate.body.type === input.type &&
+        uncertainCreate.body.targetMinutes === Number(input.duration);
+      const record = { id: retryCreate ? uncertainCreate.body.timerId : crypto.randomUUID(), ...ownership, name: input.name?.trim(), type: input.type,
         targetMinutes: Number(input.duration), isPay: false, isShared: input.isShared === true,
         status: "idle", startTime: null, accumulatedTime: 0, elapsed: 0,
         remaining: input.type === "down" ? Number(input.duration) * 60000 : null,
@@ -234,28 +248,9 @@ export function createStopwatchController({ backend, socket, engine, personalApi
       personalStateFromLocal(record);
       let saved = record;
       if (record.dataMode === MODE.SHARED) {
-        const response = await backend.dbCreateTimer(record, { isRequestCurrent: () => current(ctx) });
-        assertCurrent(ctx);
-        if (!response?.success) throw new Error(response?.error || "Ortak sayaç oluşturulamadı");
-        if (response.timer?.id !== record.id || response.timer.workspace_id !== ctx.scope.workspaceId ||
-            response.timer.is_shared !== true || (response.timer.user_id ?? response.timer.created_by) !== ctx.scope.userId) {
-          throw new Error("Ortak sayaç yanıtının kimliği veya kapsamı uyuşmuyor");
-        }
-        sharedEventRevision++; // Confirmed POST invalidates any pre-create shared GET.
-        saved = sharedFromServer(response.timer, now());
-        saved = await timerDb.transaction("rw", timerDb.timers, async () => {
-          assertCurrent(ctx);
-          const cached = await timerDb.timers.get(record.id);
-          assertCurrent(ctx);
-          if (sharedDeleted.has(record.id)) throw new Error("Ortak sayaç sunucuda silindi");
-          if (cached && (cached.dataMode !== MODE.SHARED || cached.userId !== saved.userId || cached.workspaceId !== saved.workspaceId)) {
-            throw new Error("Ortak sayaç cache kimliği değiştirilemez");
-          }
-          // POST is authenticated server evidence too. Keep any newer GET state.
-          if (!cached) await timerDb.timers.put(saved);
-          assertCurrent(ctx);
-          return cached ?? saved;
-        });
+        if (!requireSharedWrite()) return null;
+        const ok = await sharedMutation(record.id, { command: "create", name: record.name, type: record.type, targetMinutes: record.targetMinutes });
+        return ok ? record.id : null;
       } else {
         saved = await timerDb.transaction("rw", timerDb.timers, timerDb.personalOutbox, async () => {
           assertCurrent(ctx);
@@ -272,19 +267,18 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   const startTimer = id => action(id, old => {
     if (old.status === "running" || ["expired", "completed"].includes(old.status)) return null;
     return { ...old, status: "running", startTime: now() };
-  }, next => ({ status: "running", ends_at: personalStateFromLocal(next).endsAt, accumulated_ms: next.accumulatedTime }));
+  }, { command: "start" });
   const pauseTimer = id => action(id, old => {
     if (old.status !== "running") return null;
     const completed = thresholdState(old, now());
     if (completed?.status === "completed") return completed;
     return { ...(completed ?? old), accumulatedTime: Math.round(elapsedAt(old, now())), status: "paused", startTime: null, pausedCount: old.pausedCount + 1 };
-  }, next => next.status === "completed" ? { status: "completed", ended_at: next.endedAt, duration_ms: next.durationMs } :
-    { status: "paused", accumulated_ms: next.accumulatedTime });
+  }, { command: "pause" });
   const updateIsPay = (id, value) => action(id, old => {
     if (typeof value !== "boolean") throw new Error("Geçersiz ödeme durumu");
     return { ...old, isPay: value };
-  }, next => ({ is_pay: next.isPay }));
-  const deleteTimer = (timer, label) => action(timer.id, null, null, true, label);
+  }, { command: "set-pay", value });
+  const deleteTimer = (timer, label) => action(timer.id, null, { command: "delete" }, true, label);
 
   async function tick() {
     if (disposed) return;
@@ -293,11 +287,17 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     const tasks = [];
     for (const timer of stopwatches.value) {
       if (timer.status !== "running") continue;
-      const display = displayTimer(timer, now());
+      const display = displayTimer(timer, timer.dataMode === MODE.SHARED ? sharedNow() : now());
       timer.elapsed = display.elapsed; timer.remaining = display.remaining;
-      if (timer.dataMode === MODE.SHARED && sharedTargetReached(timer, now())) {
-        if (!timer.sharedAlarmDelivered) tasks.push(markSharedAlarm(timer.id, ctx));
-        if (timer.type === "up") continue;
+      if (timer.dataMode === MODE.SHARED) {
+        if (sharedTargetReached(timer, sharedNow())) {
+          if (!timer.sharedAlarmDelivered) tasks.push(markSharedAlarm(timer.id, ctx));
+          const key = `${timer.id}:${timer.sharedRevision}`;
+          if (timer.type === "down" && !failedTransitions.has(key) && online()) {
+            failedTransitions.add(key); void loadSharedTimers();
+          }
+        }
+        continue; // Rendering/alarming can never issue a shared write.
       }
       if (!thresholdState(timer, now()) || transitions.has(timer.id) || failedTransitions.has(timer.id)) continue;
       transitions.add(timer.id);
@@ -357,97 +357,110 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     try { return await work; } finally { if (syncPromise === work) syncPromise = null; }
   }
 
-  // Both an acknowledged DELETE and the scoped socket event are server evidence.
-  // Invalidate older reads immediately, even when this UUID is not in memory yet.
-  async function removeSharedAfterServerDelete(id, ctx) {
+  async function applySharedEnvelope(envelope, ctx, snapshot = false) {
     assertCurrent(ctx);
-    sharedEventRevision++;
-    sharedDeleted.add(id);
-    const displayed = stopwatches.value.find(t => t.id === id && t.dataMode === MODE.SHARED && visible(t, ctx));
-    if (displayed) {
-      cancelSound(id);
-      stopwatches.value = stopwatches.value.filter(t => t !== displayed);
-    }
+    validateSharedEnvelope(envelope, ctx.scope, snapshot);
+    const generation = BigInt(envelope.generation);
+    if (generation < sharedGeneration) return false;
+    const rows = snapshot ? envelope.timers : [envelope.timer];
+    const ids = new Set(rows.map(row=>row.id));
     await timerDb.transaction("rw", timerDb.timers, async () => {
       assertCurrent(ctx);
-      const cached = await timerDb.timers.get(id);
-      assertCurrent(ctx);
-      if (cached?.dataMode === MODE.SHARED && cached.workspaceId === ctx.scope?.workspaceId) {
-        await timerDb.timers.delete(id);
+      for (const row of rows) {
+        const cached=await timerDb.timers.get(row.id); assertCurrent(ctx);
+        if (cached && (cached.dataMode!==MODE.SHARED || cached.workspaceId!==ctx.scope.workspaceId || cached.userId!==row.user_id)) throw new Error("Ortak cache kapsamı değiştirilemez");
+        if (cached?.sharedRevision && BigInt(cached.sharedRevision)>BigInt(row.shared_revision)) continue;
+        if (cached?.syncDeleted && row.record_status==='active' && !row.archived_at) continue;
+        const terminal=row.record_status!=='active' || Boolean(row.archived_at);
+        const record=terminal ? { id:row.id,dataMode:MODE.SHARED,isShared:true,userId:row.user_id,workspaceId:row.workspace_id } : sharedFromServer(row,Date.parse(envelope.serverNow));
+        await timerDb.timers.put({ ...record, sharedRevision:row.shared_revision, sharedGeneration:envelope.generation,
+          sharedClockOffset:Date.parse(envelope.serverNow)-now(),
+          syncDeleted:terminal, sharedAlarmDelivered:cached?.sharedAlarmDelivered===true });
         assertCurrent(ctx);
       }
+      if (snapshot) {
+        const cached=await timerDb.timers.where("workspaceId").equals(ctx.scope.workspaceId).toArray();
+        for(const row of cached) if(row.dataMode===MODE.SHARED && !row.syncDeleted && !ids.has(row.id) &&
+          BigInt(row.sharedGeneration ?? '0')<=generation) await timerDb.timers.delete(row.id);
+      }
+      assertCurrent(ctx);
     });
+    assertCurrent(ctx);
+    for (const row of rows) if (row.record_status!=='active' || row.archived_at) { sharedDeleted.add(row.id); cancelSound(row.id); }
+    stopwatches.value=stopwatches.value.filter(t=>t.dataMode!==MODE.SHARED || !sharedDeleted.has(t.id));
+    if (generation < sharedGeneration) return false;
+    sharedGeneration = generation > sharedGeneration ? generation : sharedGeneration;
+    // A slow same-generation response was sampled before the UI's last tick.
+    // Keep a monotonic estimate; this never changes a canonical timer status.
+    const serverTime=Date.parse(envelope.serverNow);
+    sharedClock={server:sharedClock ? Math.max(sharedNow(),serverTime) : serverTime,local:monotonicNow()};
+    const rowsNow=await repository.listSharedTimerCache(ctx.scope); assertCurrent(ctx);
+    stopwatches.value=[...stopwatches.value.filter(t=>t.dataMode!==MODE.SHARED),...rowsNow.map(t=>displayTimer(t,sharedNow()))];
+    checkSharedAlarms(ctx); startTick(); return true;
   }
-
+  async function sharedMutation(id, command, label = "sayacı") {
+    if (!requireSharedWrite()) return false;
+    const ctx=capture(); const old=stopwatches.value.find(t=>t.id===id);
+    if (!ctx.scope || (command.command!=='create' && (!old || old.dataMode!==MODE.SHARED))) return false;
+    sharedPending.value=true;
+    const body=command.command==='create' && uncertainCreate?.key===ctx.key && uncertainCreate.body.timerId===id ? uncertainCreate.body :
+      { protocol:5,timerId:id,mutationId:crypto.randomUUID(),expectedRevision:old?.sharedRevision ?? '0',...command };
+    try {
+      const envelope=await sharedApi.command(body,{isRequestCurrent:()=>current(ctx)});
+      assertCurrent(ctx);
+      if (envelope?.timer?.id!==id || envelope.mutationId!==body.mutationId) throw new Error("Ortak komut cevabı eşleşmiyor");
+      if (command.command==='create' && envelope.timer.user_id!==ctx.scope.userId) throw new Error("Ortak sahiplik yanıtı eşleşmiyor");
+      sharedEventRevision++;
+      await applySharedEnvelope(envelope,ctx);
+      assertCurrent(ctx);
+      if (command.command==='create') uncertainCreate=null;
+      if (command.command==='delete') { void haptic(); message.success(`${old.name} ${label} silindi`); }
+      return true;
+    } catch (error) {
+      if (current(ctx)) {
+        if (command.command==='create') uncertainCreate=(!error.status || error.status>=500) ? {key:ctx.key,body} : null;
+        sharedState.value=error.status===401?'auth-required':online()?'unavailable':'offline-readonly';
+        message.warning(error.status===401 ? "Oturumunuzu doğrulayın." : error.status===403 ? "Bu ortak işlem için izniniz yok." :
+          error.status===409 ? "Ortak sayaç değişti. Güncel durum alınıyor." : "İşlemin sonucu henüz doğrulanamadı. Güncel durum alınıyor.");
+        if (error.status!==401) await loadSharedTimers();
+      }
+      return false;
+    } finally { if(current(ctx)) sharedPending.value=false; }
+  }
   async function loadSharedTimers() {
-    const ctx = active;
+    const ctx=active;
     if (!ctx?.scope || !current(ctx)) return false;
-    sharedRequested = true;
+    if (!online()) { sharedState.value='offline-readonly'; return false; }
+    sharedRequested=true;
     if (sharedPromise) return sharedPromise;
-    const work = (async () => {
-      let loaded = false;
-      // An event arriving during GET needs a fresh read after that response.
-      while (current(ctx) && sharedRequested) {
-        sharedRequested = false;
+    const work=(async()=>{
+      let loaded=false, attempts=0;
+      while(current(ctx) && sharedRequested && attempts++<3) {
+        sharedRequested=false; sharedState.value='reconciling';
+        const revision=sharedEventRevision;
         try {
-          const revision = sharedEventRevision;
-          const rows = await backend.dbGetSharedTimers({ isRequestCurrent: () => current(ctx) });
+          const envelope=await sharedApi.snapshot({isRequestCurrent:()=>current(ctx)});
           assertCurrent(ctx);
-          if (revision !== sharedEventRevision) continue; // An older GET cannot undo a socket deletion.
-          if (!Array.isArray(rows) || rows.some(row => row.workspace_id !== ctx.scope.workspaceId || row.is_shared !== true)) continue;
-          const records = rows.map(row => sharedFromServer(row, now()));
-          await timerDb.transaction("rw", timerDb.timers, async () => {
-            assertCurrent(ctx);
-            if (revision !== sharedEventRevision) throw new Error("Stale shared snapshot");
-            for (const record of records) {
-              const cached = await timerDb.timers.get(record.id);
-              record.sharedAlarmDelivered = cached?.dataMode === MODE.SHARED && cached.workspaceId === ctx.scope.workspaceId && cached.sharedAlarmDelivered === true;
-            }
-            await repository.replaceSharedCacheFromServerSnapshot({ workspaceId: ctx.scope.workspaceId, snapshot: { success: true, timers: records } });
-            assertCurrent(ctx);
-          });
-          assertCurrent(ctx);
-          if (revision !== sharedEventRevision) continue;
-          sharedDeleted.clear();
-          stopwatches.value = [...stopwatches.value.filter(t => t.dataMode !== MODE.SHARED),
-            ...records.map(record => ({ ...record, sharedAlarmDelivered: record.sharedAlarmDelivered ||
-              stopwatches.value.find(t => t.id === record.id && t.dataMode === MODE.SHARED)?.sharedAlarmDelivered === true }))];
-          checkSharedAlarms(ctx);
-          startTick(); loaded = true;
-        } catch { /* Keep cache on failure; retry only on another explicit event. */ }
+          if(revision!==sharedEventRevision) { sharedRequested=true; continue; }
+          if (!await applySharedEnvelope(envelope,ctx,true)) { sharedRequested=true; continue; } assertCurrent(ctx);
+          if(revision!==sharedEventRevision) { sharedRequested=true; continue; }
+          sharedState.value=online()?'ready':'offline-readonly'; sharedLastVerified.value=now(); loaded=true;
+        } catch(error) {
+          if(current(ctx)) sharedState.value=error.status===401?'auth-required':online()?'unavailable':'offline-readonly';
+        }
       }
       return loaded;
     })();
-    sharedPromise = work;
-    try { return await work; } finally { if (sharedPromise === work) sharedPromise = null; }
+    sharedPromise=work;
+    try { return await work; } finally { if(sharedPromise===work) sharedPromise=null; }
   }
-  const offTimer = socket.onTimerEvent(({ event, data }) => {
-    const ctx = active;
-    if (!ctx?.scope || !current(ctx)) return;
-    if (event === "deleted") {
-      if (typeof data?.id !== "string" || !data.id.trim()) return;
-      void removeSharedAfterServerDelete(data.id, ctx)
-        .catch(() => { if (current(ctx)) message.error("Ortak sayaç önbelleği güncellenemedi"); });
-      void loadSharedTimers();
-      return;
-    }
-    const timer = stopwatches.value.find(t => t.id === data?.id && t.dataMode === MODE.SHARED && visible(t, ctx));
-    if (event === "created") { void loadSharedTimers(); return; }
-    if (!timer) return;
-    if (event === "updated") {
-      if (data.status !== undefined) timer.status = data.status;
-      if (data.isPay !== undefined) timer.isPay = data.isPay;
-      if (data.pausedCount !== undefined) timer.pausedCount = Number(data.pausedCount);
-      // The remote device's target flag is not this device's notification receipt.
-      if (data.status === "running") {
-        timer.accumulatedTime = data.endsAt ? Math.max(0, timer.targetMinutes * 60000 - (Date.parse(data.endsAt) - now())) : Number(data.accumulatedTimeAtStart || 0);
-        timer.startTime = now(); startTick();
-      } else if (data.status === "paused") { timer.accumulatedTime = Number(data.accumulatedTimeAtStart ?? elapsedAt(timer, now())); timer.startTime = null; cancelSound(timer.id); }
-      else if (["expired", "completed"].includes(data.status)) {
-        Object.assign(timer, { status: "expired", startTime: null, accumulatedTime: timer.targetMinutes * 60000, elapsed: timer.targetMinutes * 60000, remaining: 0 });
-      }
-      checkSharedAlarms(ctx);
-    }
+  const offTimer=socket.onTimerEvent(({data})=>{
+    const ctx=active;
+    if(!ctx?.scope || !current(ctx)) return;
+    if(data?.workspaceId && data.workspaceId!==ctx.scope.workspaceId) return;
+    sharedEventRevision++;
+    // Missing/legacy payload is never authoritative. A scoped GET is required.
+    if(data?.protocol===5) void applySharedEnvelope(data,ctx).catch(()=>{});
     void loadSharedTimers();
   });
   const offConnected = socket.onSocketConnected(() => { void loadSharedTimers(); });
@@ -461,12 +474,13 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   listen(events, backend.AUTH_LOGIN_REQUIRED_EVENT, () => { suspended = false; void initialize(); });
   listen(events, backend.AUTH_USER_CHANGED_EVENT, () => { void initialize(); });
   listen(events, "storage", event => { if ([null, "user", "refreshToken", "accessToken"].includes(event.key)) void initialize(); });
+  listen(events, "offline", () => { sharedState.value="offline-readonly"; });
   listen(events, "online", resume); listen(events, "focus", resume); listen(events, "pageshow", resume);
   listen(document, "visibilitychange", () => { if (document.visibilityState === "visible") resume(); });
   function dispose() {
     disposed = true; epoch++; subscription?.unsubscribe(); stopTick();
     offTimer?.(); offConnected?.(); removers.forEach(remove => remove());
   }
-  return { stopwatches, ready, user, syncStatus, pendingCount, presetTimes, presetNames, duration, name, roleStyles,
+  return { sharedState, sharedPending, sharedWritable, sharedLastVerified, requireSharedWrite, stopwatches, ready, user, syncStatus, pendingCount, presetTimes, presetNames, duration, name, roleStyles,
     initialize, addTimer, startTimer, pauseTimer, deleteTimer, updateIsPay, tick, startTick, stopTick, loadSharedTimers, requestSync, dispose };
 }
