@@ -1,4 +1,4 @@
-const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
+export const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
 // Her login / token temizleme yeni bir auth oturumu olarak değerlendirilir.
 // Access token refresh olmak authGeneration'ı değiştirmez.
@@ -30,6 +30,7 @@ async function withAuthMutationLock(callback) {
 }
 
 export const AUTH_SESSION_CHANGED_EVENT = "keeptimer:auth-session-changed";
+export const AUTH_USER_CHANGED_EVENT = "keeptimer:auth-user-changed";
 export const AUTH_LOCAL_LOGOUT_EVENT = "keeptimer:auth-local-logout";
 export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT =
   "keeptimer:auth-access-token-refreshed";
@@ -173,6 +174,7 @@ export function getUser() {
 
 export function saveUser(user) {
   localStorage.setItem("user", JSON.stringify(user));
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_USER_CHANGED_EVENT));
 }
 
 export function isLoggedIn() {
@@ -502,9 +504,11 @@ export async function refreshAccessToken(
 
 // Genel fetch — token süresi dolunca otomatik yeniler
 export async function apiFetch(url, options = {}) {
+  // Optional caller scope guard: personal sync must also retain its workspace.
+  const requestIsCurrent = () => !options.isRequestCurrent || options.isRequestCurrent();
   const context = await captureApiRequestContext(options);
 
-  if (!context.ok) {
+  if (!context.ok || !requestIsCurrent()) {
     return null;
   }
 
@@ -525,7 +529,7 @@ export async function apiFetch(url, options = {}) {
   // auth session değişmiş olabilir.
   //
   // 200 dahil hiçbir eski response yeni session'a ulaşmamalı.
-  if (!isApiRequestContextCurrent(context)) {
+  if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
     return null;
   }
 
@@ -552,7 +556,7 @@ export async function apiFetch(url, options = {}) {
 
       // Retry beklenirken session değiştiyse
       // eski cevabı yeni kullanıcıya verme.
-      if (!isApiRequestContextCurrent(context)) {
+      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
         return null;
       }
 
@@ -566,7 +570,7 @@ export async function apiFetch(url, options = {}) {
     );
     if (result.ok) {
       // Refresh beklerken session değişmiş olabilir.
-      if (!isApiRequestContextCurrent(context)) {
+      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
         return null;
       }
 
@@ -593,7 +597,7 @@ export async function apiFetch(url, options = {}) {
 
       // Retry beklerken login/logout/session değiştiyse
       // cevabı discard et.
-      if (!isApiRequestContextCurrent(context)) {
+      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
         return null;
       }
 
@@ -760,10 +764,11 @@ export async function saveTelegramChatId(chatId) {
 }
 
 // Timer DB'ye kaydet
-export async function dbCreateTimer(timer) {
+export async function dbCreateTimer(timer, options = {}) {
   const response = await apiFetch(`${BASE_URL}/timers`, {
     method: "POST",
     headers: authHeader(),
+    isRequestCurrent: options.isRequestCurrent,
     body: JSON.stringify({
       id: timer.id,
       name: timer.name,
@@ -777,10 +782,11 @@ export async function dbCreateTimer(timer) {
 }
 
 // Timer güncelle
-export async function dbUpdateTimer(timerId, updates) {
+export async function dbUpdateTimer(timerId, updates, options = {}) {
   const response = await apiFetch(`${BASE_URL}/timers/${timerId}`, {
     method: "PATCH",
     headers: authHeader(),
+    isRequestCurrent: options.isRequestCurrent,
     body: JSON.stringify(updates),
   });
   if (!response) return null;
@@ -788,7 +794,7 @@ export async function dbUpdateTimer(timerId, updates) {
 }
 
 // Timer sil (soft delete)
-export async function dbDeleteTimer(timerId) {
+export async function dbDeleteTimer(timerId, options = {}) {
   console.log(
     "[DEBUG-DBDELETE] çağrıldı, timerId:",
     timerId,
@@ -798,6 +804,7 @@ export async function dbDeleteTimer(timerId) {
   const response = await apiFetch(`${BASE_URL}/timers/${timerId}`, {
     method: "DELETE",
     headers: authHeader(),
+    isRequestCurrent: options.isRequestCurrent,
   });
   console.log(
     "[DEBUG-DBDELETE] apiFetch sonucu var mı:",
@@ -812,9 +819,10 @@ export async function dbDeleteTimer(timerId) {
 }
 
 // Ortak timer'ları getir
-export async function dbGetSharedTimers() {
+export async function dbGetSharedTimers(options = {}) {
   const response = await apiFetch(`${BASE_URL}/timers/shared`, {
     headers: authHeader(),
+    isRequestCurrent: options.isRequestCurrent,
   });
   // token yok ya da istek başarısız (503/500 vb.) → null: "bilinmiyor", local veriyi silme
   if (!response || !response.ok) return null;
@@ -823,7 +831,7 @@ export async function dbGetSharedTimers() {
 }
 
 // Timer başlat
-export async function syncTimerStart(timer) {
+export async function syncTimerStart(timer, options = {}) {
   const user = getUser();
   if (!user) return;
 
@@ -845,6 +853,7 @@ export async function syncTimerStart(timer) {
     const response = await apiFetch(`${BASE_URL}/timer/start`, {
       method: "POST",
       headers: authHeader(),
+      isRequestCurrent: options.isRequestCurrent,
       body: JSON.stringify({
         timerId: timer.id,
         timerName: timer.name,
@@ -874,11 +883,12 @@ export async function syncTimerStart(timer) {
 }
 
 // Timer iptal
-export async function syncTimerCancel(timerId) {
+export async function syncTimerCancel(timerId, options = {}) {
   try {
     await apiFetch(`${BASE_URL}/timer/cancel`, {
       method: "POST",
       headers: authHeader(),
+      isRequestCurrent: options.isRequestCurrent,
       body: JSON.stringify({ timerId }),
     });
   } catch (err) {

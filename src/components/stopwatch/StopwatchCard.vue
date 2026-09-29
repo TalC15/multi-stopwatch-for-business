@@ -46,7 +46,9 @@
 
     <div class="flex items-center justify-between">
       <button
-        @click="store.updateIsPay(timer.id, !timer.isPay)"
+        @click="togglePayment"
+        :aria-disabled="sharedBlocked"
+        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
         class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -98,6 +100,8 @@
     <div class="flex items-center gap-3">
       <button
         @click="toggleTimer"
+        :aria-disabled="sharedBlocked"
+        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-95 flex items-center justify-center gap-2',
           cardStyle.primaryBtn,
@@ -118,6 +122,9 @@
       </button>
       <button
         @click="requestDelete(timer, 'kronometresi')"
+        :aria-label="'Sil: ' + timer.name"
+        :aria-disabled="sharedBlocked"
+        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'w-12 h-12 rounded-2xl flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -171,7 +178,9 @@
 
     <div class="flex items-center justify-between">
       <button
-        @click="store.updateIsPay(timer.id, !timer.isPay)"
+        @click="togglePayment"
+        :aria-disabled="sharedBlocked"
+        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
         class="flex items-center gap-2 rounded-lg px-3 py-2 -mt-3 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -221,6 +230,8 @@
       <button
         v-if="timer.status !== 'expired'"
         @click="toggleTimer"
+        :aria-disabled="sharedBlocked"
+        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-95 flex items-center justify-center gap-2',
           cardStyle.primaryBtn,
@@ -242,6 +253,9 @@
 
       <button
         @click="requestDelete(timer, 'zamanlayıcısı')"
+        :aria-label="'Sil: ' + timer.name"
+        :aria-disabled="sharedBlocked"
+        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'w-10 h-10 flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -265,6 +279,7 @@
   </div>
 
   <ConfirmModal
+    :confirmDisabled="sharedBlocked"
     :isOpen="confirmOpen"
     title="Ortak zamanlayıcıyı sil"
     message="Bu ortak bir zamanlayıcı. Silme işlemi çalışma gurubundaki herkesi etkileyecek. Emin misiniz?"
@@ -318,6 +333,8 @@ const smoothElapsed = ref(Number(props.timer.accumulatedTime || 0));
 let animationFrame = null;
 
 const getCurrentElapsed = () => {
+  // Shared anchors use the server clock. Date.now() on this device is unrelated.
+  if (props.timer.isShared) return Number(props.timer.elapsed || 0);
   const accumulated = Number(props.timer.accumulatedTime || 0);
 
   if (
@@ -367,39 +384,47 @@ const statusLabel = computed(() => {
   if (type === "up") {
     if (reachedTarget && status === "running") return "TIME REACHED";
     if (reachedTarget && status === "paused") return "TIME REACHED";
-    if (status === "running") return "RUNNING";
+    if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Sunucu doğrulaması bekleniyor";
+  if (status === "running") return "RUNNING";
     if (status === "paused") return "PAUSED";
     return "IDLE";
   }
+  if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Sunucu doğrulaması bekleniyor";
   if (status === "running") return "RUNNING";
   if (status === "paused") return "PAUSED";
   if (status === "expired") return "FINISHED";
   return "IDLE";
 });
 
-const toggleTimer = () => {
+const sharedBlocked = computed(() => props.timer.isShared && !store.sharedWritable);
+function canChange() { return !props.timer.isShared || store.requireSharedWrite(); }
+function togglePayment() { if (canChange()) void store.updateIsPay(props.timer.id, !props.timer.isPay); }
+
+const toggleTimer = async () => {
+  if (!canChange()) return;
   if (props.timer.status === "running") {
-    store.pauseTimer(props.timer.id);
+    if (!await store.pauseTimer(props.timer.id)) return;
     audioRadar.pause();
     audioDigital.pause();
     hapticTap();
   } else {
-    store.startTimer(props.timer.id);
+    await store.startTimer(props.timer.id);
   }
 };
 
-function deleteAndStop(timer, deger) {
+async function deleteAndStop(timer, deger) {
+  if (!await store.deleteTimer(timer, deger)) return;
   audioRadar.pause();
   audioDigital.pause();
   audioRadar.currentTime = 0;
   audioDigital.currentTime = 0;
-  store.deleteTimer(timer, deger);
 }
 
 const confirmOpen = ref(false);
 const pendingDelete = ref(null);
 
 function requestDelete(timer, deger) {
+  if (!canChange()) return;
   if (timer.isShared) {
     pendingDelete.value = { timer, deger };
     confirmOpen.value = true;
@@ -409,6 +434,7 @@ function requestDelete(timer, deger) {
 }
 
 function confirmDelete() {
+  if (!canChange()) return;
   if (pendingDelete.value) {
     deleteAndStop(pendingDelete.value.timer, pendingDelete.value.deger);
   }

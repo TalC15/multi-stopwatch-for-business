@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "node --test"
   },
   "dependencies": {
     "@capacitor-community/text-to-speech": "^8.0.1",
@@ -15,6 +16,7 @@
     "@capacitor/core": "^8.4.0",
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/local-notifications": "^8.2.0",
+    "dexie": "^4.4.6",
     "pinia": "^3.0.4",
     "socket.io-client": "^4.8.3",
     "vite": "^7.3.2",
@@ -27,6 +29,7 @@
     "@types/node": "^25.6.0",
     "@vitejs/plugin-vue": "^6.0.6",
     "autoprefixer": "^10.5.0",
+    "fake-indexeddb": "^6.2.5",
     "postcss": "^8.5.13",
     "tailwindcss": "^4.2.4"
   }

@@ -1,5 +1,8 @@
 {
   "appId": "com.keeptime.app",
   "appName": "keepTime",
-  "webDir": "dist"
+  "webDir": "dist",
+  "android": {
+    "minWebViewVersion": 107
+  }
 }

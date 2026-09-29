@@ -8,11 +8,12 @@ import {
   getAccessToken,
   saveTelegramChatId,
   getUser,
-  saveUser,
   cancelTelegramChatId,
   telegramControl,
 } from "@/services/backendSync";
 import { useStopwatchStore } from "../stores/stopwatchStore";
+
+import { captureWorkspaceSession } from "../services/workspaceSession.js";
 
 const store = useStopwatchStore();
 const user = getUser();
@@ -48,61 +49,49 @@ async function fetchWorkspace() {
 }
 
 async function joinWorkspace() {
-  if (!inviteCode.value) return;
+  if (!inviteCode.value || joinLoading.value) return;
+  const session = captureWorkspaceSession();
   joinLoading.value = true;
-
-  const response = await apiFetch(`${BASE_URL}/workspace/join`, {
-    method: "POST",
-    headers: authHeader(),
-    body: JSON.stringify({ inviteCode: inviteCode.value }),
-  });
-
-  if (response) {
+  try {
+    const response = await apiFetch(`${BASE_URL}/workspace/join`, {
+      method: "POST", headers: authHeader(), isRequestCurrent: session.isCurrent,
+      body: JSON.stringify({ inviteCode: inviteCode.value }),
+    });
+    if (!response) return;
     const data = await response.json();
+    if (!session.isCurrent()) return;
     if (response.ok) {
+      if (!session.saveWorkspace(data.workspace?.id)) return;
       message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
-      if (user) {
-        user.workspace_id = data.workspace.id;
-        saveUser(user);
-      }
-
       inviteCode.value = "";
       workspace.value = data.workspace;
-
-      disconnectSocket();
-      connectSocket();
-    } else {
-      message.warning(data.error || "Geçersiz davet kodu");
-    }
-  }
-  joinLoading.value = false;
+      disconnectSocket(); connectSocket();
+    } else message.warning(data.error || "Geçersiz davet kodu");
+  } catch {
+    if (session.isCurrent()) message.error("Çalışma grubuna katılınamadı");
+  } finally { joinLoading.value = false; }
 }
 
 async function leaveWorkspace() {
+  if (leaveLoading.value) return;
+  const session = captureWorkspaceSession();
   leaveLoading.value = true;
-
-  const response = await apiFetch(`${BASE_URL}/workspace/leave`, {
-    method: "POST",
-    headers: authHeader(),
-  });
-
-  if (response) {
+  try {
+    const response = await apiFetch(`${BASE_URL}/workspace/leave`, {
+      method: "POST", headers: authHeader(), isRequestCurrent: session.isCurrent,
+    });
+    if (!response) return;
     const data = await response.json();
+    if (!session.isCurrent()) return;
     if (response.ok) {
+      if (!session.saveWorkspace(null)) return;
       message.success("Çalışma gurubundan ayrıldınız");
       workspace.value = null;
-      if (user) {
-        user.workspace_id = null;
-        saveUser(user);
-      }
-      // Soket eski workspace odasında kalmasın diye bağlantıyı sıfırla
-      disconnectSocket();
-      connectSocket();
-    } else {
-      message.error(data.error || "Ayrılma başarısız");
-    }
-  }
-  leaveLoading.value = false;
+      disconnectSocket(); connectSocket();
+    } else message.error(data.error || "Ayrılma başarısız");
+  } catch {
+    if (session.isCurrent()) message.error("Çalışma grubundan ayrılınamadı");
+  } finally { leaveLoading.value = false; }
 }
 
 async function saveTelegram() {

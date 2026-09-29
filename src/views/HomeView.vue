@@ -23,19 +23,25 @@ const sharedTimers = computed(() =>
   store.stopwatches.filter((t) => t.isShared),
 );
 
-function allTimersPause() {
-  if (isPausedAll.value) {
-    filteredTimers.value.map((val) => store.startTimer(val.id));
-    isPausedAll.value = false;
-  } else {
-    filteredTimers.value.map((val) => store.pauseTimer(val.id));
-    isPausedAll.value = true;
-  }
+function openAdd() {
+  if (activeTab.value === "shared" && !store.requireSharedWrite()) return;
+  isModalOpen.value = true;
+}
+const sharedMessage = computed(() => ({
+  "offline-readonly": "Ortak sayaçlar çevrimdışı. Görüntüleyebilirsiniz; değiştirmek için internet bağlantınızı kontrol edin.",
+  reconciling: "Ortak sayaçlar sunucuyla güncelleniyor…",
+  unavailable: "Sunucuya erişilemiyor; ortak sayaçlar geçici olarak salt okunur.",
+  "auth-required": "Ortak sayaçlar için oturumunuzu doğrulayın.",
+}[store.sharedState] || (store.sharedPending ? "Ortak işlem doğrulanıyor…" : "")));
+async function allTimersPause() {
+  const results = await Promise.all(filteredTimers.value.map(timer =>
+    isPausedAll.value ? store.startTimer(timer.id) : store.pauseTimer(timer.id)));
+  if (results.every(Boolean)) isPausedAll.value = !isPausedAll.value;
 }
 
 onMounted(() => {
   themeStore.applyTheme();
-  store.loadSharedTimers();
+  void store.initialize();
 });
 </script>
 
@@ -53,6 +59,23 @@ onMounted(() => {
 
     <!-- Main Content -->
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
+      <p v-if="!store.ready" role="status" class="text-sm mb-3">Yerel sayaçlar açılıyor…</p>
+      <p v-else-if="store.syncStatus === 'unsupported-locks'" role="status" class="text-sm mb-3">
+        Sayaçlar cihazda saklanıyor. Senkronizasyon için Android System WebView veya tarayıcıyı güncelleyin.
+      </p>
+      <p v-else-if="store.syncStatus === 'backend-update-required'" role="status" class="text-sm mb-3">
+        Sayaçlar cihazda saklandı. Sunucu senkronizasyon güncellemesi gerekiyor.
+      </p>
+      <p v-else-if="store.syncStatus === 'conflict'" role="status" class="text-sm mb-3">
+        Bazı sayaçlar senkronize edilemedi; cihazdaki değişiklikler korunuyor.
+      </p>
+      <p v-else-if="store.pendingCount" role="status" class="text-sm mb-3">
+        {{ store.pendingCount }} değişiklik cihazda kayıtlı, senkronizasyon bekliyor.
+      </p>
+      <p v-if="activeTab === 'shared' && sharedMessage" role="status" aria-live="polite"
+        class="text-sm mb-3 rounded-xl p-3 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 break-words">{{ sharedMessage }}</p>
+      <button v-if="activeTab === 'shared' && store.sharedState === 'unavailable'"
+        @click="store.loadSharedTimers()" class="text-sm underline mb-3">Yeniden dene</button>
       <!-- Page Header -->
       <div class="flex items-center mb-5">
         <h2
@@ -304,7 +327,9 @@ onMounted(() => {
 
     <!-- FAB Button -->
     <button
-      @click="isModalOpen = true"
+      @click="openAdd"
+          :aria-disabled="activeTab === 'shared' && !store.sharedWritable"
+          :style="activeTab === 'shared' && !store.sharedWritable ? { opacity: 0.45 } : undefined"
       class="fixed bottom-24 right-5 w-14 h-14 bg-indigo-700 text-white rounded-2xl fab-shadow flex items-center justify-center hover:bg-indigo-800 active:scale-90 transition-all z-40"
       aria-label="Yeni ekle"
     >

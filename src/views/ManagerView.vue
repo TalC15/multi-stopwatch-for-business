@@ -8,8 +8,9 @@ import {
   apiFetch,
   getAccessToken,
   getUser,
-  saveUser,
 } from "@/services/backendSync";
+
+import { captureWorkspaceSession } from "../services/workspaceSession.js";
 
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
@@ -68,16 +69,11 @@ async function responseData(response) {
   return response?.json().catch(() => ({})) ?? {};
 }
 
-function updateWorkspaceConnection(workspaceId) {
-  const user = getUser();
-
-  if (user) {
-    user.workspace_id = workspaceId ?? null;
-    saveUser(user);
-  }
-
+function updateWorkspaceConnection(workspaceId, session) {
+  if (!session.saveWorkspace(workspaceId)) return false;
   disconnectSocket();
   connectSocket();
+  return true;
 }
 
 async function fetchWorkspace() {
@@ -168,12 +164,14 @@ async function createWorkspace() {
 
   workspaceLoading.value = true;
 
+  const session = captureWorkspaceSession();
   try {
     const response = await apiFetch(
       `${BASE_URL}/workspace/create`,
       {
         method: "POST",
         headers: authHeader(),
+        isRequestCurrent: session.isCurrent,
         body: JSON.stringify({
           name: newWorkspaceName.value.trim(),
         }),
@@ -183,6 +181,7 @@ async function createWorkspace() {
     if (!response) return;
 
     const data = await responseData(response);
+    if (!session.isCurrent()) return;
 
     if (!response.ok) {
       message.warning(
@@ -193,7 +192,7 @@ async function createWorkspace() {
 
     workspace.value = data.workspace;
     newWorkspaceName.value = "";
-    updateWorkspaceConnection(data.workspace.id);
+    if (!updateWorkspaceConnection(data.workspace.id, session)) return;
 
     message.success("Çalışma grubu oluşturuldu");
     await fetchUsers();
@@ -216,12 +215,14 @@ async function joinWorkspace() {
 
   workspaceLoading.value = true;
 
+  const session = captureWorkspaceSession();
   try {
     const response = await apiFetch(
       `${BASE_URL}/workspace/join`,
       {
         method: "POST",
         headers: authHeader(),
+        isRequestCurrent: session.isCurrent,
         body: JSON.stringify({
           inviteCode: inviteCode.value.trim(),
         }),
@@ -231,6 +232,7 @@ async function joinWorkspace() {
     if (!response) return;
 
     const data = await responseData(response);
+    if (!session.isCurrent()) return;
 
     if (!response.ok) {
       message.warning(
@@ -242,7 +244,7 @@ async function joinWorkspace() {
     workspace.value = data.workspace;
     inviteCode.value = "";
 
-    updateWorkspaceConnection(data.workspace.id);
+    if (!updateWorkspaceConnection(data.workspace.id, session)) return;
 
     message.success(
       `${data.workspace.name} çalışma grubuna katıldın`,
@@ -268,18 +270,21 @@ async function leaveWorkspace() {
 
   leaveLoading.value = true;
 
+  const session = captureWorkspaceSession();
   try {
     const response = await apiFetch(
       `${BASE_URL}/workspace/leave`,
       {
         method: "POST",
         headers: authHeader(),
+        isRequestCurrent: session.isCurrent,
       },
     );
 
     if (!response) return;
 
     const data = await responseData(response);
+    if (!session.isCurrent()) return;
 
     if (!response.ok) {
       message.error(
@@ -291,7 +296,7 @@ async function leaveWorkspace() {
     workspace.value = null;
     users.value = [];
 
-    updateWorkspaceConnection(null);
+    if (!updateWorkspaceConnection(null, session)) return;
     message.success("Çalışma grubundan ayrıldın");
   } catch {
     message.error(

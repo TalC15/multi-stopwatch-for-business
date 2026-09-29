@@ -1,9 +1,12 @@
 <script setup>
-import { logout as apiLogout, getUser } from "../../services/backendSync";
+import { logout as apiLogout } from "../../services/backendSync";
 
 defineEmits(["open-menu"]);
 
-const user = getUser();
+import { computed } from "vue";
+import { useStopwatchStore } from "../../stores/stopwatchStore.js";
+const store = useStopwatchStore();
+const user = computed(() => store.user);
 
 async function logout() {
   await apiLogout();
@@ -115,8 +118,10 @@ async function logout() {
       }}</span>
     </div>
 
+    <RouterLink v-if="!user" to="/login" class="text-sm text-indigo-500">Giriş</RouterLink>
     <!-- Sağ: Logout -->
     <button
+      v-if="user"
     type="button"
       @click="logout"
       class="w-9 h-9 flex items-center justify-center text-primary-light active:scale-90 transition-transform"

@@ -1,0 +1,86 @@
+import test, { before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { build } from 'vite';
+import vue from '@vitejs/plugin-vue';
+import { createRenderer, reactive, nextTick } from 'vue';
+import { writeFile, unlink } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import path from 'node:path';
+const root=fileURLToPath(new URL('../../',import.meta.url)), modules={}, files=[];
+globalThis.Audio=class {pause(){} play(){return Promise.resolve();}};
+globalThis.requestAnimationFrame=()=>1;globalThis.cancelAnimationFrame=()=>{};
+globalThis.localStorage={getItem:()=>null};
+const renderer=createRenderer({
+ createElement:tag=>({tag,props:{},children:[],parent:null,addEventListener(k,v){this.props['on'+k[0].toUpperCase()+k.slice(1)]=v;},removeEventListener(){},setAttribute(k,v){this.props[k]=v;},removeAttribute(k){delete this.props[k];}}),createText:text=>({text}),createComment:text=>({text:''}),
+ setText:(n,t)=>{n.text=t;},setElementText:(n,t)=>{n.children=[{text:t}];},
+ patchProp:(n,k,_old,v)=>{n.props[k]=v;n[k]=v;},parentNode:n=>n.parent,nextSibling:n=>n?.parent?.children[n.parent.children.indexOf(n)+1] ?? null,
+ insert(n,p,anchor){ if(n.parent){const i=n.parent.children.indexOf(n);if(i>=0)n.parent.children.splice(i,1);}n.parent=p;const i=p.children.indexOf(anchor);p.children.splice(i<0?p.children.length:i,0,n);},
+ remove(n){if(n?.parent){const i=n.parent.children.indexOf(n);if(i>=0)n.parent.children.splice(i,1);}},
+});
+const walk=n=>[n,...(n.children??[]).flatMap(walk)];const text=n=>(n.text??'')+(n.children??[]).map(text).join('');
+const button=(tree,label)=>walk(tree).find(n=>n.tag==='button'&&text(n).includes(label));
+function fixture(){
+ const calls=[];const store=reactive({sharedWritable:false,sharedState:'offline-readonly',sharedPending:false,ready:true,user:{id:'u',workspace_id:'w'},
+  stopwatches:[],presetTimes:[],presetNames:[],name:'Work',duration:1,roleStyles:{},initialize(){},
+  requireSharedWrite(){calls.push('guard');return this.sharedWritable;},
+  async startTimer(){calls.push('start');return true;},async pauseTimer(){calls.push('pause');return true;},
+  async updateIsPay(){calls.push('pay');return true;},async deleteTimer(){calls.push('delete');return true;},async addTimer(){calls.push('create');return 'new';}});
+ globalThis.__sharedUi={store,calls};return{store,calls};
+}
+function mount(name,props){const tree={children:[]};const app=renderer.createApp(modules[name],props);app.mount(tree);return{tree,app};}
+before(async()=>{
+ for(const [name,entry] of Object.entries({Card:'src/components/stopwatch/StopwatchCard.vue',Add:'src/components/stopwatch/AddModal.vue',Home:'src/views/HomeView.vue'})){
+  const mocks={store:'export const useStopwatchStore=()=>globalThis.__sharedUi.store;',theme:'export const useThemeStore=()=>({applyTheme(){}});',
+   message:'export const message={warning:t=>globalThis.__sharedUi.calls.push("warning"),success(){},error(){}};',
+   backend:'export const getAccessToken=()=>"test";export const getUser=()=>globalThis.__sharedUi.store.user;export const getAuthGeneration=()=>1;export const apiFetch=async()=>({ok:true,json:async()=>({workspace:{shared_mode_enabled:true}})});',
+   haptics:'export const hapticTap=()=>{};',audio:'export default "";',stub:'export default {render(){return null;}};'};
+  const result=await build({configFile:false,root,logLevel:'silent',resolve:{alias:{'@':path.join(root,'src')}},plugins:[{
+   name:'phase5-ui-fixture',enforce:'pre',resolveId(source){
+    const key=source.includes('stopwatchStore')?'store':source.includes('themeStore')?'theme':source.includes('composables/message')?'message':
+      source.includes('backendSync')?'backend':source.includes('haptics')?'haptics':source.endsWith('.mp3')?'audio':
+      /Navbar.vue|SettingsDrawer.vue/.test(source)?'stub':null; if(key)return '\0fixture:'+key;
+   },load(id){if(id.startsWith('\0fixture:'))return mocks[id.slice(9)];}
+  },vue({template:{compilerOptions:{hoistStatic:false}}})],build:{write:false,minify:false,lib:{entry:path.join(root,entry),formats:['es']},rollupOptions:{external:['vue']}}});
+  const file=path.join(root,`.phase5-ui-${name}.mjs`);files.push(file);await writeFile(file,(Array.isArray(result)?result[0]:result).output.find(x=>x.type==='chunk').code);
+  modules[name]=(await import(pathToFileURL(file).href)).default;
+ }
+});
+after(async()=>{await Promise.all(files.map(f=>unlink(f).catch(()=>{})));delete globalThis.__sharedUi;});
+for(const type of ['up','down'])test(`${type} card guards actual Start/Pause, payment, Delete and an already-open confirmation`,async()=>{
+ const{store,calls}=fixture();const timer=reactive({id:'t',name:'Test',isShared:true,type,status:'running',targetMinutes:1,elapsed:0,remaining:60000,isPay:false});
+ const{tree,app}=mount('Card',{timer});
+ try {
+  const pause=button(tree,'Pause'),pay=button(tree,'Ödenmedi'),del=walk(tree).find(n=>n.props?.['aria-label']==='Sil: Test');
+  for(const b of[pause,pay,del]){assert.ok(b);assert.equal(b.props['aria-disabled'],true);assert.notEqual(b.props.disabled,true);await b.props.onClick();}
+  assert.deepEqual(calls,['guard','guard','guard']);
+  timer.status='idle';await nextTick();await button(tree,'Start').props.onClick();assert.equal(calls.at(-1),'guard');assert.equal(calls.includes('start'),false);
+  store.sharedWritable=true;await nextTick();await del.props.onClick();await nextTick();
+  store.sharedWritable=false;await nextTick();const confirm=button(tree,'Sil');assert.equal(confirm.props['aria-disabled'],true);
+  await confirm.props.onClick();assert.equal(calls.includes('delete'),false);
+  store.sharedWritable=true;await nextTick();await confirm.props.onClick();await nextTick();assert.equal(calls.filter(x=>x==='delete').length,1);
+ } finally{app.unmount();}
+});
+for(const forceShared of [true,false])test(`AddModal forceShared=${forceShared} blocks shared create and automatic start`,async()=>{
+ const{calls}=fixture();const{tree,app}=mount('Add',{isOpen:true,defaultType:'up',forceShared});
+ try{
+  await new Promise(resolve=>setImmediate(resolve));await nextTick();
+  if(!forceShared){const toggle=walk(tree).find(n=>n.props?.role==='switch');assert.ok(toggle);await toggle.props.onClick();
+   await nextTick();
+  }
+  const save=walk(tree).find(n=>n.tag==='button'&&text(n).includes('oluştur'));assert.ok(save);await save.props.onClick();
+  assert.equal(calls.includes('create'),false);assert.equal(calls.includes('start'),false);assert.ok(calls.includes('guard'));
+ }finally{app.unmount();}
+});
+test('Home shared band is announced and shared floating Add is guarded',async()=>{
+ const{calls}=fixture();const{tree,app}=mount('Home');
+ try{await button(tree,'Ortak').props.onClick();await nextTick();
+  assert.ok(walk(tree).some(n=>n.props?.role==='status'&&n.props['aria-live']==='polite'&&text(n).includes('çevrimdışı')));
+  const add=walk(tree).find(n=>n.tag==='button'&&n.props['aria-disabled']===true);assert.ok(add);await add.props.onClick();assert.ok(calls.includes('guard'));assert.equal(calls.includes('create'),false);
+ }finally{app.unmount();}
+});
+test('shared card renders controller server-time elapsed, not the device wall clock',async()=>{
+ fixture();const {tree,app}=mount('Card',{timer:{id:'t',name:'Clock',isShared:true,type:'up',status:'running',
+   targetMinutes:1,elapsed:2500,accumulatedTime:0,startTime:Date.now()-100000,isPay:false}});
+ try {await nextTick();assert.match(text(tree),/00:02/);assert.doesNotMatch(text(tree),/01:40/);}
+ finally{app.unmount();}
+});
