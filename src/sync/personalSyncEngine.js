@@ -1,7 +1,8 @@
+import { timerDb } from "../data/timerDb.js";
 import { createPersonalSyncApi } from "./personalSyncApi.js";
 import {
   listPersonalOutbox, preparePersonalOperation, acknowledgePersonalOperation,
-  markPersonalOperation, importPersonalSnapshot,
+  markPersonalOperation, importPersonalSnapshot, reconcileAlreadyDeletedPersonalTimer,
 } from "./personalOutbox.js";
 
 export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks = globalThis.navigator?.locks, now = Date.now, online = () => globalThis.navigator?.onLine !== false } = {}) {
@@ -23,18 +24,43 @@ export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks 
     });
   }
 
+  async function tryResolveAlreadyDeleted(session, op) {
+    if (!api.snapshot) return false;
+    const local = await timerDb.timers.get(op.timerId);
+    session.assertCurrent();
+    if (!local?.syncDeleted) return false;
+    // This is an optimization only: the scoped transaction repeats all guards.
+    // Failed/partial snapshots are never interpreted as evidence of deletion.
+    let snapshot;
+    try {
+      snapshot = await api.snapshot(session);
+      session.assertCurrent();
+    } catch {
+      session.assertCurrent();
+      return false;
+    }
+    const tombstone = snapshot?.tombstones?.find(row => row.id === op.timerId);
+    if (!tombstone) return false;
+    return reconcileAlreadyDeletedPersonalTimer(op, tombstone, session, session.assertCurrent);
+  }
+
   return {
     flush() {
       return inSessionLock(async (session) => {
         // Finite snapshot: newly queued work waits for the next explicit flush.
         const queued = await listPersonalOutbox(session);
         session.assertCurrent();
-        const result = { status: "done", acknowledged: 0, blocked: [], deferred: [] };
+        const result = { status: "done", acknowledged: 0, resolvedDeletes: 0, blocked: [], deferred: [] };
         if (queued.some((op) => op.status === "forbidden")) return { ...result, status: "forbidden" };
         const stopped = new Set();
         for (const row of queued) {
           session.assertCurrent();
           if (stopped.has(row.timerId)) continue;
+          if (row.status === "conflict" && await tryResolveAlreadyDeleted(session, row)) {
+            result.resolvedDeletes++;
+            stopped.add(row.timerId);
+            continue;
+          }
           if (["conflict", "error"].includes(row.status)) {
             result.blocked.push({ timerId: row.timerId, status: row.status });
             stopped.add(row.timerId);
@@ -56,7 +82,12 @@ export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks 
             await markPersonalOperation(op, state, { code: error.code || "network", httpStatus: status || 0 }, session.assertCurrent, now());
             session.assertCurrent();
             if (state === "conflict") {
-              // Evidence only, never rebase or acknowledge based on a GET snapshot.
+              if (await tryResolveAlreadyDeleted(session, op)) {
+                result.resolvedDeletes++;
+                stopped.add(op.timerId);
+                continue;
+              }
+              // The active-list GET is diagnostic evidence, never deletion proof.
               let server = { kind: "unavailable" };
               try {
                 const rows = await api.list(session);

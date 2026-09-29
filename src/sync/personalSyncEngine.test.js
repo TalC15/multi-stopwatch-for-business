@@ -130,6 +130,100 @@ test("DELETE 404 remains a conflict and retains the durable tombstone", async ()
   assert.equal((await timerDb.timers.get(ids.timer)).syncDeleted, true);
 });
 
+test("409 with a confirmed same-scope tombstone resolves queued edits plus final delete atomically", async () => {
+  await create(); await engine().flush();
+  await enqueuePersonalPut(timer({ name: "Stale edit" }), scope);
+  await enqueuePersonalPut(timer({ name: "Later edit" }), scope);
+  await enqueuePersonalDelete(ids.timer, scope);
+  server.rows.set(ids.timer, { ...server.rows.get(ids.timer), record_status: "deleted", sync_revision: 2 });
+
+  const result = await engine().flush();
+  assert.equal(result.status, "done");
+  assert.equal(result.resolvedDeletes, 1);
+  assert.equal(result.acknowledged, 0); // No PUT/DELETE acknowledgement was fabricated.
+  assert.equal((await listPersonalOutbox(scope)).length, 0);
+  assert.deepEqual(await timerDb.timers.get(ids.timer), {
+    id: ids.timer, dataMode: "workspace-personal", ...scope,
+    isShared: false, syncDeleted: true, syncRevision: 2, syncState: "deleted",
+  });
+  const mutations = server.requests.filter(row => ["PUT", "DELETE"].includes(row.method));
+  assert.equal(mutations.length, 2); // Initial create plus stale edit; no stale DELETE sent.
+  await engine().pull();
+  assert.equal((await timerDb.timers.get(ids.timer)).syncState, "deleted");
+});
+
+test("previously persisted conflict heals when user later chooses delete, without disturbing other timers", async () => {
+  await create(); await engine().flush();
+  await enqueuePersonalPut(timer({ name: "Old edit" }), scope);
+  server.rows.set(ids.timer, { ...server.rows.get(ids.timer), record_status: "deleted", sync_revision: 2 });
+  assert.equal((await engine().flush()).blocked.length, 1); // Do not discard an edit-vs-delete conflict.
+  await enqueuePersonalDelete(ids.timer, scope);
+  await create({ id: ids.second });
+
+  const result = await engine().flush();
+  assert.equal(result.resolvedDeletes, 1);
+  assert.equal(result.acknowledged, 1);
+  assert.equal((await listPersonalOutbox(scope)).length, 0);
+  assert.equal((await timerDb.timers.get(ids.timer)).syncState, "deleted");
+  assert.equal((await timerDb.timers.get(ids.second)).syncState, "synced");
+});
+
+for (const [label, alter] of [
+  ["wrong owner", row => ({ ...row, user_id: ids.other })],
+  ["wrong workspace", row => ({ ...row, workspace_id: ids.otherWorkspace })],
+  ["archived row", row => ({ ...row, archived_at: "2026-09-29T00:00:00.000Z" })],
+  ["nonterminal row", row => ({ ...row, record_status: "active" })],
+  ["nonnewer revision", row => ({ ...row, sync_revision: 1 })],
+]) test(`409 never auto-resolves ${label}`, async () => {
+  await create(); await engine().flush();
+  await enqueuePersonalPut(timer({ name: "Queued" }), scope);
+  await enqueuePersonalDelete(ids.timer, scope);
+  const tombstone = alter({ ...server.rows.get(ids.timer), record_status: "deleted", sync_revision: 2 });
+  server.rows.set(ids.timer, tombstone);
+  const transport = api(async (url, options) => options.method === "GET"
+    ? server.request(url, options) : response(409, {}));
+
+  const result = await engine(transport).flush();
+  assert.equal(result.resolvedDeletes, 0);
+  assert.equal((await listPersonalOutbox(scope)).length, 2);
+  assert.equal((await listPersonalOutbox(scope))[0].status, "conflict");
+  assert.equal((await timerDb.timers.get(ids.timer)).syncState, "conflict");
+});
+
+test("409 with unavailable tombstone snapshot keeps both operations intact", async () => {
+  await create(); await engine().flush();
+  await enqueuePersonalPut(timer({ name: "Queued" }), scope);
+  await enqueuePersonalDelete(ids.timer, scope);
+  server.rows.set(ids.timer, { ...server.rows.get(ids.timer), record_status: "deleted", sync_revision: 2 });
+  const transport = api(async (url, options) => {
+    if (url.includes("syncPage=1")) throw new Error("snapshot unavailable");
+    return server.request(url, options);
+  });
+  const result = await engine(transport).flush();
+  assert.equal(result.resolvedDeletes, 0);
+  assert.equal((await listPersonalOutbox(scope)).length, 2);
+  assert.equal((await timerDb.timers.get(ids.timer)).syncState, "conflict");
+});
+
+test("logout during tombstone fetch cannot remove pending operations", async () => {
+  await create(); await engine().flush();
+  await enqueuePersonalPut(timer({ name: "Queued" }), scope);
+  await enqueuePersonalDelete(ids.timer, scope);
+  server.rows.set(ids.timer, { ...server.rows.get(ids.timer), record_status: "deleted", sync_revision: 2 });
+  const entered = deferred(), release = deferred();
+  const transport = api(async (url, options) => {
+    if (url.includes("syncPage=1")) { entered.resolve(); await release.promise; }
+    return server.request(url, options);
+  });
+  const flushing = engine(transport).flush();
+  await entered.promise;
+  auth.state.user = null;
+  release.resolve();
+  assert.equal((await flushing).status, "session-changed");
+  assert.equal((await listPersonalOutbox(scope)).length, 2);
+  assert.equal((await timerDb.timers.get(ids.timer)).syncDeleted, true);
+});
+
 for (const [name, bad] of [
   ["null response", () => null],
   ["empty response", () => response(200, undefined)],

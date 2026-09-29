@@ -144,6 +144,50 @@ export async function markPersonalOperation(op, status, error, assertCurrent, no
   });
 }
 
+// A verified server tombstone may satisfy the user's FINAL local delete intent,
+// even when an older PUT hit 409 first. Never resolve an edit-vs-edit conflict.
+// Called only while the sync engine holds the scoped cross-tab Web Lock.
+export async function reconcileAlreadyDeletedPersonalTimer(op, tombstone, scope, assertCurrent) {
+  requireScope(scope);
+  requireUuid(op?.timerId);
+  if (!tombstone || tombstone.id !== op.timerId || tombstone.record_status !== "deleted" ||
+      tombstone.archived_at != null) return false;
+  try { validatePersonalTombstone(tombstone, scope); } catch { return false; }
+
+  return transaction(async () => {
+    assertCurrent();
+    const local = await timerDb.timers.get(op.timerId);
+    assertCurrent();
+    if (!local || !sameScope(local, scope) || local.dataMode !== "workspace-personal" ||
+        local.isShared !== false || local.syncDeleted !== true ||
+        !isRevision(local.syncRevision) || tombstone.sync_revision <= local.syncRevision) return false;
+
+    const rows = (await scoped(scope).toArray())
+      .filter(row => row.timerId === op.timerId).sort((a, b) => a.seq - b.seq);
+    assertCurrent();
+    if (!rows.length || rows[0].seq !== op.seq || rows[0].mutationId !== op.mutationId ||
+        rows[0].status !== "conflict" || rows.at(-1).method !== "DELETE" ||
+        rows.some(row => !["PUT", "DELETE"].includes(row.method) ||
+          ["error", "forbidden", "auth-required"].includes(row.status) ||
+          (row.expectedRevision === null ? row.body !== null :
+            !isRevision(row.expectedRevision) || row.expectedRevision >= tombstone.sync_revision ||
+            typeof row.body !== "string"))) return false;
+
+    // Queue removal and terminal marker are atomic. No other timer is touched.
+    for (const row of rows) {
+      await timerDb.personalOutbox.delete(row.seq);
+      assertCurrent();
+    }
+    await timerDb.timers.put({
+      id: local.id, dataMode: local.dataMode, userId: local.userId,
+      workspaceId: local.workspaceId, isShared: false, syncDeleted: true,
+      syncRevision: tombstone.sync_revision, syncState: "deleted",
+    });
+    assertCurrent();
+    return true;
+  });
+}
+
 // GET is not an ack. Existing dirty/unbased/deleted records are left untouched.
 export async function importPersonalSnapshot(rows, scope, assertCurrent, tombstones = []) {
   requireScope(scope);
