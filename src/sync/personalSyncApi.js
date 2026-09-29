@@ -80,8 +80,21 @@ export function createPersonalSyncApi({
           });
           session.assertCurrent();
           if (!response) throw failure("no-response");
-          if (![200, 201].includes(response.status))
-            throw failure("http-error", response.status);
+          if (![200, 201].includes(response.status)) {
+            // Only personal mutation routes expose these stable, non-sensitive codes.
+            // An HTML/proxy 404 is not proof that a timer does not exist.
+            const allowed = { PERSONAL_TIMER_FORBIDDEN: 403, PERSONAL_WORKSPACE_REQUIRED: 403,
+              PERSONAL_TIMER_NOT_FOUND: 404 };
+            let code = "http-error";
+            if (path.startsWith("/timers/personal")) {
+              try {
+                const data = await response.json();
+                if (Object.hasOwn(allowed, data?.code) && allowed[data.code] === response.status) code = data.code;
+              } catch { /* Unknown error bodies remain transport errors. */ }
+            }
+            session.assertCurrent();
+            throw failure(code, response.status);
+          }
           let data;
           try {
             data = await response.json();

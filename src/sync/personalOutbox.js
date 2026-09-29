@@ -2,7 +2,7 @@ import { timerDb } from "../data/timerDb.js";
 import { saveTimer } from "../data/timerRepository.js";
 import {
   requirePersonal, requireScope, requireUuid, isRevision, personalStateFromLocal,
-  validateAcknowledgement, validateServerTimer, localFromServer, validatePersonalTombstone,
+  validateAcknowledgement, validateServerTimer, localFromServer, validatePersonalTombstone, canonicalState,
 } from "./personalSyncModel.js";
 
 const scoped = (scope) => timerDb.personalOutbox.where("[userId+workspaceId]").equals([scope.userId, scope.workspaceId]);
@@ -37,6 +37,16 @@ export async function enqueuePersonalPut(timer, scope, { isNew = false } = {}) {
     record.syncRevision = isNew ? 0 : previous.syncRevision;
     record.syncState = ["conflict", "error", "forbidden"].includes(previous?.syncState) ? previous.syncState : "pending";
     await timerDb.timers.put(record);
+    const queued = (await scoped(scope).toArray()).filter(row => row.timerId === timer.id).sort((a,b) => a.seq-b.seq);
+    if (queued.some(row => ["conflict", "error", "forbidden"].includes(row.status))) {
+      const tail = queued.at(-1);
+      // Only compact an unsent tail behind a blocked head, never its frozen identity.
+      if (tail !== queued[0] && tail.method === "PUT" && tail.status === "pending" &&
+          tail.body === null && tail.expectedRevision === null && tail.attempts === 0) {
+        await timerDb.personalOutbox.update(tail.seq, { payload });
+        return { timer: record, seq: tail.seq };
+      }
+    }
     const seq = await timerDb.personalOutbox.add({
       timerId: timer.id, userId: scope.userId, workspaceId: scope.workspaceId,
       method: "PUT", mutationId, expectedRevision: null, payload, body: null,
@@ -57,6 +67,9 @@ export async function enqueuePersonalDelete(timerId, scope) {
     if (!isRevision(timer.syncRevision)) throw new Error("Verified server revision required");
     await timerDb.timers.update(timerId, { syncDeleted: true,
       syncState: ["conflict", "error", "forbidden"].includes(timer.syncState) ? timer.syncState : "pending" });
+    for (const row of await scoped(scope).toArray()) {
+      if (row.timerId === timerId && row.status === "conflict") await timerDb.personalOutbox.update(row.seq, { reconcileAt: 0 });
+    }
     const seq = await timerDb.personalOutbox.add({
       timerId, userId: scope.userId, workspaceId: scope.workspaceId,
       method: "DELETE", mutationId: crypto.randomUUID(), expectedRevision: null,
@@ -77,9 +90,11 @@ export async function preparePersonalOperation(seq, scope, assertCurrent, now) {
     assertCurrent();
     if (rows.some((row) => row.timerId === op.timerId && row.seq < seq)) return null;
     if (["conflict", "error", "forbidden"].includes(op.status) || op.retryAt > now) return null;
+    try { requireUuid(op.timerId); requireUuid(op.mutationId); }
+    catch { throw Object.assign(new Error("Invalid persisted identity"), { code: "invalid-operation" }); }
     const timer = await timerDb.timers.get(op.timerId);
     assertCurrent();
-    requirePersonal(timer, scope);
+    validatePersonalOperation(op, timer, scope);
     if (!op.body) {
       if (!isRevision(timer.syncRevision)) throw new Error("Missing verified revision");
       op.expectedRevision = timer.syncRevision;
@@ -139,7 +154,75 @@ export async function markPersonalOperation(op, status, error, assertCurrent, no
       ...(server === undefined ? {} : { server }),
     });
     assertCurrent();
-    await timerDb.timers.update(op.timerId, { syncState: status });
+    let validKey = true;
+    try { requireUuid(op.timerId); } catch { validKey = false; }
+    const local = validKey ? await timerDb.timers.get(op.timerId) : null;
+    assertCurrent();
+    if (local && sameScope(local, op) && local.dataMode === "workspace-personal" && local.isShared === false)
+      await timerDb.timers.update(op.timerId, { syncState: status });
+    assertCurrent();
+  });
+}
+
+// Validation errors are quarantinable; storage/session failures must still propagate.
+export function validatePersonalOperation(op, timer, scope) {
+  try {
+    requirePersonal(timer, scope); requireUuid(op.timerId); requireUuid(op.mutationId);
+    if (!sameScope(op, scope) || timer.id !== op.timerId || !["PUT", "DELETE"].includes(op.method) ||
+        !Number.isSafeInteger(op.attempts) || op.attempts < 0 || !isRevision(timer.syncRevision) ||
+        !["pending", "sending", "retry", "auth-required", "conflict"].includes(op.status)) throw Error();
+    const payload = op.method === "PUT" ? canonicalState(op.payload) : {};
+    if (op.body === null) {
+      if (op.expectedRevision !== null || op.attempts !== 0) throw Error();
+    } else {
+      if (typeof op.body !== "string" || !isRevision(op.expectedRevision)) throw Error();
+      const body = JSON.parse(op.body);
+      const expected = { dataMode: "workspace-personal", mutationId: op.mutationId, expectedRevision: op.expectedRevision, ...payload };
+      if (Object.keys(body).length !== Object.keys(expected).length ||
+          Object.entries(expected).some(([key,value]) => body[key] !== value)) throw Error();
+    }
+  } catch { throw Object.assign(new Error("Invalid persisted personal operation"), { code: "invalid-operation" }); }
+}
+
+export async function deferPersonalReconciliation(op, assertCurrent, until) {
+  return transaction(async () => {
+    assertCurrent();
+    const stored = await timerDb.personalOutbox.get(op.seq);
+    assertCurrent();
+    if (stored && sameScope(stored,op) && stored.mutationId === op.mutationId && stored.body === op.body)
+      await timerDb.personalOutbox.update(op.seq, { reconcileAt: until });
+    assertCurrent();
+  });
+}
+
+// A review is read-only. Confirmation must match both the local queue and freshly
+// fetched canonical server proof, under the same scoped Web Lock.
+export async function readPersonalResolution(timerId, scope, assertCurrent) {
+  return timerDb.transaction("r", timerDb.timers, timerDb.personalOutbox, async () => {
+    assertCurrent();
+    const local = await timerDb.timers.get(timerId);
+    requirePersonal(local, scope);
+    const rows = (await listPersonalOutbox(scope)).filter(op => op.timerId === timerId);
+    assertCurrent();
+    return { local, rows, fingerprint: JSON.stringify([local, rows]) };
+  });
+}
+
+export async function acceptPersonalServer(review, proof, scope, assertCurrent) {
+  if (proof.kind === "active") validateServerTimer(proof.timer, scope);
+  else validatePersonalTombstone(proof.timer, scope);
+  if (proof.timer.id !== review.timerId) throw Error("Resolution identity changed");
+  return transaction(async () => {
+    const state = await readPersonalResolution(review.timerId, scope, assertCurrent);
+    if (state.fingerprint !== review.fingerprint || !state.rows.length ||
+        proof.timer.sync_revision < state.local.syncRevision) throw Error("Resolution changed; review again");
+    const record = proof.kind === "active" ? localFromServer(proof.timer, scope) : {
+      id: review.timerId, userId: scope.userId, workspaceId: scope.workspaceId, dataMode: "workspace-personal", isShared: false,
+      syncDeleted: true, syncState: "deleted", syncRevision: proof.timer.sync_revision,
+    };
+    if (proof.kind === "active") record.reachedTarget = state.local.reachedTarget === true;
+    await timerDb.timers.put(record);
+    for (const row of state.rows) { assertCurrent(); await timerDb.personalOutbox.delete(row.seq); }
     assertCurrent();
   });
 }

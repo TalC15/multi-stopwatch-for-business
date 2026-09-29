@@ -6,11 +6,11 @@ import { timerDb } from "../data/timerDb.js";
 import { createStopwatchController } from "./stopwatchController.js";
 import { createPersonalSyncApi } from "../sync/personalSyncApi.js";
 import { createPersonalSyncEngine } from "../sync/personalSyncEngine.js";
-import { enqueuePersonalPut, listPersonalOutbox } from "../sync/personalOutbox.js";
+import { enqueuePersonalPut, enqueuePersonalDelete, listPersonalOutbox } from "../sync/personalOutbox.js";
 import { ids, scope, timer, serverTimer, fakeAuth, fakeLocks, mockServer, response, deferred } from "../sync/testSupport/fixtures.js";
 let sharedMock, controllers, auth, backend, server, legacy, online, clock, signals, notifications, errors, successes, socketCallback, connectedCallback, events;
 const input = changes => ({ name: "Work", type: "up", duration: 1, isShared: false, ...changes });
-function makeController(request = server.request) {
+function makeController(request = server.request, overrides = {}) {
   const personalApi = createPersonalSyncApi({ auth: backend, request, baseUrl: "https://mock.invalid" });
   const engine = createPersonalSyncEngine({ api: personalApi, locks: fakeLocks(), now: () => clock, online: () => online });
   const controller = createStopwatchController({ backend, engine, personalApi, sharedApi: sharedMock.api, monotonicNow: () => clock,
@@ -20,6 +20,7 @@ function makeController(request = server.request) {
     storage: { getItem: key => key === "timers" ? JSON.stringify([timer({ name: "Legacy should not load" })]) : null },
     events, document: new EventTarget(), now: () => clock,
     setInterval: callback => { signals.push(callback); return signals.length; }, clearInterval: () => {},
+    ...overrides,
   });
   controllers.push(controller); return controller;
 }
@@ -40,6 +41,78 @@ beforeEach(async () => {
 });
 afterEach(async () => { controllers.forEach(c => c.dispose()); await new Promise(resolve => setImmediate(resolve)); });
 after(() => timerDb.close());
+
+test("failed deletion proof retries after cooldown and clears warning only with a tombstone",async()=>{
+  online=true; await enqueuePersonalPut(timer(),scope,{isNew:true}); await enqueuePersonalDelete(ids.timer,scope);
+  server.rows.set(ids.timer,serverTimer({record_status:"deleted",sync_revision:2}));
+  const jobs=new Map(); let serial=0, failSnapshot=true;
+  const c=makeController((url,opts)=>{
+    if(url.includes("syncPage=1") && failSnapshot) throw Error("temporary snapshot outage");
+    return server.request(url,opts);
+  },{setTimeout:(fn,delay)=>{jobs.set(++serial,{fn,delay});return serial;},clearTimeout:id=>jobs.delete(id)});
+  await c.initialize(); await settle(c);
+  assert.equal(c.syncStatus.value,"conflict"); assert.equal((await listPersonalOutbox(scope)).length,2);
+  const [id,job]=jobs.entries().next().value; assert.ok(job.delay>=60000);
+  failSnapshot=false; jobs.delete(id); clock+=job.delay; job.fn(); await settle(c);
+  assert.equal(c.pendingCount.value,0); assert.equal(c.syncIssues.value.length,0);
+  assert.equal((await timerDb.timers.get(ids.timer)).syncState,"deleted");
+});
+
+test("bounded scheduled retries respect persistent backoff, background, resume and dispose", async () => {
+  online=true; const jobs=new Map(); let serial=0, puts=0;
+  const doc=new EventTarget(); doc.visibilityState="visible";
+  const c=makeController(async(url,opts)=> {
+    if(opts.method==="PUT") { puts++; throw Error("offline"); }
+    return server.request(url,opts);
+  }, { online:()=>online, document:doc, setTimeout:(fn,delay)=>{jobs.set(++serial,{fn,delay});return serial;}, clearTimeout:id=>jobs.delete(id) });
+  await enqueuePersonalPut(timer(),scope,{isNew:true});
+  await c.initialize(); await settle(c);
+  const fire=async()=>{const [id,job]=jobs.entries().next().value;jobs.delete(id);clock+=job.delay;job.fn();await settle(c);};
+  assert.equal(puts,1); assert.equal(jobs.size,1); assert.ok([...jobs.values()][0].delay>=5000);
+  doc.visibilityState="hidden"; doc.dispatchEvent(new Event("visibilitychange")); assert.equal(jobs.size,0);
+  doc.visibilityState="visible"; doc.dispatchEvent(new Event("visibilitychange")); await settle(c);
+  for(let i=0;i<3;i++) await fire();
+  assert.equal(puts,4); assert.equal(jobs.size,0); // Exhausted until a lifecycle/user trigger.
+  events.dispatchEvent(new Event("focus")); await settle(c); assert.equal(jobs.size,1);
+  online=false; events.dispatchEvent(new Event("offline")); assert.equal(jobs.size,0);
+  online=true; events.dispatchEvent(new Event("online")); await settle(c); assert.equal(jobs.size,1);
+  const stale=[...jobs.values()][0].fn; c.dispose(); assert.equal(jobs.size,0);
+  const before=puts; stale(); await new Promise(resolve=>setImmediate(resolve)); assert.equal(puts,before);
+});
+test("explicit server acceptance clears only resolved warning; cancel and edits retain work",async()=>{
+  online=true; await enqueuePersonalPut(timer(),scope,{isNew:true});
+  server.rows.set(ids.timer,serverTimer({name:"Other device",sync_revision:9}));
+  const c=makeController(); await c.initialize(); await settle(c);
+  assert.equal(c.syncStatus.value,"conflict"); assert.equal(c.syncIssues.value[0].name,"Work");
+  assert.equal(await c.reviewSyncIssue(ids.timer),true);
+  c.cancelSyncReview(); assert.equal((await listPersonalOutbox(scope)).length,1);
+  await c.reviewSyncIssue(ids.timer);
+  assert.equal(await c.acceptSyncServer(),true); await settle(c);
+  assert.equal(c.syncStatus.value,"done"); assert.equal(c.syncIssues.value.length,0);
+  assert.equal(c.pendingCount.value,0); assert.equal(c.stopwatches.value[0].name,"Other device");
+});
+test("record denial does not prevent controller pull or expose another account's timer name",async()=>{
+  online=true; await enqueuePersonalPut(timer(),scope,{isNew:true});
+  server.rows.set(ids.second,serverTimer({id:ids.second}));
+  const c=makeController((url,opts)=>opts.method==="PUT"?response(403,{code:"PERSONAL_TIMER_FORBIDDEN"}):server.request(url,opts));
+  await c.initialize(); await settle(c);
+  assert.ok(c.stopwatches.value.some(row=>row.id===ids.second));
+  assert.equal(c.syncIssues.value[0].status,"forbidden");
+  auth.state.user={id:ids.other,workspace_id:ids.otherWorkspace};
+  events.dispatchEvent(new Event("user")); await c.initialize(); await settle(c);
+  assert.equal(c.syncIssues.value.length,0); assert.equal(c.pendingCount.value,0);
+});
+test("global auth/permission failures schedule no retry and keep operation visible",async()=>{
+  for(const http of [401,403]) {
+    await timerDb.personalOutbox.clear(); await timerDb.timers.clear();
+    await enqueuePersonalPut(timer(),scope,{isNew:true}); online=true;
+    const jobs=new Map(); let serial=0;
+    const c=makeController(async()=>response(http,{}),{setTimeout:(fn,delay)=>{jobs.set(++serial,{fn,delay});return serial;},clearTimeout:id=>jobs.delete(id)});
+    await c.initialize(); await settle(c);
+    assert.equal(jobs.size,0); assert.equal(c.syncIssues.value.length,1);
+    assert.equal((await listPersonalOutbox(scope)).length,1); c.dispose();
+  }
+});
 
 test("standalone offline CRUD/payment uses IndexedDB, no outbox or backend timer request", async () => {
   auth.state.user.workspace_id = null;
