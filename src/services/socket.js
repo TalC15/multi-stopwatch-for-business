@@ -269,6 +269,11 @@ export function connectSocket() {
   };
   const newSocket = io(SOCKET_URL, {
     autoConnect: false,
+    // Bağlantı başarısız oldukça denemeleri seyrekleştir.
+    reconnection: true,
+    reconnectionDelay: 3_000,
+    reconnectionDelayMax: 300_000,
+    randomizationFactor: 0.5,
     auth: (callback) => {
       const currentTabSessionIdentity = getTabSessionIdentity();
 
@@ -636,6 +641,28 @@ export function disconnectSocket() {
 }
 
 if (typeof window !== "undefined") {
+  // Online olayı yalnızca bir ipucudur.
+  // Bağlantı kararını sadece navigator.onLine'a bağlamıyoruz.
+  window.addEventListener("online", () => {
+    const current = socket;
+    const identity = socketSessionIdentity;
+
+    if (
+      !connectionWanted ||
+      !current ||
+      !identity ||
+      !isCurrent(current, identity) ||
+      current.connected ||
+      !current.active
+    ) {
+      return;
+    }
+
+    // Yalnızca normal ağ bağlantısının yeniden denenmesini hızlandır.
+    // Kimlik doğrulama hatalarının ayrı çözüm akışına dokunma.
+    current.disconnect().connect();
+  });
+
   window.addEventListener(AUTH_LOCAL_LOGOUT_EVENT, () => {
     disconnectSocket();
   });
