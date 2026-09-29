@@ -28,6 +28,7 @@ beforeEach(async()=>{
    env.commands++; const body=JSON.parse(options.body);
    if(env.postGate) {env.postGate.entered.resolve(); await env.postGate.release.promise;}
    if(env.reject) return reply(env.reject,{});
+   if(env.rejectStart && body.command==='start') return reply(env.rejectStart,{});
    let row=rows.get(body.timerId);
    if(body.command==='create') {
     row=serverTimer({id:body.timerId,is_shared:true,name:body.name,type:body.type,target_minutes:body.targetMinutes,shared_revision:'0'}); rows.set(row.id,row);
@@ -88,6 +89,76 @@ test('a stale online client receives 409, reconciles, and only an explicit next 
  assert.equal(await c.pauseTimer(ids.timer),true);assert.equal(env.commands,2);
  const requests=calls.filter(call=>call.options.method==='POST').map(call=>JSON.parse(call.options.body));
  assert.deepEqual(requests.map(r=>r.expectedRevision),['1','2']);assert.notEqual(requests[0].mutationId,requests[1].mutationId);
+});
+test('confirmed shared create auto-starts even while its socket GET is reconciling',async()=>{
+ env.ackGate={entered:deferred(),release:deferred()};
+ env.getGate={entered:deferred(),release:deferred()};
+ const creating=c.addTimer({name:'Auto',type:'up',duration:1,isShared:true,autoStart:true});
+ await env.ackGate.entered.promise;
+ const id=[...rows.keys()].find(key=>key!==ids.timer);
+ assert.ok(id);
+ receive({event:'created',data:envelope({timer:rows.get(id)})});
+ await env.getGate.entered.promise;
+ assert.equal(c.sharedState.value,'reconciling');
+ env.ackGate.release.resolve();
+ const result=await creating;
+ assert.deepEqual(result,{id,started:true});
+ const sent=calls.filter(call=>call.options.method==='POST').map(call=>JSON.parse(call.options.body));
+ assert.deepEqual(sent.map(body=>body.command),['create','start']);
+ assert.equal(sent[1].expectedRevision,'1');
+ assert.notEqual(sent[0].mutationId,sent[1].mutationId);
+ assert.equal(rows.get(id).status,'running');
+ assert.equal(await timerDb.personalOutbox.count(),0);
+ env.getGate.release.resolve();
+ delete env.getGate;
+ await settle();
+ assert.equal(c.stopwatches.value.find(t=>t.id===id).status,'running');
+});
+
+test('failed shared auto-start keeps confirmed create and never replays START',async()=>{
+ env.rejectStart=409;
+ const result=await c.addTimer({name:'Rejected',type:'up',duration:1,isShared:true,autoStart:true});
+ assert.ok(result?.id);assert.equal(result.started,false);
+ assert.equal(rows.get(result.id).status,'idle');
+ assert.deepEqual(calls.filter(call=>call.options.method==='POST').map(call=>JSON.parse(call.options.body).command),['create','start']);
+ assert.equal(await timerDb.personalOutbox.count(),0);
+ connected();await settle();
+ assert.equal(env.commands,2); // Never retry a write as a side effect of GET/socket.
+ assert.equal(c.stopwatches.value.find(t=>t.id===result.id).status,'idle');
+});
+
+test('going offline after confirmed shared CREATE blocks automatic START',async()=>{
+ env.ackGate={entered:deferred(),release:deferred()};
+ const creating=c.addTimer({name:'Offline',type:'down',duration:1,isShared:true,autoStart:true});
+ await env.ackGate.entered.promise;
+ env.online=false;events.dispatchEvent(new Event('offline'));
+ env.ackGate.release.resolve();
+ const result=await creating;
+ assert.ok(result?.id);assert.equal(result.started,false);
+ assert.equal(env.commands,1);
+ assert.equal(rows.get(result.id).status,'idle');
+ assert.equal(await timerDb.personalOutbox.count(),0);
+});
+
+test('lost CREATE acknowledgment never sends an automatic START',async()=>{
+ env.ackLost=true;
+ const result=await c.addTimer({name:'Unknown',type:'up',duration:1,isShared:true,autoStart:true});
+ assert.equal(result,null);
+ assert.equal(env.commands,1);
+ const created=[...rows.values()].find(t=>t.name==='Unknown');
+ assert.equal(created?.status,'idle');
+ assert.equal(await timerDb.personalOutbox.count(),0);
+});
+
+test('changed session during confirmed create cannot dispatch automatic START',async()=>{
+ env.ackGate={entered:deferred(),release:deferred()};
+ const creating=c.addTimer({name:'Stale',type:'up',duration:1,isShared:true,autoStart:true});
+ await env.ackGate.entered.promise;
+ auth.state.generation++;
+ env.ackGate.release.resolve();
+ assert.equal(await creating,null);
+ assert.equal(env.commands,1);
+ assert.equal(await timerDb.personalOutbox.count(),0);
 });
 test('same-session access-token refresh during ACK does not reject an accepted canonical command',async()=>{
  env.ackGate={entered:deferred(),release:deferred()};const pending=c.pauseTimer(ids.timer);await env.ackGate.entered.promise;
