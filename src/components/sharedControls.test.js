@@ -18,6 +18,27 @@ const renderer=createRenderer({
  remove(n){if(n?.parent){const i=n.parent.children.indexOf(n);if(i>=0)n.parent.children.splice(i,1);}},
 });
 const walk=n=>[n,...(n.children??[]).flatMap(walk)];const text=n=>(n.text??'')+(n.children??[]).map(text).join('');
+
+test('Home identifies personal conflict and requires separate explicit acceptance',async()=>{
+ const {store,calls}=fixture();
+ Object.assign(store,{syncStatus:'conflict',pendingCount:1,resolvingSync:false,syncReview:null,
+   syncIssues:[{seq:1,timerId:'personal',name:'Local edit',method:'Kaydetme',httpStatus:409,reason:'Çakışma',canReview:true}],
+   reviewSyncIssue(){calls.push('review');this.syncReview={name:'Local edit',serverName:'Other device',revision:9,kind:'active'};},
+   acceptSyncServer(){calls.push('accept');this.syncReview=null;this.syncIssues=[];this.pendingCount=0;this.syncStatus='done';},
+   cancelSyncReview(){calls.push('cancel');this.syncReview=null;},retrySync(){calls.push('retry');}});
+ const {tree,app}=mount('Home');
+ try {
+  assert.match(text(tree),/Local edit/);assert.match(text(tree),/409/);
+  await button(tree,'Sunucu kaydını incele').props.onClick();await nextTick();
+  assert.match(text(tree),/Other device/);assert.match(text(tree),/bekleyen değişikliklerinden vazgeçilir/);
+  assert.equal(calls.includes('accept'),false);
+  await button(tree,'Koru ve vazgeç').props.onClick();await nextTick();assert.equal(store.pendingCount,1);
+  await button(tree,'Sunucu kaydını incele').props.onClick();await nextTick();
+  await button(tree,'Yerel değişikliklerden vazgeç').props.onClick();await nextTick();
+  assert.deepEqual(calls,['review','cancel','review','accept']);
+  assert.equal(text(tree).includes('Bazı sayaçlar'),false);
+ } finally {app.unmount();}
+});
 const button=(tree,label)=>walk(tree).find(n=>n.tag==='button'&&text(n).includes(label));
 function fixture(){
  const calls=[];const store=reactive({sharedWritable:false,sharedState:'offline-readonly',sharedPending:false,ready:true,user:{id:'u',workspace_id:'w'},

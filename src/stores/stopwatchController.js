@@ -1,5 +1,5 @@
 import { createSharedApi, validateSharedEnvelope } from "../services/sharedApi.js";
-import { ref, computed } from "vue";
+import { ref, shallowRef, computed } from "vue";
 import { liveQuery } from "dexie";
 import { timerDb } from "../data/timerDb.js";
 import * as repository from "../data/timerRepository.js";
@@ -14,10 +14,72 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   events = globalThis.window, document = globalThis.document, now = Date.now,
   sharedApi, online = () => globalThis.navigator?.onLine !== false, monotonicNow = () => globalThis.performance?.now() ?? now(),
   setInterval: every = globalThis.setInterval, clearInterval: stopEvery = globalThis.clearInterval,
+  setTimeout: later = globalThis.setTimeout, clearTimeout: cancelLater = globalThis.clearTimeout,
 }) {
   sharedApi ??= createSharedApi({ backend, online });
   const preference = (key, fallback) => { try { return JSON.parse(storage?.getItem(key)) ?? fallback; } catch { return fallback; } };
   const stopwatches = ref([]), ready = ref(false), user = ref(null), syncStatus = ref("idle"), pendingCount = ref(0);
+  const syncIssues = ref([]), syncReview = shallowRef(null), resolvingSync = ref(false);
+  let retryTimer = null, retryBudget = 3;
+  function cancelRetry() { if (retryTimer !== null) cancelLater(retryTimer); retryTimer = null; }
+  function scheduleRetry(queue, ctx, status) {
+    cancelRetry();
+    if (!current(ctx) || !online() || document?.visibilityState === "hidden" || retryBudget <= 0 ||
+        ["auth-required", "forbidden", "unsupported-locks", "session-changed", "backend-update-required"].includes(status)) return;
+    const heads = [...new Map([...queue].reverse().map(op => [op.timerId, op])).values()];
+    const retryable = heads.filter(op => ["pending", "retry", "sending"].includes(op.status) ||
+      (op.status === "conflict" && op.reconcileAt > now() && queue.filter(row => row.timerId === op.timerId).at(-1)?.method === "DELETE"));
+    if (!retryable.length && status !== "retry" && status !== "busy") return;
+    const wait = Math.max(1000, Math.min(...retryable.map(op => Math.max(0, ((op.status === "conflict" ? op.reconcileAt : op.retryAt) || 0) - now())), 300000));
+    retryTimer = later(() => {
+      retryTimer = null;
+      if (!current(ctx) || !online() || document?.visibilityState === "hidden") return;
+      retryBudget--; void requestSync();
+    }, retryable.length ? wait : 5000);
+    retryTimer?.unref?.();
+  }
+  async function refreshSyncState(ctx, status) {
+    const queue = await listPersonalOutbox(ctx.scope);
+    const issues = [];
+    for (const op of queue) {
+      if (issues.some(issue => issue.timerId === op.timerId) || !["conflict", "error", "forbidden", "auth-required"].includes(op.status)) continue;
+      const local = typeof op.timerId === "string" ? await timerDb.timers.get(op.timerId) : null;
+      const owned = local?.dataMode === MODE.WORKSPACE_PERSONAL && local.userId === ctx.scope.userId && local.workspaceId === ctx.scope.workspaceId;
+      issues.push({ timerId: op.timerId, seq: op.seq, name: owned ? local.name || "Silinen sayaç" : "Yerel karşılığı bulunamayan işlem",
+        method: op.method === "DELETE" ? "Silme" : "Kaydetme", status: op.status, httpStatus: op.error?.httpStatus || 0,
+        reason: op.status === "forbidden" ? "Bu işlem için yetki doğrulanamadı." : op.status === "auth-required" ? "Oturumunuzu yeniden doğrulayın." :
+          op.status === "error" ? "Yerel işlem geçersiz veya sunucu tarafından reddedildi." : "Sunucu ile cihazdaki değişiklikler çakışıyor.",
+        canReview: owned && op.status !== "auth-required" });
+    }
+    assertCurrent(ctx);
+    pendingCount.value = queue.length; syncIssues.value = issues;
+    syncStatus.value = issues.length ? "conflict" : queue.some(op => op.status === "retry") ? "retry" : status;
+    scheduleRetry(queue, ctx, status);
+  }
+  async function reviewSyncIssue(id) {
+    const ctx = capture();
+    if (resolvingSync.value) return false;
+    resolvingSync.value = true; syncReview.value = null;
+    try {
+      const review = await engine.review(id); assertCurrent(ctx);
+      if (review.status !== "review") { message.warning("Güncel ve yetkili sunucu kaydı doğrulanamadı. Değişiklikler korundu; bağlantınızı ve hesabınızı kontrol edin. Sorun sürerse salt okunur tanı raporunu paylaşın."); return false; }
+      syncReview.value = review; return true;
+    } catch { if (current(ctx)) message.warning("Sunucu kaydı incelenemedi. Yerel değişiklikler korundu."); return false; }
+    finally { if (current(ctx)) resolvingSync.value = false; }
+  }
+  async function acceptSyncServer() {
+    const ctx = capture(), review = syncReview.value;
+    if (!review || resolvingSync.value) return false;
+    resolvingSync.value = true;
+    try {
+      const result = await engine.acceptServer(review); assertCurrent(ctx);
+      if (result.status !== "resolved") throw Error();
+      syncReview.value = null; await reloadLocal(ctx); await refreshSyncState(ctx, "done");
+      void requestSync(); return true;
+    } catch { if (current(ctx)) { syncReview.value = null; message.warning("Kayıt veya oturum değişmiş olabilir. İşlem uygulanmadı; yeniden inceleyin."); } return false; }
+    finally { if (current(ctx)) resolvingSync.value = false; }
+  }
+  function retrySync() { retryBudget = 3; cancelRetry(); return requestSync(); }
   const presetTimes = ref(preference("presetTimes", [])), presetNames = ref(preference("presetNames", []));
   const duration = ref(preference("defaultDuration", 5)), name = ref(preference("defaultName", "kronometre"));
   const roleStyles = { worker: { text: "text-teal-400" }, manager: { text: "text-indigo-400" }, superadmin: { text: "text-amber-400" } };
@@ -92,6 +154,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     applyRows(rows, ctx);
   }
   function clearView() {
+    cancelRetry(); retryBudget = 3; syncIssues.value = []; syncReview.value = null; resolvingSync.value = false; syncStatus.value = "idle";
     epoch++;
     subscription?.unsubscribe(); subscription = null;
     for (const timer of stopwatches.value) if (timer.dataMode !== MODE.STANDALONE) cancelSound(timer.id);
@@ -319,6 +382,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     if (disposed || !ready.value || !active?.scope) return { status: "local-only" };
     syncRequested = true;
     if (syncPromise) return syncPromise;
+    cancelRetry();
     const work = (async () => {
       let result = { status: "idle" };
       while (syncRequested && !disposed) {
@@ -334,10 +398,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
             if (pulled.status !== "done") result = pulled;
           }
           await reloadLocal(ctx);
-          const queue = await listPersonalOutbox(ctx.scope);
-          assertCurrent(ctx);
-          pendingCount.value = queue.length;
-          syncStatus.value = queue.some(op => ["conflict", "error", "forbidden"].includes(op.status)) ? "conflict" : result.status;
+          await refreshSyncState(ctx, result.status);
           if (result.status === "done" && personalApi?.syncNotification) {
             const session = personalApi.captureSession();
             const rows = await timerDb.timers.where("[userId+workspaceId]").equals([ctx.scope.userId, ctx.scope.workspaceId]).toArray();
@@ -351,7 +412,12 @@ export function createStopwatchController({ backend, socket, engine, personalApi
               } catch { assertCurrent(ctx); /* Notification failure never discards a saved timer. */ }
             }
           }
-        } catch (error) { if (current(ctx)) syncStatus.value = error.code === "snapshot-unavailable" ? "backend-update-required" : "retry"; }
+        } catch (error) {
+          if (current(ctx)) {
+            const status = error.code === "snapshot-unavailable" ? "backend-update-required" : error.status === 401 ? "auth-required" : error.status === 403 ? "forbidden" : "retry";
+            try { await refreshSyncState(ctx, status); } catch { if(current(ctx)) syncStatus.value = status; }
+          }
+        }
       }
       return result;
     })();
@@ -505,19 +571,21 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     target?.addEventListener(type, callback);
     removers.push(() => target?.removeEventListener(type, callback));
   }
-  const resume = () => { failedTransitions.clear(); void initialize(); void tick(); void loadSharedTimers(); };
+  const resume = () => { retryBudget = 3; failedTransitions.clear(); void initialize(); void tick(); void loadSharedTimers(); };
   listen(events, backend.AUTH_LOCAL_LOGOUT_EVENT, () => { suspended = true; clearView(); active = null; void initialize(); });
   listen(events, backend.AUTH_SESSION_CHANGED_EVENT, () => { suspended = false; void initialize(); });
   listen(events, backend.AUTH_LOGIN_REQUIRED_EVENT, () => { suspended = false; void initialize(); });
   listen(events, backend.AUTH_USER_CHANGED_EVENT, () => { void initialize(); });
   listen(events, "storage", event => { if ([null, "user", "refreshToken", "accessToken"].includes(event.key)) void initialize(); });
-  listen(events, "offline", () => { sharedState.value="offline-readonly"; });
+  listen(events, "offline", () => { cancelRetry(); sharedState.value="offline-readonly"; });
   listen(events, "online", resume); listen(events, "focus", resume); listen(events, "pageshow", resume);
-  listen(document, "visibilitychange", () => { if (document.visibilityState === "visible") resume(); });
+  listen(document, "visibilitychange", () => { if (document.visibilityState === "visible") resume(); else cancelRetry(); });
   function dispose() {
-    disposed = true; epoch++; subscription?.unsubscribe(); stopTick();
+    disposed = true; epoch++; subscription?.unsubscribe(); stopTick(); cancelRetry();
     offTimer?.(); offConnected?.(); removers.forEach(remove => remove());
   }
   return { sharedState, sharedPending, sharedWritable, sharedLastVerified, requireSharedWrite, stopwatches, ready, user, syncStatus, pendingCount, presetTimes, presetNames, duration, name, roleStyles,
+    syncIssues, syncReview, resolvingSync, reviewSyncIssue, acceptSyncServer, retrySync,
+    cancelSyncReview: () => { if (!resolvingSync.value) syncReview.value = null; },
     initialize, addTimer, startTimer, pauseTimer, deleteTimer, updateIsPay, tick, startTick, stopTick, loadSharedTimers, requestSync, dispose };
 }

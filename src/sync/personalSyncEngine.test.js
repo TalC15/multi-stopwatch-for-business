@@ -95,8 +95,8 @@ for (const [http, expected] of [[400, "error"], [401, "auth-required"], [403, "f
     await create(); await enqueuePersonalPut(timer({ name: "Pending" }), scope);
     let puts = 0;
     const transport = api(async (_url, options) => {
-      if (options.method === "GET") return response(200, { timers: [] });
-      puts += 1; return response(http, {});
+      if (options.method === "GET") return response(200, { timers: [], tombstones: [], nextCursor: null });
+      puts += 1; return response(http, http === 404 ? { code: "PERSONAL_TIMER_NOT_FOUND" } : {});
     });
     await engine(transport).flush();
     const queue = await listPersonalOutbox(scope);

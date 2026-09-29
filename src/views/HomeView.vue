@@ -6,6 +6,7 @@ import Navbar from "@/components/layout/Navbar.vue";
 import SettingsDrawer from "@/components/layout/SettingsDrawer.vue";
 import StopwatchCard from "@/components/stopwatch/StopwatchCard.vue";
 import AddModal from "@/components/stopwatch/AddModal.vue";
+import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
@@ -66,12 +67,33 @@ onMounted(() => {
       <p v-else-if="store.syncStatus === 'backend-update-required'" role="status" class="text-sm mb-3">
         Sayaçlar cihazda saklandı. Sunucu senkronizasyon güncellemesi gerekiyor.
       </p>
+      <p v-else-if="['auth-required', 'forbidden'].includes(store.syncStatus)" role="status" class="text-sm mb-3">
+        Oturum veya şirket yetkisi doğrulanamadı. Hesabınızı kontrol edin; cihazdaki değişiklikler korunuyor.
+      </p>
       <p v-else-if="store.syncStatus === 'conflict'" role="status" class="text-sm mb-3">
         Bazı sayaçlar senkronize edilemedi; cihazdaki değişiklikler korunuyor.
       </p>
       <p v-else-if="store.pendingCount" role="status" class="text-sm mb-3">
         {{ store.pendingCount }} değişiklik cihazda kayıtlı, senkronizasyon bekliyor.
       </p>
+      <p v-if="store.syncStatus === 'retry'" role="status" class="text-sm mb-3">
+        Bağlantı veya sunucu yanıtı bekleniyor. Değişiklikler cihazda güvende; sınırlı aralıklarla yeniden denenecek.
+      </p>
+      <button v-if="store.pendingCount || store.syncStatus === 'retry'" @click="store.retrySync()"
+        class="text-sm underline mb-3">Senkronizasyonu yeniden dene</button>
+      <ul v-if="store.syncIssues?.length" class="space-y-3 mb-4 text-sm">
+        <li v-for="issue in store.syncIssues" :key="issue.seq" class="rounded-xl border p-3">
+          <strong>{{ issue.name }}</strong> — {{ issue.method }}<span v-if="issue.httpStatus"> ({{ issue.httpStatus }})</span>
+          <p>{{ issue.reason }} Cihazdaki değişiklikler korunuyor.</p>
+          <button v-if="issue.canReview" :disabled="store.resolvingSync" @click="store.reviewSyncIssue(issue.timerId)"
+            class="underline mt-2">Sunucu kaydını incele</button>
+          <p v-else-if="issue.status !== 'auth-required'">Salt okunur tanı raporuyla destek isteyin; kayıtları temizlemeyin.</p>
+        </li>
+      </ul>
+      <ConfirmModal :isOpen="Boolean(store.syncReview)" title="Sunucu kaydını kabul et?"
+        :message="store.syncReview ? `${store.syncReview.name || 'Sayaç'} için sunucu sürümü ${store.syncReview.revision}: ${store.syncReview.kind === 'terminal' ? 'silinmiş veya arşivlenmiş' : store.syncReview.serverName}. Onaylarsanız yalnız bu sayacın cihazdaki bekleyen değişikliklerinden vazgeçilir ve bu sunucu kaydı kullanılır. Sunucu kaydı değiştirilmez.` : ''"
+        confirmText="Yerel değişikliklerden vazgeç" cancelText="Koru ve vazgeç" :confirmDisabled="store.resolvingSync"
+        @confirm="store.acceptSyncServer()" @cancel="store.cancelSyncReview()" />
       <p v-if="activeTab === 'shared' && sharedMessage" role="status" aria-live="polite"
         class="text-sm mb-3 rounded-xl p-3 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 break-words">{{ sharedMessage }}</p>
       <button v-if="activeTab === 'shared' && store.sharedState === 'unavailable'"
