@@ -56,11 +56,15 @@ const save = async () => {
   if (saving.value || !store.ready) return;
   saving.value = true;
   try {
-    const createdTimerId = await store.addTimer({
-      name: store.name, duration: store.duration, type: props.defaultType, isShared: props.forceShared === true || isShared.value,
+    const shared = props.forceShared === true || isShared.value;
+    const result = await store.addTimer({
+      name: store.name, duration: store.duration, type: props.defaultType, isShared: shared, autoStart: shared,
     });
+    const createdTimerId = typeof result === "string" ? result : result?.id;
     if (!createdTimerId) return;
-    const started = await store.startTimer(createdTimerId);
+    // Shared create-and-start is one user action with two canonical server ACKs;
+    // do not issue another START after the controller has already handled it.
+    const started = typeof result === "string" ? await store.startTimer(createdTimerId) : result.started === true;
     emit("close");
     if (started) message.success(`${store.name} oluşturuldu`);
     else message.warning("Sayaç kaydedildi; başlatma tamamlanamadı.");

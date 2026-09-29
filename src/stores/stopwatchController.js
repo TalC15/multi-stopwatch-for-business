@@ -249,8 +249,10 @@ export function createStopwatchController({ backend, socket, engine, personalApi
       let saved = record;
       if (record.dataMode === MODE.SHARED) {
         if (!requireSharedWrite()) return null;
-        const ok = await sharedMutation(record.id, { command: "create", name: record.name, type: record.type, targetMinutes: record.targetMinutes });
-        return ok ? record.id : null;
+        const result = await sharedMutation(record.id, { command: "create", name: record.name, type: record.type, targetMinutes: record.targetMinutes },
+          "sayacı", { autoStart: input.autoStart === true });
+        if (!result) return null;
+        return input.autoStart === true ? { id: record.id, started: result.started === true } : record.id;
       } else {
         saved = await timerDb.transaction("rw", timerDb.timers, timerDb.personalOutbox, async () => {
           assertCurrent(ctx);
@@ -398,7 +400,35 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     stopwatches.value=[...stopwatches.value.filter(t=>t.dataMode!==MODE.SHARED),...rowsNow.map(t=>displayTimer(t,sharedNow()))];
     checkSharedAlarms(ctx); startTick(); return true;
   }
-  async function sharedMutation(id, command, label = "sayacı") {
+  // Continue only this user's accepted create-and-start action. A canonical CREATE
+  // ACK supplies the START revision; a transient socket GET must not cancel it.
+  // The server still checks that revision. Never queue or replay a failed START.
+  async function startAfterConfirmedCreate(id, createdEnvelope, ctx) {
+    assertCurrent(ctx);
+    const created = stopwatches.value.find(t => t.id === id && t.dataMode === MODE.SHARED);
+    if (!online() || sharedDeleted.has(id) || createdEnvelope.timer.record_status !== "active" ||
+        createdEnvelope.timer.status !== "idle" || !created || created.status !== "idle" ||
+        created.sharedRevision !== createdEnvelope.timer.shared_revision) return false;
+    const body = { protocol: 5, timerId: id, mutationId: crypto.randomUUID(),
+      expectedRevision: createdEnvelope.timer.shared_revision, command: "start" };
+    try {
+      const result = await sharedApi.command(body, { isRequestCurrent: () => current(ctx) });
+      assertCurrent(ctx);
+      if (result.timer.status !== "running") throw new Error("Başlatma yanıtı doğrulanamadı");
+      sharedEventRevision++;
+      const applied = await applySharedEnvelope(result, ctx);
+      assertCurrent(ctx);
+      return applied && stopwatches.value.some(t => t.id === id && t.dataMode === MODE.SHARED &&
+        t.status === "running" && BigInt(t.sharedRevision) >= BigInt(result.timer.shared_revision));
+    } catch (error) {
+      if (current(ctx)) {
+        sharedState.value = error.status === 401 ? "auth-required" : online() ? "reconciling" : "offline-readonly";
+        if (error.status !== 401) await loadSharedTimers();
+      }
+      return false;
+    }
+  }
+  async function sharedMutation(id, command, label = "sayacı", { autoStart = false } = {}) {
     if (!requireSharedWrite()) return false;
     const ctx=capture(); const old=stopwatches.value.find(t=>t.id===id);
     if (!ctx.scope || (command.command!=='create' && (!old || old.dataMode!==MODE.SHARED))) return false;
@@ -411,9 +441,16 @@ export function createStopwatchController({ backend, socket, engine, personalApi
       if (envelope?.timer?.id!==id || envelope.mutationId!==body.mutationId) throw new Error("Ortak komut cevabı eşleşmiyor");
       if (command.command==='create' && envelope.timer.user_id!==ctx.scope.userId) throw new Error("Ortak sahiplik yanıtı eşleşmiyor");
       sharedEventRevision++;
-      await applySharedEnvelope(envelope,ctx);
+      const applied = await applySharedEnvelope(envelope,ctx);
       assertCurrent(ctx);
-      if (command.command==='create') uncertainCreate=null;
+      if (command.command==='create') {
+        uncertainCreate=null;
+        if (autoStart) {
+          const started = applied ? await startAfterConfirmedCreate(id, envelope, ctx) : false;
+          assertCurrent(ctx);
+          return { started };
+        }
+      }
       if (command.command==='delete') { void haptic(); message.success(`${old.name} ${label} silindi`); }
       return true;
     } catch (error) {
