@@ -34,7 +34,7 @@ for (const connected of [true, false]) test(`signed out / online=${connected} pr
   auth.state.current = false; auth.state.user = null; online = connected;
   await controller.initialize();
   assert.equal(controller.sharedNotice.value.state, "signed-out");
-  assert.equal(controller.sharedNotice.value.message, "Ortak sayaçları görmek için giriş yapın.");
+  assert.equal(controller.sharedNotice.value.message, "Ortak sayaçları kullanmak için giriş yapın.");
   assert.equal(controller.sharedNotice.value.to, "/login");
   assert.equal(snapshots, 0); assert.equal(await timerDb.personalOutbox.count(), 0);
   assert.equal(controller.requireSharedWrite(), false);
@@ -44,7 +44,7 @@ for (const connected of [true, false]) test(`confirmed null workspace / online=$
   auth.state.user.workspace_id = null; online = connected;
   await controller.initialize();
   assert.equal(controller.sharedNotice.value.state, "workspace-required");
-  assert.equal(controller.sharedNotice.value.message, "Ortak sayaçları kullanmak için bir şirkete katılın.");
+  assert.equal(controller.sharedNotice.value.message, "Ortak sayaçları kullanmak için bir çalışma gurubuna katılın.");
   assert.equal(controller.sharedNotice.value.to, "/profile");
   assert.equal(snapshots, 0); assert.equal(controller.requireSharedWrite(), false);
   assert.equal(warnings[0], controller.sharedNotice.value.message);

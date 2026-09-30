@@ -96,7 +96,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     if (sharedAccess.value === "signed-out") return { state: "signed-out", tone: "info",
       message: "Ortak sayaçları görmek için giriş yapın.", to: "/login", action: "Giriş yap" };
     if (sharedAccess.value === "workspace-required") return { state: "workspace-required", tone: "info",
-      message: "Ortak sayaçları kullanmak için bir şirkete katılın.", to: "/profile", action: "Şirkete katıl" };
+      message: "Ortak sayaçları kullanmak için bir çalışma gurubuna katılın.", to: "/profile", action: "çalışma gurubuna katıl" };
     if (!ready.value || sharedAccess.value === "loading") return { state: "loading", tone: "neutral", message: "Ortak bölüm hazırlanıyor…" };
     if (sharedState.value === "auth-required") return { state: "auth-required", tone: "error",
       message: "Ortak sayaçlar için oturumunuzu doğrulayın.", to: "/login", action: "Giriş yap" };
