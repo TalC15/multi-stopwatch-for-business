@@ -384,12 +384,12 @@ const statusLabel = computed(() => {
   if (type === "up") {
     if (reachedTarget && status === "running") return "TIME REACHED";
     if (reachedTarget && status === "paused") return "TIME REACHED";
-    if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Sunucu doğrulaması bekleniyor";
+    if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Bitiş onayı bekleniyor";
   if (status === "running") return "RUNNING";
     if (status === "paused") return "PAUSED";
     return "IDLE";
   }
-  if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Sunucu doğrulaması bekleniyor";
+  if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Bitiş onayı bekleniyor";
   if (status === "running") return "RUNNING";
   if (status === "paused") return "PAUSED";
   if (status === "expired") return "FINISHED";
