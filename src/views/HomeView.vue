@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from "vue";
+import { RouterLink } from "vue-router";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { useThemeStore } from "@/stores/themeStore";
 import Navbar from "@/components/layout/Navbar.vue";
@@ -28,12 +29,28 @@ function openAdd() {
   if (activeTab.value === "shared" && !store.requireSharedWrite()) return;
   isModalOpen.value = true;
 }
-const sharedMessage = computed(() => ({
-  "offline-readonly": "Ortak sayaçlar çevrimdışı. Görüntüleyebilirsiniz; değiştirmek için internet bağlantınızı kontrol edin.",
-  reconciling: "Ortak sayaçlar sunucuyla güncelleniyor…",
-  unavailable: "Sunucuya erişilemiyor; ortak sayaçlar geçici olarak salt okunur.",
-  "auth-required": "Ortak sayaçlar için oturumunuzu doğrulayın.",
-}[store.sharedState] || (store.sharedPending ? "Ortak işlem doğrulanıyor…" : "")));
+const noticeStyles = {
+  neutral: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200",
+  info: "border-indigo-200 bg-indigo-50 text-indigo-900 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-200",
+  warning: "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200",
+  error: "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200",
+};
+const personalNotice = computed(() => {
+  if (!store.ready) return { tone: "neutral", message: "Sayaçlarınız açılıyor…" };
+  if (store.syncStatus === "unsupported-locks") return { tone: "warning",
+    message: "Kişisel sayaçlarınız bu cihazda kayıtlı. Diğer cihazlarla güncellemek için tarayıcı veya Android System WebView güncellemesi gerekiyor." };
+  if (store.syncStatus === "backend-update-required") return { tone: "warning",
+    message: "Kişisel sayaçlarınız bu cihazda kayıtlı. Diğer cihazlarla güncelleme şu anda kullanılamıyor." };
+  if (["auth-required", "forbidden"].includes(store.syncStatus)) return { tone: "error",
+    message: "Kişisel sayaçlar için hesabınızı ve şirket erişiminizi kontrol edin. Cihazdaki değişiklikleriniz korunuyor." };
+  if (store.syncStatus === "conflict") return { tone: "warning",
+    message: "Bazı kişisel sayaçlar güncellenemedi. Cihazdaki değişiklikleriniz korunuyor." };
+  if (store.syncStatus === "retry") return { tone: "warning",
+    message: "Kişisel sayaçlar için bağlantı bekleniyor. Cihazdaki kayıtlarınız korunuyor." };
+  if (store.pendingCount) return { tone: "neutral",
+    message: `${store.pendingCount} kişisel değişiklik bu cihazda kayıtlı; diğer cihazlara aktarılmayı bekliyor.` };
+  return null;
+});
 async function allTimersPause() {
   const results = await Promise.all(filteredTimers.value.map(timer =>
     isPausedAll.value ? store.startTimer(timer.id) : store.pauseTimer(timer.id)));
@@ -60,28 +77,16 @@ onMounted(() => {
 
     <!-- Main Content -->
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
-      <p v-if="!store.ready" role="status" class="text-sm mb-3">Yerel sayaçlar açılıyor…</p>
-      <p v-else-if="store.syncStatus === 'unsupported-locks'" role="status" class="text-sm mb-3">
-        Sayaçlar cihazda saklanıyor. Senkronizasyon için Android System WebView veya tarayıcıyı güncelleyin.
-      </p>
-      <p v-else-if="store.syncStatus === 'backend-update-required'" role="status" class="text-sm mb-3">
-        Sayaçlar cihazda saklandı. Sunucu senkronizasyon güncellemesi gerekiyor.
-      </p>
-      <p v-else-if="['auth-required', 'forbidden'].includes(store.syncStatus)" role="status" class="text-sm mb-3">
-        Oturum veya şirket yetkisi doğrulanamadı. Hesabınızı kontrol edin; cihazdaki değişiklikler korunuyor.
-      </p>
-      <p v-else-if="store.syncStatus === 'conflict'" role="status" class="text-sm mb-3">
-        Bazı sayaçlar senkronize edilemedi; cihazdaki değişiklikler korunuyor.
-      </p>
-      <p v-else-if="store.pendingCount" role="status" class="text-sm mb-3">
-        {{ store.pendingCount }} değişiklik cihazda kayıtlı, senkronizasyon bekliyor.
-      </p>
-      <p v-if="store.syncStatus === 'retry'" role="status" class="text-sm mb-3">
-        Bağlantı veya sunucu yanıtı bekleniyor. Değişiklikler cihazda güvende; sınırlı aralıklarla yeniden denenecek.
-      </p>
-      <button v-if="store.pendingCount || store.syncStatus === 'retry'" @click="store.retrySync()"
+      <div v-if="activeTab !== 'shared' && personalNotice" role="status" aria-live="polite"
+        :class="['mb-3 flex items-start gap-3 rounded-xl border p-3 text-sm leading-5', noticeStyles[personalNotice.tone]]">
+        <svg class="h-5 w-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" /><path d="M12 7v6m0 3v1" stroke-linecap="round" />
+        </svg>
+        <p class="min-w-0 break-words">{{ personalNotice.message }}</p>
+      </div>
+      <button v-if="activeTab !== 'shared' && (store.pendingCount || store.syncStatus === 'retry')" @click="store.retrySync()"
         class="text-sm underline mb-3">Senkronizasyonu yeniden dene</button>
-      <ul v-if="store.syncIssues?.length" class="space-y-3 mb-4 text-sm">
+      <ul v-if="activeTab !== 'shared' && store.syncIssues?.length" class="space-y-3 mb-4 text-sm">
         <li v-for="issue in store.syncIssues" :key="issue.seq" class="rounded-xl border p-3">
           <strong>{{ issue.name }}</strong> — {{ issue.method }}<span v-if="issue.httpStatus"> ({{ issue.httpStatus }})</span>
           <p>{{ issue.reason }} Cihazdaki değişiklikler korunuyor.</p>
@@ -94,10 +99,31 @@ onMounted(() => {
         :message="store.syncReview ? `${store.syncReview.name || 'Sayaç'} için sunucu sürümü ${store.syncReview.revision}: ${store.syncReview.kind === 'terminal' ? 'silinmiş veya arşivlenmiş' : store.syncReview.serverName}. Onaylarsanız yalnız bu sayacın cihazdaki bekleyen değişikliklerinden vazgeçilir ve bu sunucu kaydı kullanılır. Sunucu kaydı değiştirilmez.` : ''"
         confirmText="Yerel değişikliklerden vazgeç" cancelText="Koru ve vazgeç" :confirmDisabled="store.resolvingSync"
         @confirm="store.acceptSyncServer()" @cancel="store.cancelSyncReview()" />
-      <p v-if="activeTab === 'shared' && sharedMessage" role="status" aria-live="polite"
-        class="text-sm mb-3 rounded-xl p-3 bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200 break-words">{{ sharedMessage }}</p>
-      <button v-if="activeTab === 'shared' && store.sharedState === 'unavailable'"
-        @click="store.loadSharedTimers()" class="text-sm underline mb-3">Yeniden dene</button>
+      <section v-if="activeTab === 'shared'" role="status" aria-live="polite" :data-state="store.sharedNotice.state"
+        :class="['mb-4 flex items-start gap-3 rounded-xl border p-3 text-sm leading-5', noticeStyles[store.sharedNotice.tone]]">
+        <svg class="h-5 w-5 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <g v-if="store.sharedNotice.state === 'signed-out' || store.sharedNotice.state === 'auth-required'">
+            <path d="M10 4H5v16h5m3-12 4 4-4 4m-5-4h13" />
+          </g>
+          <g v-else-if="store.sharedNotice.state === 'workspace-required'">
+            <circle cx="9" cy="8" r="3" /><path d="M3 20v-2a6 6 0 0 1 12 0v2m1-15a3 3 0 0 1 0 6m2 3a5 5 0 0 1 3 4v2" />
+          </g>
+          <g v-else-if="store.sharedNotice.state === 'offline-readonly'">
+            <path d="m3 3 18 18M2 8a16 16 0 0 1 3-2m4-2a16 16 0 0 1 13 4M5 12a11 11 0 0 1 4-2m4 0a11 11 0 0 1 6 2m-11 4a6 6 0 0 1 5-1m-1 5h.01" />
+          </g>
+          <g v-else-if="store.sharedNotice.tone === 'warning' || store.sharedNotice.tone === 'error'">
+            <path d="m12 3 10 18H2L12 3Zm0 6v5m0 3v1" />
+          </g>
+          <g v-else><circle cx="12" cy="12" r="9" /><path d="M12 11v6m0-10h.01" /></g>
+        </svg>
+        <div class="min-w-0 flex-1 break-words">
+          <p>{{ store.sharedNotice.message }}</p>
+          <RouterLink v-if="store.sharedNotice.to" :to="store.sharedNotice.to"
+            class="mt-2 inline-flex min-h-9 items-center rounded-lg px-2 font-semibold underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">{{ store.sharedNotice.action }}</RouterLink>
+          <button v-else-if="store.sharedNotice.state === 'unavailable'" type="button" @click="store.loadSharedTimers()"
+            class="mt-2 inline-flex min-h-9 items-center rounded-lg px-2 font-semibold underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2">Yeniden dene</button>
+        </div>
+      </section>
       <!-- Page Header -->
       <div class="flex items-center mb-5">
         <h2
@@ -312,7 +338,7 @@ onMounted(() => {
         <div
           v-if="
             (activeTab === 'shared' ? sharedTimers : filteredTimers).length ===
-            0
+            0 && (activeTab !== 'shared' || store.sharedNotice.state === 'ready')
           "
           class="flex flex-col items-center justify-center py-20 text-center"
         >

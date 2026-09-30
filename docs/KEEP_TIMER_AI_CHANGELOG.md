@@ -1,5 +1,43 @@
 # KeepTimer — AI Engineering Changelog
 
+## 2026-09-30 — Ortak bölümünde doğru durum mesajları ve sade görünüm
+
+### Neden
+
+Home yalnız `sharedState` değerine bakıyordu. Oturum/workspace yokken ortak
+GET yapılmadığı halde başlangıçtaki `reconciling` veya `offline-readonly`
+mesajı kalıyor; kullanıcı yanlış senkronizasyon/bağlantı açıklaması görüyordu.
+
+### Değişenler
+
+- `src/stores/stopwatchController.js`: mevcut tab/session ve kullanıcı bağlamından
+  yalnız görüntüleme için `sharedNotice`. Eksik kullanıcı/workspace bilgisi yükleme,
+  açıkça `workspace_id: null` şirket gereksinimi olarak gösterilir. Engellenmiş
+  eylemin mevcut warning mesajı da aynı açıklamayı kullanır; yazma guard'ı değişmez.
+- `src/views/HomeView.vue`: Ortak sekmesinde tek öncelikli mesaj, simge, açık/koyu
+  tema renkleri; mevcut `/login` ve `/profile` bağlantıları. Kişisel mesajlar yalnız
+  kişisel sekmelerde gösterilir; değişikliklerin cihazda zaten kaydedildiği belirtilir.
+  Doğrulanmamış ortak listede yanlış “henüz sayaç yok” açıklaması gösterilmez.
+- `src/components/stopwatch/StopwatchCard.vue`: yalnız ortak geri sayımın mevcut
+  “Sunucu doğrulaması bekleniyor” etiketi “Bitiş onayı bekleniyor” olarak sadeleşir.
+- `src/stores/sharedStatus.test.js` ve `src/components/sharedControls.test.js`:
+  auth/workspace/yükleme/bağlantı önceliği, mevcut yönlendirmeler, mesaj izolasyonu,
+  tema/simge/erişilebilirlik ve kişisel/ortak bitiş etiketi regresyonları.
+
+### Invariants ve doğrulama
+
+- Auth/refresh/Socket.IO, kişisel sync motoru/outbox, IndexedDB, çakışma onayı,
+  standalone IO ve shared sunucu otoritesi değiştirilmedi. Backend/dependency/SQL yok.
+- Kaynak tabanı 236 başarılı test; 22 yeni test ile **258 başarılı, 0 hata, 0 atlanan**.
+  Bu ortamda `npm test` alt testler yerine 14 dosya raporlar; tekil sayılar aynı
+  dosyaların ayrı Node test koşularından toplandı. Eski testler kaldırılmadı.
+- Standart `npm run build` uygulamayı derledi, PWA/Terser aşamasında başarısız oldu
+  (`os.cpus()` boş). Yalnız ortam CPU yardımcısıyla ek PWA doğrulaması başarılı;
+  yardımcı patch'te yoktur, standart build başarılı sayılmaz.
+- Temiz ZIP tabanında `git apply --check` ve gerçek uygulama başarılı. Gerçek
+  Android/masaüstü görsel kabulü ve standart Windows/CI build ayrıca yapılmalıdır.
+- Commit/push/merge/deploy yapılmadı.
+
 ## 2026-09-28 — Phase 5: shared sunucu otoritesi ve çevrimdışı UX (yayın kapısı açık)
 
 - Shared komutları canonical v5 API üzerinden; yerel optimistic shared yazma/outbox/replay yok.

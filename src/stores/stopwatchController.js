@@ -89,6 +89,25 @@ export function createStopwatchController({ backend, socket, engine, personalApi
   const sharedDeleted = new Set();
   let sharedEventRevision = 0;
   const sharedState = ref("reconciling"), sharedPending = ref(false), sharedLastVerified = ref(null);
+  // Presentation only: missing initial user/workspace metadata is not a logout
+  // or a confirmed lack of membership. Keep the existing sync state/guards intact.
+  const sharedAccess = ref("loading");
+  const sharedNotice = computed(() => {
+    if (sharedAccess.value === "signed-out") return { state: "signed-out", tone: "info",
+      message: "Ortak sayaçları görmek için giriş yapın.", to: "/login", action: "Giriş yap" };
+    if (sharedAccess.value === "workspace-required") return { state: "workspace-required", tone: "info",
+      message: "Ortak sayaçları kullanmak için bir şirkete katılın.", to: "/profile", action: "Şirkete katıl" };
+    if (!ready.value || sharedAccess.value === "loading") return { state: "loading", tone: "neutral", message: "Ortak bölüm hazırlanıyor…" };
+    if (sharedState.value === "auth-required") return { state: "auth-required", tone: "error",
+      message: "Ortak sayaçlar için oturumunuzu doğrulayın.", to: "/login", action: "Giriş yap" };
+    if (sharedState.value === "offline-readonly") return { state: "offline-readonly", tone: "warning",
+      message: "İnternet bağlantısı bekleniyor. Ortak sayaçlar çevrimdışıyken değiştirilemez." };
+    if (sharedState.value === "unavailable") return { state: "unavailable", tone: "warning",
+      message: "Ortak sayaçlara şu anda ulaşılamıyor. Değişiklik yapmadan yeniden deneyin.", action: "Yeniden dene" };
+    if (sharedPending.value) return { state: "pending", tone: "neutral", message: "Ortak sayaç işlemi tamamlanıyor…" };
+    if (sharedState.value === "reconciling") return { state: "reconciling", tone: "neutral", message: "Ortak sayaçlar güncelleniyor…" };
+    return { state: "ready", tone: "info", message: "Ortak sayaçlar ekip üyeleriyle güncel tutulur." };
+  });
   let sharedGeneration = -1n, sharedClock = null, lastWarning = -Infinity;
   // Only the identity of an uncertain create, never an offline operation queue.
   // It is reused solely on an explicit same-form retry in this session.
@@ -100,20 +119,24 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     if (sharedWritable.value) return true;
     if (now()-lastWarning>=2000) {
       lastWarning=now();
-      message.warning(sharedState.value === "offline-readonly" ? "Ortak sayacı değiştirmek için internet bağlantınızı kontrol edin." :
-        sharedState.value === "auth-required" ? "Ortak sayaçlar için oturumunuzu doğrulayın." :
-        sharedState.value === "reconciling" || sharedPending.value ? "Ortak sayaçlar sunucuyla güncelleniyor…" :
-        "Sunucuya erişilemiyor; ortak sayaçlar geçici olarak salt okunur.");
+      message.warning(sharedNotice.value.message);
     }
     return false;
   }
   const removers = [];
 
   function context() {
-    let current = null;
-    try { current = !suspended && backend.isTabSessionCurrent() ? backend.getUser() : null; } catch { /* invalid stored auth */ }
-    if (current?.disabled_at) current = null;
+    let current = null, sessionCurrent = null;
+    try {
+      sessionCurrent = !suspended && backend.isTabSessionCurrent();
+      current = sessionCurrent ? backend.getUser() : null;
+    } catch { /* invalid stored auth */ }
+    const disabled = Boolean(current?.disabled_at);
+    if (disabled) current = null;
     return { user: current, scope: current?.workspace_id ? { userId: current.id, workspaceId: current.workspace_id } : null,
+      sharedAccess: sessionCurrent === false || disabled ? "signed-out" : !current ? "loading" :
+        current.workspace_id === null ? "workspace-required" :
+        typeof current.workspace_id === "string" && current.workspace_id.trim() ? "available" : "loading",
       key: JSON.stringify([backend.getAuthGeneration(), backend.getTabSessionIdentity(), backend.getRefreshToken(), current?.id, current?.workspace_id]) };
   }
   function capture() { return { ...context(), epoch }; }
@@ -154,6 +177,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     applyRows(rows, ctx);
   }
   function clearView() {
+    sharedAccess.value = "loading";
     cancelRetry(); retryBudget = 3; syncIssues.value = []; syncReview.value = null; resolvingSync.value = false; syncStatus.value = "idle";
     epoch++;
     subscription?.unsubscribe(); subscription = null;
@@ -168,10 +192,11 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     if (disposed) return false;
     const next = context();
     user.value = next.user;
+    sharedAccess.value = next.sharedAccess;
     if (active?.key === next.key && initPromise) return initPromise;
     if (active?.key === next.key && ready.value) { void requestSync(); return true; }
     clearView();
-    const ctx = capture(); active = ctx; user.value = ctx.user;
+    const ctx = capture(); active = ctx; user.value = ctx.user; sharedAccess.value = ctx.sharedAccess;
     const task = (async () => {
       try {
         await reloadLocal(ctx);
@@ -584,7 +609,7 @@ export function createStopwatchController({ backend, socket, engine, personalApi
     disposed = true; epoch++; subscription?.unsubscribe(); stopTick(); cancelRetry();
     offTimer?.(); offConnected?.(); removers.forEach(remove => remove());
   }
-  return { sharedState, sharedPending, sharedWritable, sharedLastVerified, requireSharedWrite, stopwatches, ready, user, syncStatus, pendingCount, presetTimes, presetNames, duration, name, roleStyles,
+  return { sharedNotice, sharedState, sharedPending, sharedWritable, sharedLastVerified, requireSharedWrite, stopwatches, ready, user, syncStatus, pendingCount, presetTimes, presetNames, duration, name, roleStyles,
     syncIssues, syncReview, resolvingSync, reviewSyncIssue, acceptSyncServer, retrySync,
     cancelSyncReview: () => { if (!resolvingSync.value) syncReview.value = null; },
     initialize, addTimer, startTimer, pauseTimer, deleteTimer, updateIsPay, tick, startTick, stopTick, loadSharedTimers, requestSync, dispose };
