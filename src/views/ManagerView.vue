@@ -1,4 +1,3 @@
-
 <script setup>
 import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
@@ -63,20 +62,20 @@ function authHeader() {
     "Content-Type": "application/json",
     Authorization: `Bearer ${getAccessToken()}`,
   };
-}
+};
 
 async function responseData(response) {
   return response?.json().catch(() => ({})) ?? {};
-}
+};
 
 function updateWorkspaceConnection(workspaceId, session) {
   if (!session.saveWorkspace(workspaceId)) return false;
   disconnectSocket();
   connectSocket();
   return true;
-}
+};
 
-async function fetchWorkspace() {
+const fetchWorkspace = message.withLoading("Çalışma grubu yükleniyor...", async () => {
   workspaceLoadingDiv.value = true;
   workspaceLoadError.value = false;
 
@@ -109,9 +108,9 @@ async function fetchWorkspace() {
   } finally {
     workspaceLoadingDiv.value = false;
   }
-}
+});
 
-async function fetchUsers() {
+const fetchUsers = message.withLoading("Üyeler yükleniyor...", async () => {
   loading.value = true;
   usersLoadError.value = false;
 
@@ -144,7 +143,7 @@ async function fetchUsers() {
   } finally {
     loading.value = false;
   }
-}
+})
 
 async function reloadManagerData() {
   await fetchWorkspace();
@@ -152,9 +151,9 @@ async function reloadManagerData() {
   if (workspace.value && !workspaceLoadError.value) {
     await fetchUsers();
   }
-}
+};
 
-async function createWorkspace() {
+const createWorkspace = message.withLoading("Çalışma grubu oluşturuluyor...", async () => {
   if (
     !newWorkspaceName.value.trim() ||
     workspaceLoading.value
@@ -203,9 +202,9 @@ async function createWorkspace() {
   } finally {
     workspaceLoading.value = false;
   }
-}
+});
 
-async function joinWorkspace() {
+const joinWorkspace = message.withLoading("Çalışma grubuna katılınıyor...", async () => {
   if (
     !inviteCode.value.trim() ||
     workspaceLoading.value
@@ -258,9 +257,9 @@ async function joinWorkspace() {
   } finally {
     workspaceLoading.value = false;
   }
-}
+});
 
-async function leaveWorkspace() {
+const leaveWorkspace = message.withLoading("Çalışma grubundan ayrılınıyor...", async () => {
   if (
     !canLeaveWorkspace.value ||
     leaveLoading.value
@@ -305,9 +304,9 @@ async function leaveWorkspace() {
   } finally {
     leaveLoading.value = false;
   }
-}
+});
 
-async function refreshInviteCode() {
+const refreshInviteCode = message.withLoading("Davet kodu yenileniyor...", async () => {
   if (refreshLoading.value) return;
 
   refreshLoading.value = true;
@@ -344,9 +343,9 @@ async function refreshInviteCode() {
   } finally {
     refreshLoading.value = false;
   }
-}
+});
 
-async function createUser() {
+const createUser = message.withLoading("Çalışan oluşturuluyor...", async () => {
   const username = newUsername.value.trim();
 
   if (
@@ -408,7 +407,7 @@ async function createUser() {
   } finally {
     createLoading.value = false;
   }
-}
+});
 
 function requestDeactivation(user) {
   if (
@@ -436,7 +435,7 @@ function cancelDeactivation() {
   }
 }
 
-async function confirmDeactivation() {
+const confirmDeactivation = message.withLoading("Hesap devre dışı bırakılıyor...", async () => {
   const target = pendingDeactivation.value;
 
   if (
@@ -563,9 +562,9 @@ async function confirmDeactivation() {
   } finally {
     deactivationLoading.value = false;
   }
-}
+});
 
-async function toggleSharedMode() {
+const toggleSharedMode = message.withLoading("Ortak ekran ayarı güncelleniyor...", async () => {
   if (
     sharedModeLoading.value ||
     !workspace.value
@@ -610,7 +609,7 @@ async function toggleSharedMode() {
   } finally {
     sharedModeLoading.value = false;
   }
-}
+});
 
 onMounted(async () => {
   await fetchWorkspace();
@@ -630,13 +629,13 @@ onMounted(async () => {
       class="sticky top-0 z-30 border-b border-[var(--color-border)] bg-[var(--color-card)] backdrop-blur-xl"
     >
       <div
-        class="mx-auto flex h-16 max-w-2xl items-center justify-between px-4 sm:px-6"
+        class="grid h-16 w-full grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 px-4 sm:px-6"
       >
         <button
           type="button"
           aria-label="Geri dön"
           @click="router.back()"
-          class="grid size-10 place-items-center rounded-2xl border border-[var(--color-border)] text-[var(--color-text-primary)] transition hover:bg-[var(--color-surface)] active:scale-95 focus-visible:outline-2 focus-visible:outline-indigo-500"
+          class="grid size-10 shrink-0 justify-self-start place-items-center rounded-2xl border border-[var(--color-border)] text-[var(--color-text-primary)] transition hover:bg-[var(--color-surface)] active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
         >
           <svg
             viewBox="0 0 24 24"
@@ -652,22 +651,20 @@ onMounted(async () => {
           </svg>
         </button>
 
-        <div class="text-center">
+        <div class="min-w-0 text-center">
           <p
             class="text-[10px] font-black tracking-[0.26em] text-indigo-500 uppercase"
           >
             KeepTimer
           </p>
 
-          <h1
-            class="text-sm font-extrabold tracking-tight sm:text-base"
-          >
+          <h1 class="text-sm font-extrabold tracking-tight sm:text-base">
             Yönetici Paneli
           </h1>
         </div>
 
         <div
-          class="grid size-10 place-items-center rounded-2xl bg-indigo-500/10 text-indigo-500"
+          class="grid size-10 justify-self-end place-items-center rounded-2xl bg-indigo-500/10 text-indigo-500"
           aria-hidden="true"
         >
           <svg
@@ -686,61 +683,42 @@ onMounted(async () => {
       </div>
     </nav>
 
-    <main
-      class="mx-auto flex max-w-2xl flex-col gap-5 px-4 pt-6 pb-16 sm:px-6"
-    >
-      <!-- Hero -->
+    <main class="mx-auto flex max-w-2xl flex-col gap-5 px-4 pt-6 pb-16 sm:px-6">
+      <!-- Ekip özeti -->
       <header
-        class="relative isolate overflow-hidden rounded-[28px] bg-gradient-to-br from-indigo-800 via-indigo-700 to-violet-700 p-6 text-white shadow-xl shadow-indigo-950/15 sm:p-7"
+        class="rounded-[28px] border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-sm sm:p-7"
       >
-        <div
-          class="pointer-events-none absolute -top-20 -right-12 size-52 rounded-full border border-white/15 bg-white/10 blur-[2px]"
-          aria-hidden="true"
-        ></div>
-
-        <div
-          class="pointer-events-none absolute -right-12 -bottom-28 size-64 rounded-full bg-fuchsia-400/20 blur-3xl"
-          aria-hidden="true"
-        ></div>
-
         <div class="relative">
           <span
-            class="inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-[10px] font-bold tracking-widest uppercase backdrop-blur-sm"
+            class="inline-flex items-center gap-2 text-xs font-semibold text-[var(--color-text-secondary)]"
           >
             <span
-              class="size-1.5 rounded-full bg-emerald-300"
+              class="size-1.5 rounded-full bg-[var(--color-text-muted)] size-1.5 rounded-full bg-emerald-500"
             ></span>
             Ekip yönetimi
           </span>
 
-          <div
-            v-if="workspace"
-            class="mt-6 grid grid-cols-2 gap-3"
-          >
+          <div v-if="workspace" class="mt-5 grid grid-cols-2 gap-3">
             <div
-              class="rounded-2xl border border-white/15 bg-white/10 p-3.5 backdrop-blur-sm"
+              class="min-w-0 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5"
             >
-              <div
-                class="text-2xl font-black tabular-nums"
-              >
+              <div class="text-2xl font-bold tracking-tight tabular-nums">
                 {{ sameWorkspaceUsers.length }}
               </div>
 
-              <div class="mt-1 text-xs text-indigo-100">
+              <div class="mt-1 text-xs text-[var(--color-text-secondary)]">
                 Aktif üye
               </div>
             </div>
 
             <div
-              class="rounded-2xl border border-white/15 bg-white/10 p-3.5 backdrop-blur-sm"
+              class="min-w-0 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-3.5"
             >
-              <div
-                class="text-2xl font-black tabular-nums"
-              >
+              <div class="text-2xl font-bold tracking-tight tabular-nums">
                 {{ activeWorkerCount }}
               </div>
 
-              <div class="mt-1 text-xs text-indigo-100">
+              <div class="mt-1 text-xs text-[var(--color-text-secondary)]">
                 Aktif çalışan
               </div>
             </div>
@@ -767,16 +745,8 @@ onMounted(async () => {
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <rect
-                x="3"
-                y="7"
-                width="18"
-                height="14"
-                rx="2"
-              />
-              <path
-                d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18"
-              />
+              <rect x="3" y="7" width="18" height="14" rx="2" />
+              <path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M3 12h18" />
             </svg>
           </div>
 
@@ -788,9 +758,7 @@ onMounted(async () => {
               Çalışma grubum
             </h2>
 
-            <p
-              class="text-xs text-[var(--color-text-secondary)]"
-            >
+            <p class="text-xs text-[var(--color-text-secondary)]">
               Ekip ayarları ve davet bilgileri
             </p>
           </div>
@@ -811,9 +779,7 @@ onMounted(async () => {
           role="alert"
           class="rounded-2xl border border-amber-500/30 bg-amber-500/10 p-5 text-center"
         >
-          <p
-            class="text-sm font-semibold text-amber-800 dark:text-amber-200"
-          >
+          <p class="text-sm font-semibold text-amber-800 dark:text-amber-200">
             Çalışma grubu bilgileri alınamadı.
           </p>
 
@@ -827,10 +793,7 @@ onMounted(async () => {
         </div>
 
         <!-- Mevcut çalışma grubu -->
-        <div
-          v-else-if="workspace"
-          class="space-y-4"
-        >
+        <div v-else-if="workspace" class="space-y-4">
           <!-- Grup adı -->
           <div
             class="flex items-center justify-between gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4"
@@ -842,9 +805,7 @@ onMounted(async () => {
                 Grup adı
               </p>
 
-              <p
-                class="mt-1 truncate text-base font-extrabold"
-              >
+              <p class="mt-1 truncate text-base font-extrabold">
                 {{ workspace.name }}
               </p>
             </div>
@@ -852,28 +813,18 @@ onMounted(async () => {
             <span
               class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400"
             >
-              <span
-                class="size-1.5 rounded-full bg-emerald-500"
-              ></span>
+              <span class="size-1.5 rounded-full bg-emerald-500"></span>
               Aktif
             </span>
           </div>
 
           <!-- Davet kodu -->
-          <div
-            class="rounded-2xl border border-[var(--color-border)] p-4"
-          >
-            <div
-              class="mb-3 flex items-center justify-between gap-3"
-            >
+          <div class="rounded-2xl border border-[var(--color-border)] p-4">
+            <div class="mb-3 flex items-center justify-between gap-3">
               <div>
-                <h3 class="text-sm font-bold">
-                  Davet kodu
-                </h3>
+                <h3 class="text-sm font-bold">Davet kodu</h3>
 
-                <p
-                  class="mt-0.5 text-xs text-[var(--color-text-secondary)]"
-                >
+                <p class="mt-0.5 text-xs text-[var(--color-text-secondary)]">
                   Yeni üyelerinle paylaş
                 </p>
               </div>
@@ -884,11 +835,7 @@ onMounted(async () => {
                 :disabled="refreshLoading"
                 class="rounded-xl bg-indigo-500/10 px-3 py-2 text-xs font-bold text-indigo-600 transition hover:bg-indigo-500/15 active:scale-95 disabled:cursor-wait disabled:opacity-50 dark:text-indigo-300 focus-visible:outline-2 focus-visible:outline-indigo-500"
               >
-                {{
-                  refreshLoading
-                    ? "Yenileniyor..."
-                    : "Kodu yenile"
-                }}
+                {{ refreshLoading ? "Yenileniyor..." : "Kodu yenile" }}
               </button>
             </div>
 
@@ -904,15 +851,12 @@ onMounted(async () => {
             class="flex items-center justify-between gap-4 rounded-2xl border border-[var(--color-border)] p-4"
           >
             <div class="min-w-0">
-              <h3 class="text-sm font-bold">
-                Ortak ekran
-              </h3>
+              <h3 class="text-sm font-bold">Ortak ekran</h3>
 
               <p
                 class="mt-1 text-xs leading-relaxed text-[var(--color-text-secondary)]"
               >
-                Ekip arkadaşları paylaşılan kronometreleri
-                birlikte görebilir.
+                Ekip arkadaşları paylaşılan kronometreleri birlikte görebilir.
               </p>
             </div>
 
@@ -949,11 +893,7 @@ onMounted(async () => {
             :disabled="leaveLoading"
             class="w-full rounded-2xl border border-rose-300 px-4 py-3 text-sm font-bold text-rose-600 transition hover:bg-rose-500/5 active:scale-[0.99] disabled:opacity-50 dark:border-rose-800 dark:text-rose-400"
           >
-            {{
-              leaveLoading
-                ? "Ayrılıyor..."
-                : "Çalışma grubundan ayrıl"
-            }}
+            {{ leaveLoading ? "Ayrılıyor..." : "Çalışma grubundan ayrıl" }}
           </button>
 
           <p
@@ -970,28 +910,16 @@ onMounted(async () => {
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <rect
-                x="5"
-                y="10"
-                width="14"
-                height="11"
-                rx="2"
-              />
-              <path
-                d="M8 10V7a4 4 0 0 1 8 0v3"
-              />
+              <rect x="5" y="10" width="14" height="11" rx="2" />
+              <path d="M8 10V7a4 4 0 0 1 8 0v3" />
             </svg>
 
-            Şirket hesapları güvenlik gereği çalışma
-            grubundan ayrılamaz.
+            Şirket hesapları güvenlik gereği çalışma grubundan ayrılamaz.
           </p>
         </div>
 
         <!-- Henüz çalışma grubu yok -->
-        <div
-          v-else
-          class="space-y-5"
-        >
+        <div v-else class="space-y-5">
           <div class="space-y-2">
             <label
               for="workspace-name"
@@ -1024,15 +952,11 @@ onMounted(async () => {
           <div
             class="flex items-center gap-3 text-xs text-[var(--color-text-secondary)]"
           >
-            <div
-              class="h-px flex-1 bg-[var(--color-border)]"
-            ></div>
+            <div class="h-px flex-1 bg-[var(--color-border)]"></div>
 
             veya
 
-            <div
-              class="h-px flex-1 bg-[var(--color-border)]"
-            ></div>
+            <div class="h-px flex-1 bg-[var(--color-border)]"></div>
           </div>
 
           <div class="space-y-2">
@@ -1086,40 +1010,24 @@ onMounted(async () => {
               stroke-linejoin="round"
               aria-hidden="true"
             >
-              <path
-                d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2"
-              />
-              <circle
-                cx="9.5"
-                cy="7"
-                r="4"
-              />
-              <path
-                d="M19 8v6m-3-3h6"
-              />
+              <path d="M16 21v-2a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v2" />
+              <circle cx="9.5" cy="7" r="4" />
+              <path d="M19 8v6m-3-3h6" />
             </svg>
           </div>
 
           <div>
-            <h2
-              id="create-heading"
-              class="text-base font-black tracking-tight"
-            >
+            <h2 id="create-heading" class="text-base font-black tracking-tight">
               Yeni çalışan
             </h2>
 
-            <p
-              class="text-xs text-[var(--color-text-secondary)]"
-            >
+            <p class="text-xs text-[var(--color-text-secondary)]">
               Ekibine yeni bir hesap ekle
             </p>
           </div>
         </div>
 
-        <form
-          class="space-y-3.5"
-          @submit.prevent="createUser"
-        >
+        <form class="space-y-3.5" @submit.prevent="createUser">
           <div>
             <label
               for="new-username"
@@ -1177,11 +1085,7 @@ onMounted(async () => {
               <path d="M12 5v14m-7-7h14" />
             </svg>
 
-            {{
-              createLoading
-                ? "Oluşturuluyor..."
-                : "Çalışan oluştur"
-            }}
+            {{ createLoading ? "Oluşturuluyor..." : "Çalışan oluştur" }}
           </button>
 
           <p
@@ -1198,9 +1102,7 @@ onMounted(async () => {
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6"
         aria-labelledby="members-heading"
       >
-        <div
-          class="mb-5 flex items-center justify-between gap-3"
-        >
+        <div class="mb-5 flex items-center justify-between gap-3">
           <div class="flex items-center gap-3">
             <div
               class="grid size-11 shrink-0 place-items-center rounded-2xl bg-violet-500/10 text-violet-600 dark:text-violet-400"
@@ -1215,13 +1117,9 @@ onMounted(async () => {
                 stroke-linejoin="round"
                 aria-hidden="true"
               >
-                <path
-                  d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"
-                />
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
                 <circle cx="8.5" cy="7" r="4" />
-                <path
-                  d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"
-                />
+                <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
               </svg>
             </div>
 
@@ -1233,9 +1131,7 @@ onMounted(async () => {
                 Ekip üyeleri
               </h2>
 
-              <p
-                class="text-xs text-[var(--color-text-secondary)]"
-              >
+              <p class="text-xs text-[var(--color-text-secondary)]">
                 Yalnızca aktif hesaplar
               </p>
             </div>
@@ -1281,8 +1177,7 @@ onMounted(async () => {
           role="alert"
           class="rounded-2xl border border-amber-400/30 bg-amber-500/10 p-4 text-sm text-amber-700 dark:text-amber-300"
         >
-          Üye listesi alınamadı.
-          Bağlantını kontrol edip yenile.
+          Üye listesi alınamadı. Bağlantını kontrol edip yenile.
         </div>
 
         <!-- Boş liste -->
@@ -1308,22 +1203,15 @@ onMounted(async () => {
             </svg>
           </div>
 
-          <p class="text-sm font-bold">
-            Henüz aktif üye görünmüyor
-          </p>
+          <p class="text-sm font-bold">Henüz aktif üye görünmüyor</p>
 
-          <p
-            class="mt-1 text-xs text-[var(--color-text-secondary)]"
-          >
+          <p class="mt-1 text-xs text-[var(--color-text-secondary)]">
             Yukarıdan yeni bir çalışan ekleyebilirsin.
           </p>
         </div>
 
         <!-- Üye listesi -->
-        <div
-          v-else
-          class="space-y-2"
-        >
+        <div v-else class="space-y-2">
           <div
             v-for="user in sameWorkspaceUsers"
             :key="user.id"
@@ -1341,18 +1229,12 @@ onMounted(async () => {
               "
               aria-hidden="true"
             >
-              {{
-                user.username
-                  ?.charAt(0)
-                  ?.toLocaleUpperCase("tr-TR") || "?"
-              }}
+              {{ user.username?.charAt(0)?.toLocaleUpperCase("tr-TR") || "?" }}
             </div>
 
             <!-- Kullanıcı bilgileri -->
             <div class="min-w-0 flex-1">
-              <p
-                class="truncate text-sm font-extrabold"
-              >
+              <p class="truncate text-sm font-extrabold">
                 {{ user.username }}
               </p>
 
@@ -1378,10 +1260,7 @@ onMounted(async () => {
 
             <!-- Yalnızca çalışan hesabı kapatılabilir -->
             <button
-              v-if="
-                user.role === 'worker' &&
-                user.id !== getUser()?.id
-              "
+              v-if="user.role === 'worker' && user.id !== getUser()?.id"
               type="button"
               @click="requestDeactivation(user)"
               :disabled="
@@ -1412,33 +1291,41 @@ onMounted(async () => {
                 aria-hidden="true"
               >
                 <circle cx="10" cy="8" r="4" />
-                <path
-                  d="M3 21v-2a7 7 0 0 1 13-3.5M17 18h5"
-                />
+                <path d="M3 21v-2a7 7 0 0 1 13-3.5M17 18h5" />
               </svg>
 
-              <span
-                v-if="uncertainUserIds.has(user.id)"
-              >
+              <span v-if="uncertainUserIds.has(user.id)">
                 Kontrol gerekli
               </span>
 
               <template v-else>
-                <span class="hidden sm:inline">
-                  Devre dışı bırak
-                </span>
+                <span class="hidden sm:inline"> Devre dışı bırak </span>
 
-                <span class="sm:hidden">
-                  Kapat
-                </span>
+                <span class="sm:hidden"> Kapat </span>
               </template>
             </button>
 
             <span
               v-else
-              class="shrink-0 rounded-full bg-[var(--color-surface)] px-3 py-1.5 text-[10px] font-semibold text-[var(--color-text-secondary)]"
+              class="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-2 text-[11px] font-medium text-[var(--color-text-secondary)] sm:px-2.5"
+              title="Hesap devre dışı bırakılamaz"
+              aria-label="Hesap devre dışı bırakılamaz"
             >
-              Korunuyor
+              <svg
+                viewBox="0 0 24 24"
+                class="size-4 shrink-0"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.7"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6l-8-3Z" />
+                <rect x="9" y="11" width="6" height="5" rx="1" />
+                <path d="M10 11V9a2 2 0 0 1 4 0v2" />
+              </svg>
+              <span class="hidden sm:inline">Korumalı hesap</span>
             </span>
           </div>
         </div>
@@ -1449,17 +1336,16 @@ onMounted(async () => {
           role="alert"
           class="mt-4 rounded-xl border border-amber-500/25 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-800 dark:text-amber-200"
         >
-          Bazı hesap kapatma işlemlerinin sonucu doğrulanamadı.
-          Sunucu durumunu kontrol etmeden tekrar deneme.
+          Bazı hesap kapatma işlemlerinin sonucu doğrulanamadı. Sunucu durumunu
+          kontrol etmeden tekrar deneme.
         </p>
 
         <!-- Bilgilendirme -->
         <p
           class="mt-4 rounded-xl bg-indigo-500/5 px-3.5 py-3 text-[11px] leading-relaxed text-[var(--color-text-secondary)]"
         >
-          Devre dışı bırakılan çalışanlar bu aktif listeden
-          çıkar. Kişisel kayıtları veritabanında arşivlenir;
-          arşiv görüntüleme ekranı henüz mevcut değil.
+          Devre dışı bırakılan çalışanlar bu aktif listeden çıkar. Aktif kişisel
+          kayıtları veritabanında arşivlenir.
         </p>
       </section>
     </main>
@@ -1501,16 +1387,11 @@ onMounted(async () => {
             >
               <circle cx="10" cy="8" r="4" />
 
-              <path
-                d="M3 21v-2a7 7 0 0 1 13-3.5M17 18h5"
-              />
+              <path d="M3 21v-2a7 7 0 0 1 13-3.5M17 18h5" />
             </svg>
           </div>
 
-          <h2
-            id="deactivation-title"
-            class="text-xl font-black tracking-tight"
-          >
+          <h2 id="deactivation-title" class="text-xl font-black tracking-tight">
             Hesap devre dışı bırakılsın mı?
           </h2>
 
@@ -1518,15 +1399,12 @@ onMounted(async () => {
             id="deactivation-description"
             class="mt-2 text-sm leading-relaxed text-[var(--color-text-secondary)]"
           >
-            <strong
-              class="font-extrabold text-[var(--color-text-primary)]"
-            >
+            <strong class="font-extrabold text-[var(--color-text-primary)]">
               {{ pendingDeactivation.username }}
             </strong>
 
-            artık giriş yapamayacak; açık oturumları
-            sonlandırılacak. Şirkete ait kişisel sayaçları
-            silinmeden arşivlenecek, paylaşılan sayaçlar
+            artık giriş yapamayacak; açık oturumları sonlandırılacak. Şirkete
+            ait kişisel sayaçları silinmeden arşivlenecek, paylaşılan sayaçlar
             korunacak.
           </p>
 
@@ -1534,14 +1412,11 @@ onMounted(async () => {
             class="mt-5 rounded-2xl border border-amber-500/25 bg-amber-500/10 p-3.5 text-xs leading-relaxed text-amber-800 dark:text-amber-200"
           >
             <strong>Önemli:</strong>
-            Bu hesap yeniden etkinleştirilemez.
-            Arşiv kayıtları korunur ancak henüz
-            panelden görüntülenemez.
+            Bu hesap yeniden etkinleştirilemez. Arşiv kayıtları korunur ancak
+            henüz panelden görüntülenemez.
           </div>
 
-          <div
-            class="mt-6 grid grid-cols-2 gap-3"
-          >
+          <div class="mt-6 grid grid-cols-2 gap-3">
             <button
               ref="cancelDeactivationButton"
               type="button"
@@ -1558,11 +1433,7 @@ onMounted(async () => {
               :disabled="deactivationLoading"
               class="rounded-2xl bg-rose-600 px-3 py-3.5 text-sm font-extrabold text-white shadow-lg shadow-rose-700/15 transition hover:bg-rose-700 active:scale-[0.98] disabled:cursor-wait disabled:opacity-55 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
             >
-              {{
-                deactivationLoading
-                  ? "İşleniyor..."
-                  : "Devre dışı bırak"
-              }}
+              {{ deactivationLoading ? "İşleniyor..." : "Devre dışı bırak" }}
             </button>
           </div>
         </div>

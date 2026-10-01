@@ -1,5 +1,6 @@
 <script setup>
 import { logout as apiLogout } from "../../services/backendSync";
+import { message } from "@/composables/message";
 
 defineEmits(["open-menu"]);
 
@@ -8,9 +9,9 @@ import { useStopwatchStore } from "../../stores/stopwatchStore.js";
 const store = useStopwatchStore();
 const user = computed(() => store.user);
 
-async function logout() {
+const logout = message.withLoading("Çıkış yapılıyor...", async () => {
   await apiLogout();
-}
+});
 </script>
 
 <template>
