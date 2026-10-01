@@ -115,3 +115,12 @@ body {
   appearance: textfield;
   -moz-appearance: textfield;
 }
+
+html {
+  touch-action: manipulation;
+}
+
+button,
+[role="switch"] {
+  touch-action: manipulation;
+}

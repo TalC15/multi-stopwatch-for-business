@@ -235,9 +235,9 @@ export function createStopwatchController({
   const duration = ref(preference("defaultDuration", 5)),
     name = ref(preference("defaultName", "kronometre"));
   const roleStyles = {
-    worker: { text: "text-teal-400" },
-    manager: { text: "text-indigo-400" },
-    superadmin: { text: "text-amber-400" },
+    worker: { text: "text-blue-600 dark:text-blue-300" },
+    manager: { text: "text-violet-600 dark:text-violet-300" },
+    superadmin: { text: "text-amber-600 dark:text-amber-300" },
   };
   let epoch = 0,
     disposed = false,

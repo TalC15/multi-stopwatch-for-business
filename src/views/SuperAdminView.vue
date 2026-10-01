@@ -246,7 +246,8 @@ onMounted(() => fetchAll());
                   ? 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300'
                   : role === 'superadmin'
                     ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                    : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+                    : role === 'worker' ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                    : ''
                 : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-indigo-500/20 hover:bg-indigo-500/5',
             ]"
           >
@@ -300,12 +301,13 @@ onMounted(() => fetchAll());
             <div
               class="grid size-10 shrink-0 place-items-center rounded-2xl text-sm font-black"
               :class="
-                user.role === 'manager'
+                user?.role === 'manager'
                   ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                  : user.role === 'superadmin'
+                  : user?.role === 'superadmin'
                     ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                    : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
-              "
+                   : user?.role === 'worker'
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                    : '' "
               aria-hidden="true"
             >
               {{ user.username?.charAt(0)?.toLocaleUpperCase("tr-TR") || "?" }}
@@ -318,8 +320,8 @@ onMounted(() => fetchAll());
               <span
                 class="truncate text-[11px] leading-relaxed text-[var(--color-text-secondary)]"
                 ><span
-                  :class="[store.roleStyles[user?.role].text, 'text-[11px]']"
-                  >{{ user?.role }}</span
+                  :class="[store.roleStyles[user?.role]?.text, 'text-[11px] font-semibold']"
+                  >{{ user?.role=='manager' ? 'Yönetici' : user?.role =='superadmin' ? 'Süper Yönetici' : user?.role =='worker' ? 'Çalışan' : '' }}</span
                 >
                 — {{ workspaceName(user.workspace_id) }}</span
               >
@@ -412,10 +414,11 @@ onMounted(() => fetchAll());
                   'min-w-0 flex-1 rounded-xl border px-1 py-2.5 text-[10px] font-bold capitalize sm:text-[11px] transition active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500',
                   editingUser.role === role
                     ? role === 'manager'
-                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                      : role === 'superadmin'
-                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                        : 'border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+                  ? 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                  : role === 'superadmin'
+                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                    : role === 'worker' ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                    : ''
                     : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-indigo-500/20 hover:bg-indigo-500/5',
                 ]"
               >
@@ -596,7 +599,7 @@ onMounted(() => fetchAll());
 
             <!-- Üyeler -->
             <div class="flex flex-col gap-2">
-              <h3 class="mb-1 text-sm font-extrabold tracking-tight">Üyeler</h3>
+              <h3 class="mb-1 text-lg font-semibold tracking-tight">Üyeler</h3>
               <div
                 v-if="workspaceDetail.members.length === 0"
                 class="rounded-2xl bg-[var(--color-surface)] py-5 text-center text-sm text-[var(--color-text-secondary)]"
@@ -611,12 +614,13 @@ onMounted(() => fetchAll());
                 <div
                   class="grid size-10 shrink-0 place-items-center rounded-2xl text-sm font-black"
                   :class="
-                    member.role === 'manager'
-                      ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                      : member.role === 'superadmin'
-                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                        : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
-                  "
+                member?.role === 'manager'
+                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                  : member?.role === 'superadmin'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                   : member?.role === 'worker'
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                    : '' "
                   aria-hidden="true"
                 >
                   {{
@@ -632,7 +636,7 @@ onMounted(() => fetchAll());
                   <span
                     :class="[
                       store.roleStyles[member?.role].text,
-                      'text-[11px]',
+                      'text-[11px] font-semibold',
                     ]"
                     >{{ member.role }}</span
                   >
