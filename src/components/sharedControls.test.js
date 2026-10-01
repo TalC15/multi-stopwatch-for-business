@@ -586,3 +586,53 @@ for (const isShared of [true, false])
       app.unmount();
     }
   });
+
+test('Home sort select offers exactly two directions and only reorders visible personal cards', async () => {
+  const { store, calls } = fixture();
+  store.stopwatches = [
+    { id:'far',name:'Far',type:'up',status:'running',targetMinutes:10,elapsed:100000,isShared:false },
+    { id:'finished',name:'Finished',type:'up',status:'running',targetMinutes:10,elapsed:600000,reachedTarget:true,isShared:false },
+    { id:'near',name:'Near',type:'up',status:'paused',targetMinutes:10,elapsed:590000,isShared:false },
+    { id:'hidden',name:'Hidden',type:'down',status:'running',targetMinutes:10,remaining:10,isShared:false },
+    { id:'shared',name:'Shared',type:'up',status:'running',targetMinutes:10,elapsed:599999,isShared:true },
+  ];
+  const original=store.stopwatches.map(t=>t.id);
+  const { tree, app } = mount('Home');
+  const names=()=>walk(tree).filter(n=>n.props?.['aria-label']?.startsWith('Sil: ')).map(n=>n.props['aria-label'].slice(5));
+  try {
+    const select=walk(tree).find(n=>n.tag==='select' && n.props.id==='timer-sort-order');
+    assert.ok(select); assert.equal(walk(select).filter(n=>n.tag==='option').length,2);
+    assert.deepEqual(names(),['Finished','Near','Far']);
+    select.props.onChange({target:{value:'farthest'}}); await nextTick();
+    assert.deepEqual(names(),['Far','Near','Finished']);
+    assert.deepEqual(store.stopwatches.map(t=>t.id),original); assert.deepEqual(calls,[]);
+    select.props.onChange({target:{value:'__proto__'}}); await nextTick();
+    assert.deepEqual(names(),['Finished','Near','Far']);
+  } finally { app.unmount(); }
+});
+
+test('Home sorts mixed shared timers in read-only mode and updates order as time changes without issuing actions', async () => {
+  const { store, calls } = fixture();
+  store.stopwatches = [
+    { id:'shared-down',name:'Shared down',type:'down',status:'running',targetMinutes:10,remaining:3000,elapsed:597000,isShared:true,dataMode:'shared' },
+    { id:'personal',name:'Personal',type:'down',status:'running',targetMinutes:10,remaining:1,isShared:false },
+    { id:'shared-up',name:'Shared up',type:'up',status:'running',targetMinutes:10,elapsed:599000,isShared:true,dataMode:'shared' },
+  ];
+  const original=store.stopwatches.map(t=>t.id);
+  const { tree, app }=mount('Home');
+  const names=()=>walk(tree).filter(n=>n.props?.['aria-label']?.startsWith('Sil: ')).map(n=>n.props['aria-label'].slice(5));
+  try {
+    await button(tree,'Ortak').props.onClick(); await nextTick();
+    assert.deepEqual(names(),['Shared up','Shared down']);
+    const select=walk(tree).find(n=>n.tag==='select' && n.props.id==='timer-sort-order');
+    select.props.onChange({target:{value:'farthest'}}); await nextTick();
+    assert.deepEqual(names(),['Shared down','Shared up']);
+    store.stopwatches[0].remaining=500; await nextTick();
+    assert.deepEqual(names(),['Shared up','Shared down']);
+    store.stopwatches[0].remaining=0; await nextTick();
+    assert.deepEqual(names(),['Shared up','Shared down']);
+    assert.equal(store.stopwatches[0].status,'running');
+    assert.deepEqual(store.stopwatches.map(t=>t.id),original);
+    assert.deepEqual(calls,[]);
+  } finally { app.unmount(); }
+});

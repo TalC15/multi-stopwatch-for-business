@@ -9,6 +9,7 @@ import StopwatchCard from "@/components/stopwatch/StopwatchCard.vue";
 import AddModal from "@/components/stopwatch/AddModal.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import { message } from "../composables/message";
+import { sortTimers, TIMER_SORT, normalizeTimerSort } from "../domain/timerSort.js";
 
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
@@ -17,6 +18,8 @@ const activeTab = ref("up");
 const isDrawerOpen = ref(false);
 const isModalOpen = ref(false);
 const isPausedAll = ref(false);
+const sortDirection = ref(TIMER_SORT.NEAREST);
+function changeSort(value) { sortDirection.value = normalizeTimerSort(value); }
 
 const filteredTimers = computed(() =>
   store.stopwatches.filter((t) => t.type === activeTab.value && !t.isShared),
@@ -25,6 +28,13 @@ const filteredTimers = computed(() =>
 const sharedTimers = computed(() =>
   store.stopwatches.filter((t) => t.isShared),
 );
+
+// Sorting affects only the visible cards, never the store or bulk action order.
+const visibleTimers = computed(previous => sortTimers(
+  activeTab.value === 'shared' ? sharedTimers.value : filteredTimers.value,
+  sortDirection.value,
+  previous,
+));
 
 function openAdd() {
   if (activeTab.value === "shared" && !store.requireSharedWrite()) return;
@@ -478,25 +488,33 @@ onMounted(() => {
               </g>
             </svg>
           </button>
-          <button
-            class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
-          >
-            <span class="flex flex-col items-center gap-[3px]">
-              <span class="block h-[2px] w-4 rounded-full bg-current"></span>
-              <span class="block h-[2px] w-3 rounded-full bg-current"></span>
-              <span class="block h-[2px] w-2 rounded-full bg-current"></span>
-            </span>
-            Sırala
-          </button>
+          <div class="relative shrink-0 rounded-lg text-indigo-600 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 dark:text-indigo-400">
+            <label for="timer-sort-order" class="flex min-h-11 items-center gap-1.5 px-1 text-sm font-semibold">
+              <span aria-hidden="true" class="flex flex-col items-center gap-[3px]">
+                <span class="block h-[2px] w-4 rounded-full bg-current"></span>
+                <span class="block h-[2px] w-3 rounded-full bg-current"></span>
+                <span class="block h-[2px] w-2 rounded-full bg-current"></span>
+              </span>
+              Sırala
+            </label>
+            <select
+              id="timer-sort-order"
+              aria-label="Sayaçları sırala"
+              :value="sortDirection"
+              @change="changeSort($event.target.value)"
+              class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            >
+              <option :value="TIMER_SORT.NEAREST">Bitmiş → en yakın → en uzak</option>
+              <option :value="TIMER_SORT.FARTHEST">En uzak → en yakın → bitmiş</option>
+            </select>
+          </div>
         </div>
       </div>
 
       <!-- Timer Cards -->
       <div class="space-y-4">
         <StopwatchCard
-          v-for="timer in activeTab === 'shared'
-            ? sharedTimers
-            : filteredTimers"
+          v-for="timer in visibleTimers"
           :key="timer.id"
           :timer="timer"
         />
