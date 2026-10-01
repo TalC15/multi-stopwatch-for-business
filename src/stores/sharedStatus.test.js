@@ -91,7 +91,7 @@ for (const connected of [true, false])
     assert.equal(controller.sharedNotice.value.state, "signed-out");
     assert.equal(
       controller.sharedNotice.value.message,
-      "Ortak sayaçları kullanmak için giriş yapın.",
+      "Ortak zamanlayıcıları kullanmak için giriş yapın.",
     );
     assert.equal(controller.sharedNotice.value.to, "/login");
     assert.equal(snapshots, 0);
@@ -157,7 +157,7 @@ test("initial empty store is neutral; valid signed-in scope shows real refresh t
   assert.equal(controller.sharedNotice.value.state, "reconciling");
   assert.equal(
     controller.sharedNotice.value.message,
-    "Ortak sayaçlar güncelleniyor…",
+    "Ortak zamanlayıcılar güncelleniyor…",
   );
   const pending = controller.loadSharedTimers();
   gate.release.resolve();
@@ -165,7 +165,7 @@ test("initial empty store is neutral; valid signed-in scope shows real refresh t
   assert.equal(controller.sharedNotice.value.state, "ready");
   assert.equal(
     controller.sharedNotice.value.message,
-    "Ortak sayaçlar ekip üyeleriyle güncel tutulur.",
+    "Ortak zamanlayıcılar ekip üyeleriyle güncel tutulur.",
   );
   assert.equal(controller.sharedWritable.value, true);
 });

@@ -267,7 +267,7 @@ export function createStopwatchController({
       return {
         state: "signed-out",
         tone: "info",
-        message: "Ortak sayaçları kullanmak için giriş yapın.",
+        message: "Ortak zamanlayıcıları kullanmak için giriş yapın.",
         to: "/login",
         action: "Giriş yap",
       };
@@ -312,18 +312,18 @@ export function createStopwatchController({
       return {
         state: "pending",
         tone: "neutral",
-        message: "Ortak sayaç işlemi tamamlanıyor…",
+        message: "Ortak zamanlayıcı işlemi tamamlanıyor…",
       };
     if (sharedState.value === "reconciling")
       return {
         state: "reconciling",
         tone: "neutral",
-        message: "Ortak sayaçlar güncelleniyor…",
+        message: "Ortak zamanlayıcılar güncelleniyor…",
       };
     return {
       state: "ready",
       tone: "info",
-      message: "Ortak sayaçlar ekip üyeleriyle güncel tutulur.",
+      message: "Ortak zamanlayıcılar ekip üyeleriyle güncel tutulur.",
     };
   });
   let sharedGeneration = -1n,

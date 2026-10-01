@@ -31,7 +31,7 @@ const channelFor = (type, profile) => profile === 'quiet' ? 'keeptimer-quiet-v3'
 const bodyFor = timer => `${timer.name} bitti ve ${timer.isPay ? 'ödendi' : 'ödenmedi'}`;
 const report = error => {
   console.warn('[KeepTimer bildirim]', error);
-  notificationState.error = 'Bildirim veya ses çalıştırılamadı. Cihaz izinlerini kontrol edip yeniden deneyin.';
+  notificationState.error = 'Bildirim özelliği veya ses sistemi çalıştırılamadı.';
 };
 
 async function ensureChannels() {

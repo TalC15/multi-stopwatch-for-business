@@ -16,8 +16,8 @@ onMounted(refreshNotificationStatus);
     <div class="flex items-center gap-3 mb-4">
       <img src="/icons/notification-logo.png" alt="" width="44" height="44" class="rounded-xl" />
       <div>
-        <h2 id="alarm-settings-title" class="font-bold">Bildirimler</h2>
-        <p class="text-xs text-[var(--color-text-secondary)]">Süre dolduğunda haberdar olun</p>
+        <h2 id="alarm-settings-title" class="font-bold">Cihaz Bildirimleri</h2>
+        <p class="text-xs text-[var(--color-text-secondary)]">Her cihazda çalışmaz ve sadece cihaz sahibine zamanlayıcı bitince bildirim gönderilir.</p>
       </div>
     </div>
     <p role="status" class="text-sm font-medium">{{ permissionText }}</p>

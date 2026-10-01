@@ -41,7 +41,7 @@ const increment = () => {
   store.duration++;
 };
 
-const save = message.withLoading("Sayaç oluşturuluyor...", async () => {
+const save = message.withLoading("zamanlayıcı oluşturuluyor...", async () => {
   if ((props.forceShared || isShared.value) && !store.requireSharedWrite())
     return;
   if (!store.name) return message.warning("isim eklemek zorunludur");
