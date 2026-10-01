@@ -3,14 +3,12 @@ import { computed, nextTick, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
 import { disconnectSocket, connectSocket } from "@/services/socket";
-import {
-  apiFetch,
-  getAccessToken,
-  getUser,
-} from "@/services/backendSync";
+import { useStopwatchStore } from "../stores/stopwatchStore.js";
+import { apiFetch, getAccessToken, getUser } from "@/services/backendSync";
 
 import { captureWorkspaceSession } from "../services/workspaceSession.js";
 
+const store = useStopwatchStore();
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
@@ -43,14 +41,10 @@ const sameWorkspaceUsers = computed(() =>
 
 const activeWorkerCount = computed(
   () =>
-    sameWorkspaceUsers.value.filter(
-      (user) => user.role === "worker",
-    ).length,
+    sameWorkspaceUsers.value.filter((user) => user.role === "worker").length,
 );
 
-const canLeaveWorkspace = computed(
-  () => getUser()?.role === "superadmin",
-);
+const canLeaveWorkspace = computed(() => getUser()?.role === "superadmin");
 
 const pendingDeactivation = ref(null);
 const deactivationLoading = ref(false);
@@ -62,53 +56,52 @@ function authHeader() {
     "Content-Type": "application/json",
     Authorization: `Bearer ${getAccessToken()}`,
   };
-};
+}
 
 async function responseData(response) {
   return response?.json().catch(() => ({})) ?? {};
-};
+}
 
 function updateWorkspaceConnection(workspaceId, session) {
   if (!session.saveWorkspace(workspaceId)) return false;
   disconnectSocket();
   connectSocket();
   return true;
-};
+}
 
-const fetchWorkspace = message.withLoading("Çalışma grubu yükleniyor...", async () => {
-  workspaceLoadingDiv.value = true;
-  workspaceLoadError.value = false;
+const fetchWorkspace = message.withLoading(
+  "Çalışma grubu yükleniyor...",
+  async () => {
+    workspaceLoadingDiv.value = true;
+    workspaceLoadError.value = false;
 
-  try {
-    const response = await apiFetch(`${BASE_URL}/workspace`, {
-      headers: authHeader(),
-    });
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace`, {
+        headers: authHeader(),
+      });
 
-    if (!response) {
+      if (!response) {
+        workspaceLoadError.value = true;
+        return;
+      }
+
+      const data = await responseData(response);
+
+      if (!response.ok) {
+        workspaceLoadError.value = true;
+        message.error(data.error || "Çalışma grubu alınamadı");
+        return;
+      }
+
+      workspace.value = data.workspace ?? null;
+    } catch {
       workspaceLoadError.value = true;
-      return;
+      message.error("Çalışma grubu yüklenemedi. Bağlantını kontrol et.");
+    } finally {
+      workspaceLoadingDiv.value = false;
     }
-
-    const data = await responseData(response);
-
-    if (!response.ok) {
-      workspaceLoadError.value = true;
-      message.error(
-        data.error || "Çalışma grubu alınamadı",
-      );
-      return;
-    }
-
-    workspace.value = data.workspace ?? null;
-  } catch {
-    workspaceLoadError.value = true;
-    message.error(
-      "Çalışma grubu yüklenemedi. Bağlantını kontrol et.",
-    );
-  } finally {
-    workspaceLoadingDiv.value = false;
-  }
-});
+  },
+);
 
 const fetchUsers = message.withLoading("Üyeler yükleniyor...", async () => {
   loading.value = true;
@@ -136,14 +129,12 @@ const fetchUsers = message.withLoading("Üyeler yükleniyor...", async () => {
     return true;
   } catch {
     usersLoadError.value = true;
-    message.error(
-      "Üyeler yüklenemedi. Bağlantını kontrol et.",
-    );
+    message.error("Üyeler yüklenemedi. Bağlantını kontrol et.");
     return false;
   } finally {
     loading.value = false;
   }
-})
+});
 
 async function reloadManagerData() {
   await fetchWorkspace();
@@ -151,247 +142,205 @@ async function reloadManagerData() {
   if (workspace.value && !workspaceLoadError.value) {
     await fetchUsers();
   }
-};
+}
 
-const createWorkspace = message.withLoading("Çalışma grubu oluşturuluyor...", async () => {
-  if (
-    !newWorkspaceName.value.trim() ||
-    workspaceLoading.value
-  ) {
-    return;
-  }
+const createWorkspace = message.withLoading(
+  "Çalışma grubu oluşturuluyor...",
+  async () => {
+    if (!newWorkspaceName.value.trim() || workspaceLoading.value) {
+      return;
+    }
 
-  workspaceLoading.value = true;
+    workspaceLoading.value = true;
 
-  const session = captureWorkspaceSession();
-  try {
-    const response = await apiFetch(
-      `${BASE_URL}/workspace/create`,
-      {
+    const session = captureWorkspaceSession();
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/create`, {
         method: "POST",
         headers: authHeader(),
         isRequestCurrent: session.isCurrent,
         body: JSON.stringify({
           name: newWorkspaceName.value.trim(),
         }),
-      },
-    );
+      });
 
-    if (!response) return;
+      if (!response) return;
 
-    const data = await responseData(response);
-    if (!session.isCurrent()) return;
+      const data = await responseData(response);
+      if (!session.isCurrent()) return;
 
-    if (!response.ok) {
-      message.warning(
-        data.error || "Çalışma grubu oluşturulamadı",
-      );
+      if (!response.ok) {
+        message.warning(data.error || "Çalışma grubu oluşturulamadı");
+        return;
+      }
+
+      workspace.value = data.workspace;
+      newWorkspaceName.value = "";
+      if (!updateWorkspaceConnection(data.workspace.id, session)) return;
+
+      message.success("Çalışma grubu oluşturuldu");
+      await fetchUsers();
+    } catch {
+      message.error("Çalışma grubu oluşturulamadı. Bağlantını kontrol et.");
+    } finally {
+      workspaceLoading.value = false;
+    }
+  },
+);
+
+const joinWorkspace = message.withLoading(
+  "Çalışma grubuna katılınıyor...",
+  async () => {
+    if (!inviteCode.value.trim() || workspaceLoading.value) {
       return;
     }
 
-    workspace.value = data.workspace;
-    newWorkspaceName.value = "";
-    if (!updateWorkspaceConnection(data.workspace.id, session)) return;
+    workspaceLoading.value = true;
 
-    message.success("Çalışma grubu oluşturuldu");
-    await fetchUsers();
-  } catch {
-    message.error(
-      "Çalışma grubu oluşturulamadı. Bağlantını kontrol et.",
-    );
-  } finally {
-    workspaceLoading.value = false;
-  }
-});
-
-const joinWorkspace = message.withLoading("Çalışma grubuna katılınıyor...", async () => {
-  if (
-    !inviteCode.value.trim() ||
-    workspaceLoading.value
-  ) {
-    return;
-  }
-
-  workspaceLoading.value = true;
-
-  const session = captureWorkspaceSession();
-  try {
-    const response = await apiFetch(
-      `${BASE_URL}/workspace/join`,
-      {
+    const session = captureWorkspaceSession();
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/join`, {
         method: "POST",
         headers: authHeader(),
         isRequestCurrent: session.isCurrent,
         body: JSON.stringify({
           inviteCode: inviteCode.value.trim(),
         }),
-      },
-    );
+      });
 
-    if (!response) return;
+      if (!response) return;
 
-    const data = await responseData(response);
-    if (!session.isCurrent()) return;
+      const data = await responseData(response);
+      if (!session.isCurrent()) return;
 
-    if (!response.ok) {
-      message.warning(
-        data.error || "Geçersiz davet kodu",
-      );
+      if (!response.ok) {
+        message.warning(data.error || "Geçersiz davet kodu");
+        return;
+      }
+
+      workspace.value = data.workspace;
+      inviteCode.value = "";
+
+      if (!updateWorkspaceConnection(data.workspace.id, session)) return;
+
+      message.success(`${data.workspace.name} çalışma grubuna katıldın`);
+
+      await fetchUsers();
+    } catch {
+      message.error("Çalışma grubuna katılınamadı. Bağlantını kontrol et.");
+    } finally {
+      workspaceLoading.value = false;
+    }
+  },
+);
+
+const leaveWorkspace = message.withLoading(
+  "Çalışma grubundan ayrılınıyor...",
+  async () => {
+    if (!canLeaveWorkspace.value || leaveLoading.value) {
       return;
     }
 
-    workspace.value = data.workspace;
-    inviteCode.value = "";
+    leaveLoading.value = true;
 
-    if (!updateWorkspaceConnection(data.workspace.id, session)) return;
-
-    message.success(
-      `${data.workspace.name} çalışma grubuna katıldın`,
-    );
-
-    await fetchUsers();
-  } catch {
-    message.error(
-      "Çalışma grubuna katılınamadı. Bağlantını kontrol et.",
-    );
-  } finally {
-    workspaceLoading.value = false;
-  }
-});
-
-const leaveWorkspace = message.withLoading("Çalışma grubundan ayrılınıyor...", async () => {
-  if (
-    !canLeaveWorkspace.value ||
-    leaveLoading.value
-  ) {
-    return;
-  }
-
-  leaveLoading.value = true;
-
-  const session = captureWorkspaceSession();
-  try {
-    const response = await apiFetch(
-      `${BASE_URL}/workspace/leave`,
-      {
+    const session = captureWorkspaceSession();
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/leave`, {
         method: "POST",
         headers: authHeader(),
         isRequestCurrent: session.isCurrent,
-      },
-    );
+      });
 
-    if (!response) return;
+      if (!response) return;
 
-    const data = await responseData(response);
-    if (!session.isCurrent()) return;
+      const data = await responseData(response);
+      if (!session.isCurrent()) return;
 
-    if (!response.ok) {
-      message.error(
-        data.error || "Ayrılma başarısız",
-      );
-      return;
+      if (!response.ok) {
+        message.error(data.error || "Ayrılma başarısız");
+        return;
+      }
+
+      workspace.value = null;
+      users.value = [];
+
+      if (!updateWorkspaceConnection(null, session)) return;
+      message.success("Çalışma grubundan ayrıldın");
+    } catch {
+      message.error("Ayrılma tamamlanamadı. Bağlantını kontrol et.");
+    } finally {
+      leaveLoading.value = false;
     }
+  },
+);
 
-    workspace.value = null;
-    users.value = [];
+const refreshInviteCode = message.withLoading(
+  "Davet kodu yenileniyor...",
+  async () => {
+    if (refreshLoading.value) return;
 
-    if (!updateWorkspaceConnection(null, session)) return;
-    message.success("Çalışma grubundan ayrıldın");
-  } catch {
-    message.error(
-      "Ayrılma tamamlanamadı. Bağlantını kontrol et.",
-    );
-  } finally {
-    leaveLoading.value = false;
-  }
-});
+    refreshLoading.value = true;
 
-const refreshInviteCode = message.withLoading("Davet kodu yenileniyor...", async () => {
-  if (refreshLoading.value) return;
-
-  refreshLoading.value = true;
-
-  try {
-    const response = await apiFetch(
-      `${BASE_URL}/workspace/refresh-invite`,
-      {
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/refresh-invite`, {
         method: "POST",
         headers: authHeader(),
-      },
-    );
+      });
 
-    if (!response) return;
+      if (!response) return;
 
-    const data = await responseData(response);
+      const data = await responseData(response);
 
-    if (!response.ok) {
-      message.warning(
-        data.error || "Kod yenilenemedi",
-      );
-      return;
+      if (!response.ok) {
+        message.warning(data.error || "Kod yenilenemedi");
+        return;
+      }
+
+      if (workspace.value) {
+        workspace.value.invite_code = data.invite_code;
+      }
+
+      message.success("Davet kodu yenilendi");
+    } catch {
+      message.error("Davet kodu yenilenemedi. Bağlantını kontrol et.");
+    } finally {
+      refreshLoading.value = false;
     }
-
-    if (workspace.value) {
-      workspace.value.invite_code = data.invite_code;
-    }
-
-    message.success("Davet kodu yenilendi");
-  } catch {
-    message.error(
-      "Davet kodu yenilenemedi. Bağlantını kontrol et.",
-    );
-  } finally {
-    refreshLoading.value = false;
-  }
-});
+  },
+);
 
 const createUser = message.withLoading("Çalışan oluşturuluyor...", async () => {
   const username = newUsername.value.trim();
 
-  if (
-    !workspace.value ||
-    !username ||
-    !newPin.value ||
-    createLoading.value
-  ) {
+  if (!workspace.value || !username || !newPin.value || createLoading.value) {
     return;
   }
 
-  if (
-    username.length > 25 ||
-    newPin.value.length > 25
-  ) {
-    message.error(
-      "Kullanıcı adı ve PIN en fazla 25 karakter olabilir",
-    );
+  if (username.length > 25 || newPin.value.length > 25) {
+    message.error("Kullanıcı adı ve PIN en fazla 25 karakter olabilir");
     return;
   }
 
   createLoading.value = true;
 
   try {
-    const response = await apiFetch(
-      `${BASE_URL}/users/create`,
-      {
-        method: "POST",
-        headers: authHeader(),
-        body: JSON.stringify({
-          username,
-          pin: newPin.value,
-          role: "worker",
-          workspace_id: workspace.value.id,
-        }),
-      },
-    );
+    const response = await apiFetch(`${BASE_URL}/users/create`, {
+      method: "POST",
+      headers: authHeader(),
+      body: JSON.stringify({
+        username,
+        pin: newPin.value,
+        role: "worker",
+        workspace_id: workspace.value.id,
+      }),
+    });
 
     if (!response) return;
 
     const data = await responseData(response);
 
     if (!response.ok) {
-      message.error(
-        data.error || "Çalışan oluşturulamadı",
-      );
+      message.error(data.error || "Çalışan oluşturulamadı");
       return;
     }
 
@@ -401,9 +350,7 @@ const createUser = message.withLoading("Çalışan oluşturuluyor...", async () 
     message.success(`${username} oluşturuldu`);
     await fetchUsers();
   } catch {
-    message.error(
-      "Çalışan oluşturulamadı. Bağlantını kontrol et.",
-    );
+    message.error("Çalışan oluşturulamadı. Bağlantını kontrol et.");
   } finally {
     createLoading.value = false;
   }
@@ -435,181 +382,161 @@ function cancelDeactivation() {
   }
 }
 
-const confirmDeactivation = message.withLoading("Hesap devre dışı bırakılıyor...", async () => {
-  const target = pendingDeactivation.value;
+const confirmDeactivation = message.withLoading(
+  "Hesap devre dışı bırakılıyor...",
+  async () => {
+    const target = pendingDeactivation.value;
 
-  if (
-    !target ||
-    deactivationLoading.value
-  ) {
-    return;
-  }
-
-  const validTarget =
-    target.role === "worker" &&
-    target.id !== getUser()?.id &&
-    target.workspace_id === workspace.value?.id &&
-    sameWorkspaceUsers.value.some(
-      (user) =>
-        user.id === target.id &&
-        user.role === "worker",
-    );
-
-  if (!validTarget) {
-    pendingDeactivation.value = null;
-
-    message.warning(
-      "Üye listesi değişmiş. Önce listeyi yenile.",
-    );
-
-    await fetchUsers();
-    return;
-  }
-
-  deactivationLoading.value = true;
-
-  try {
-    // Phase 2B:
-    // DELETE isteği fiziksel silme yapmaz.
-    // Backend hesabı kapatır ve kişisel kayıtları arşivler.
-
-    const response = await apiFetch(
-      `${BASE_URL}/users/${encodeURIComponent(target.id)}`,
-      {
-        method: "DELETE",
-        headers: authHeader(),
-      },
-    );
-
-    if (!response) {
-      uncertainUserIds.value = new Set([
-        ...uncertainUserIds.value,
-        target.id,
-      ]);
-
-      pendingDeactivation.value = null;
-
-      message.warning(
-        "Oturum değişti veya işlem sonucu alınamadı. " +
-        "Tekrar denemeden önce kontrol et.",
-      );
-
+    if (!target || deactivationLoading.value) {
       return;
     }
 
-    const data = await responseData(response);
-
-    if (
-      response.ok &&
-      data.success === true
-    ) {
-      pendingDeactivation.value = null;
-
-      message.success(
-        data.alreadyDisabled
-          ? `${target.username} zaten devre dışı`
-          : `${target.username} devre dışı bırakıldı. ` +
-            "Kişisel kayıtları şirkette saklandı.",
+    const validTarget =
+      target.role === "worker" &&
+      target.id !== getUser()?.id &&
+      target.workspace_id === workspace.value?.id &&
+      sameWorkspaceUsers.value.some(
+        (user) => user.id === target.id && user.role === "worker",
       );
 
-      if (!(await fetchUsers())) {
-        message.warning(
-          "İşlem onaylandı ancak liste yenilenemedi. " +
-          "Sayfayı yeniden aç.",
-        );
-      }
-
-      return;
-    }
-
-    if (response.status === 503) {
-      // RPC gerçekleşmiş olsa bile ağ geçidi hata verebilir.
-      // Bu durumda sonucu kesin başarısız olarak göstermeyiz.
-
-      uncertainUserIds.value = new Set([
-        ...uncertainUserIds.value,
-        target.id,
-      ]);
-
+    if (!validTarget) {
       pendingDeactivation.value = null;
 
-      message.warning(
-        "İşlemin sonucu belirsiz. Üye listesini kontrol et; " +
-        "hemen tekrar deneme.",
-      );
+      message.warning("Üye listesi değişmiş. Önce listeyi yenile.");
 
       await fetchUsers();
       return;
     }
 
-    message.error(
-      data.error || "Hesap devre dışı bırakılamadı",
-    );
-  } catch {
-    uncertainUserIds.value = new Set([
-      ...uncertainUserIds.value,
-      target.id,
-    ]);
+    deactivationLoading.value = true;
 
-    pendingDeactivation.value = null;
+    try {
+      // Phase 2B:
+      // DELETE isteği fiziksel silme yapmaz.
+      // Backend hesabı kapatır ve kişisel kayıtları arşivler.
 
-    message.warning(
-      "Bağlantı kesildi: işlem sonucu belirsiz. " +
-      "Tekrar denemeden önce listeyi kontrol et.",
-    );
-
-    await fetchUsers();
-  } finally {
-    deactivationLoading.value = false;
-  }
-});
-
-const toggleSharedMode = message.withLoading("Ortak ekran ayarı güncelleniyor...", async () => {
-  if (
-    sharedModeLoading.value ||
-    !workspace.value
-  ) {
-    return;
-  }
-
-  sharedModeLoading.value = true;
-
-  try {
-    const response = await apiFetch(
-      `${BASE_URL}/workspace/toggle-shared`,
-      {
-        method: "POST",
-        headers: authHeader(),
-      },
-    );
-
-    if (!response) return;
-
-    const data = await responseData(response);
-
-    if (!response.ok) {
-      message.warning(
-        data.error || "İşlem başarısız",
+      const response = await apiFetch(
+        `${BASE_URL}/users/${encodeURIComponent(target.id)}`,
+        {
+          method: "DELETE",
+          headers: authHeader(),
+        },
       );
+
+      if (!response) {
+        uncertainUserIds.value = new Set([
+          ...uncertainUserIds.value,
+          target.id,
+        ]);
+
+        pendingDeactivation.value = null;
+
+        message.warning(
+          "Oturum değişti veya işlem sonucu alınamadı. " +
+            "Tekrar denemeden önce kontrol et.",
+        );
+
+        return;
+      }
+
+      const data = await responseData(response);
+
+      if (response.ok && data.success === true) {
+        pendingDeactivation.value = null;
+
+        message.success(
+          data.alreadyDisabled
+            ? `${target.username} zaten devre dışı`
+            : `${target.username} devre dışı bırakıldı. ` +
+                "Kişisel kayıtları şirkette saklandı.",
+        );
+
+        if (!(await fetchUsers())) {
+          message.warning(
+            "İşlem onaylandı ancak liste yenilenemedi. " +
+              "Sayfayı yeniden aç.",
+          );
+        }
+
+        return;
+      }
+
+      if (response.status === 503) {
+        // RPC gerçekleşmiş olsa bile ağ geçidi hata verebilir.
+        // Bu durumda sonucu kesin başarısız olarak göstermeyiz.
+
+        uncertainUserIds.value = new Set([
+          ...uncertainUserIds.value,
+          target.id,
+        ]);
+
+        pendingDeactivation.value = null;
+
+        message.warning(
+          "İşlemin sonucu belirsiz. Üye listesini kontrol et; " +
+            "hemen tekrar deneme.",
+        );
+
+        await fetchUsers();
+        return;
+      }
+
+      message.error(data.error || "Hesap devre dışı bırakılamadı");
+    } catch {
+      uncertainUserIds.value = new Set([...uncertainUserIds.value, target.id]);
+
+      pendingDeactivation.value = null;
+
+      message.warning(
+        "Bağlantı kesildi: işlem sonucu belirsiz. " +
+          "Tekrar denemeden önce listeyi kontrol et.",
+      );
+
+      await fetchUsers();
+    } finally {
+      deactivationLoading.value = false;
+    }
+  },
+);
+
+const toggleSharedMode = message.withLoading(
+  "Ortak ekran ayarı güncelleniyor...",
+  async () => {
+    if (sharedModeLoading.value || !workspace.value) {
       return;
     }
 
-    workspace.value.shared_mode_enabled =
-      data.shared_mode_enabled;
+    sharedModeLoading.value = true;
 
-    message.success(
-      data.shared_mode_enabled
-        ? "Ortak ekran açıldı"
-        : "Ortak ekran kapatıldı",
-    );
-  } catch {
-    message.error(
-      "Ortak ekran güncellenemedi. Bağlantını kontrol et.",
-    );
-  } finally {
-    sharedModeLoading.value = false;
-  }
-});
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/toggle-shared`, {
+        method: "POST",
+        headers: authHeader(),
+      });
+
+      if (!response) return;
+
+      const data = await responseData(response);
+
+      if (!response.ok) {
+        message.warning(data.error || "İşlem başarısız");
+        return;
+      }
+
+      workspace.value.shared_mode_enabled = data.shared_mode_enabled;
+
+      message.success(
+        data.shared_mode_enabled
+          ? "Ortak ekran açıldı"
+          : "Ortak ekran kapatıldı",
+      );
+    } catch {
+      message.error("Ortak ekran güncellenemedi. Bağlantını kontrol et.");
+    } finally {
+      sharedModeLoading.value = false;
+    }
+  },
+);
 
 onMounted(async () => {
   await fetchWorkspace();
@@ -662,28 +589,10 @@ onMounted(async () => {
             Yönetici Paneli
           </h1>
         </div>
-
-        <div
-          class="grid size-10 justify-self-end place-items-center rounded-2xl bg-indigo-500/10 text-indigo-500"
-          aria-hidden="true"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            class="size-5"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="1.8"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <rect x="3" y="3" width="18" height="18" rx="5" />
-            <path d="M8 11v6m4-10v10m4-7v7" />
-          </svg>
-        </div>
       </div>
     </nav>
 
-    <main class="mx-auto flex max-w-2xl flex-col gap-5 px-4 pt-6 pb-16 sm:px-6">
+    <main class="mx-auto flex max-w-md flex-col gap-5 px-4 pt-6 pb-16">
       <!-- Ekip özeti -->
       <header
         class="rounded-[28px] border border-[var(--color-border)] bg-[var(--color-card)] p-6 shadow-sm sm:p-7"
@@ -1128,7 +1037,7 @@ onMounted(async () => {
                 id="members-heading"
                 class="text-base font-black tracking-tight"
               >
-                Ekip üyeleri
+                {{workspace.name}} Üyeleri
               </h2>
 
               <p class="text-xs text-[var(--color-text-secondary)]">
@@ -1221,11 +1130,13 @@ onMounted(async () => {
             <div
               class="grid size-11 shrink-0 place-items-center rounded-2xl text-sm font-black"
               :class="
-                user.role === 'manager'
+                user?.role === 'manager'
                   ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                  : user.role === 'superadmin'
+                  : user?.role === 'superadmin'
                     ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                    : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+                    : user?.role === 'worker'
+                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                      : ''
               "
               aria-hidden="true"
             >
@@ -1240,20 +1151,15 @@ onMounted(async () => {
 
               <span
                 class="mt-0.5 inline-block text-[11px] font-semibold"
-                :class="
-                  user.role === 'manager'
-                    ? 'text-violet-600 dark:text-violet-300'
-                    : user.role === 'superadmin'
-                      ? 'text-amber-600 dark:text-amber-300'
-                      : 'text-indigo-600 dark:text-indigo-300'
-                "
+                :class="[store.roleStyles[user?.role]?.text]"
               >
                 {{
                   user.role === "manager"
                     ? "Yönetici"
                     : user.role === "superadmin"
-                      ? "Süper yönetici"
-                      : "Çalışan"
+                      ? "Süper yönetici" 
+                      : user.role === "worker" ? "Çalışan"
+                      : ''
                 }}
               </span>
             </div>
