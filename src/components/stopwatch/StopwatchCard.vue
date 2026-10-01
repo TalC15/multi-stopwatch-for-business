@@ -23,7 +23,7 @@
           v-if="timer.targetMinutes"
           :class="['text-sm mt-0.5', cardStyle.subtitle]"
         >
-          Target: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
+          Hedef: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
         </p>
       </div>
 
@@ -40,7 +40,7 @@
 
         <span v-if="timer.reachedTarget">⚠</span>
 
-        {{ statusLabel }}
+        {{ statusLabel ==='PAUSED' ? 'DURDU': statusLabel==='RUNNING' ? 'ÇALIŞIYOR' : statusLabel=='TIME REACHED' ? 'SÜRE DOLDU' : statusLabel=='IDLE' ? 'BEKLEMEDE' : statusLabel=='FINISHED' ? 'BİTTİ' : '' }}
       </span>
     </div>
 
@@ -70,7 +70,7 @@
           cardStyle.badge,
         ]"
       >
-        PAUSED COUNT: {{ pausedCount }}
+        DURDURMA SAYISI: {{ pausedCount }}
       </span>
     </div>
     <div
@@ -118,7 +118,7 @@
         <svg v-else class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <path d="M8 5v14l11-7z" />
         </svg>
-        {{ timer.status === "running" ? "Pause" : "Start" }}
+        {{ timer.status === "running" ? "Durdur" : "Başlat" }}
       </button>
       <button
         @click="requestDelete(timer, 'kronometresi')"
@@ -203,7 +203,7 @@
           cardStyle.badge,
         ]"
       >
-        PAUSED COUNT: {{ pausedCount }}
+        DURDURMA SAYISI: {{ pausedCount }}
       </span>
     </div>
     <div
@@ -248,7 +248,7 @@
         <svg v-else class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
           <path d="M8 5v14l11-7z" />
         </svg>
-        {{ timer.status === "running" ? "Pause" : "Start" }}
+        {{ timer.status === "running" ? "Durdur" : "Başlat" }}
       </button>
 
       <button

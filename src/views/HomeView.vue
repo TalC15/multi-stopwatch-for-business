@@ -8,6 +8,7 @@ import SettingsDrawer from "@/components/layout/SettingsDrawer.vue";
 import StopwatchCard from "@/components/stopwatch/StopwatchCard.vue";
 import AddModal from "@/components/stopwatch/AddModal.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
+import { message } from "../composables/message";
 
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
@@ -38,6 +39,8 @@ const noticeStyles = {
   error:
     "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200",
 };
+
+//bu fonksiyonun çağrıldığı yerler yorum satırında.İleride yorum satırı açılırsa sharedControls.test.js dosyasındaki 'test("Home hides personal notice and...' bölümünün güncellenmesi gerekir ki test edilebilsin. 
 const personalNotice = computed(() => {
   if (!store.ready)
     return { tone: "neutral", message: "Sayaçlarınız açılıyor…" };
@@ -89,9 +92,31 @@ async function allTimersPause() {
   if (results.every(Boolean)) isPausedAll.value = !isPausedAll.value;
 }
 
+const retryPersonalSync = message.withLoading(
+  "Kişisel sayaçlar eşitleniyor...",
+  () => store.retrySync(),
+);
+
+const reviewPersonalSync = message.withLoading(
+  "Sunucu kaydı inceleniyor...",
+  (id) => store.reviewSyncIssue(id),
+);
+
+const acceptPersonalSync = message.withLoading(
+  "Sunucu kaydı uygulanıyor...",
+  () => store.acceptSyncServer(),
+);
+
+const reloadSharedTimers = message.withLoading(
+  "Ortak sayaçlar yükleniyor...",
+  () => store.loadSharedTimers(),
+);
+
 onMounted(() => {
   themeStore.applyTheme();
-  void store.initialize();
+  void message.withLoading("Sayaçlar yükleniyor...", () =>
+    store.initialize(),
+  )();
 });
 </script>
 
@@ -109,7 +134,8 @@ onMounted(() => {
 
     <!-- Main Content -->
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
-      <div
+      <!--Bu yorum satırına alınan bölüm aynı hesap arası senkronizasyon hakkında bilgi veriyor ve senkronizasyonu yeniden deneme butonu var, UI açısından şuan yorum satırında-->
+      <!--<div
         v-if="activeTab !== 'shared' && personalNotice"
         role="status"
         aria-live="polite"
@@ -118,6 +144,7 @@ onMounted(() => {
           noticeStyles[personalNotice.tone],
         ]"
       >
+      
         <svg
           class="h-5 w-5 shrink-0 mt-0.5"
           viewBox="0 0 24 24"
@@ -130,13 +157,13 @@ onMounted(() => {
           <path d="M12 7v6m0 3v1" stroke-linecap="round" />
         </svg>
         <p class="min-w-0 break-words">{{ personalNotice.message }}</p>
-      </div>
-      <button
+      </div>-->
+      <!-- <button
         v-if="
           activeTab !== 'shared' &&
           (store.pendingCount || store.syncStatus === 'retry')
         "
-        @click="store.retrySync()"
+        @click="store.retryPersonalSync()"
         class="mb-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 active:bg-slate-100"
       >
         <svg
@@ -154,7 +181,7 @@ onMounted(() => {
           <path d="M20 10a8 8 0 1 0-1.5 7" />
         </svg>
         Senkronizasyonu yeniden dene
-      </button>
+      </button>-->
       <ul
         v-if="activeTab !== 'shared' && store.syncIssues?.length"
         class="space-y-3 mb-4 text-sm"
@@ -170,7 +197,7 @@ onMounted(() => {
           <button
             v-if="issue.canReview"
             :disabled="store.resolvingSync"
-            @click="store.reviewSyncIssue(issue.timerId)"
+            @click="reviewPersonalSync(issue.timerId)"
             class="underline mt-2"
           >
             Sunucu kaydını incele
@@ -191,7 +218,7 @@ onMounted(() => {
         confirmText="Yerel değişikliklerden vazgeç"
         cancelText="Koru ve vazgeç"
         :confirmDisabled="store.resolvingSync"
-        @confirm="store.acceptSyncServer()"
+        @confirm="acceptPersonalSync()"
         @cancel="store.cancelSyncReview()"
       />
       <section
@@ -220,7 +247,7 @@ onMounted(() => {
               store.sharedNotice.state === 'auth-required'
             "
           >
-            <path d="M10 4H5v16h5m3-12 4 4-4 4m-5-4h13" />
+            <path d="M10 4H5v16h5M17 8l4 4-4 4M8 12h13" />
           </g>
           <g v-else-if="store.sharedNotice.state === 'workspace-required'">
             <circle cx="9" cy="8" r="3" />
@@ -257,7 +284,7 @@ onMounted(() => {
           <button
             v-else-if="store.sharedNotice.state === 'unavailable'"
             type="button"
-            @click="store.loadSharedTimers()"
+            @click="reloadSharedTimers()"
             class="mt-2 inline-flex min-h-9 items-center rounded-lg px-2 font-semibold underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           >
             Yeniden dene
@@ -568,23 +595,24 @@ onMounted(() => {
             stroke-linejoin="round"
           >
             <!-- Üst düğme -->
-            <path d="M10 3h4" />
-            <!-- Sağdaki küçük çıkıntı -->
-            <path d="M19 6l1-1" />
-            <!-- Kronometre gövdesi -->
-            <circle cx="12" cy="13" r="7" />
-            <!-- "10" yazısı -->
-            <text
-              x="11.7"
-              y="15.6"
-              text-anchor="middle"
-              font-size="8"
-              font-weight="bold"
-              stroke="none"
-              fill="currentColor"
-            >
-              10
-            </text>
+            <path d="M9.5 2.5h5M12 2.5v3" />
+
+            <!-- Yan düğme -->
+            <path d="m17.3 7.7 1.6-1.6m-.9-.9 1.8 1.8" />
+
+            <!-- Gövde -->
+            <circle cx="12" cy="13" r="7.5" />
+
+            <!-- Kadran işaretleri -->
+            <path
+              d="M12 7.5v.8M17.5 13h-.8M12 18.5v-.8M6.5 13h.8"
+              stroke-width="1.25"
+              opacity=".55"
+            />
+
+            <!-- İbre ve merkez -->
+            <path d="m12 13 2.8-3.2" stroke-width="1.75" />
+            <circle cx="12" cy="13" r=".85" fill="currentColor" stroke="none" />
           </svg>
           <span class="text-[10px] font-black tracking-wider uppercase"
             >Kronometre</span

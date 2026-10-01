@@ -36,7 +36,7 @@ function authHeader() {
   };
 }
 
-async function fetchWorkspace() {
+const fetchWorkspace = message.withLoading("Çalışma grubu yükleniyor...", async () => {
   loading.value = true;
   const response = await apiFetch(`${BASE_URL}/workspace`, {
     headers: authHeader(),
@@ -46,9 +46,9 @@ async function fetchWorkspace() {
     workspace.value = data.workspace;
   }
   loading.value = false;
-}
+});
 
-async function joinWorkspace() {
+const joinWorkspace = message.withLoading("Çalışma grubuna katılınıyor...", async () => {
   if (!inviteCode.value || joinLoading.value) return;
   const session = captureWorkspaceSession();
   joinLoading.value = true;
@@ -70,9 +70,9 @@ async function joinWorkspace() {
   } catch {
     if (session.isCurrent()) message.error("Çalışma grubuna katılınamadı");
   } finally { joinLoading.value = false; }
-}
+});
 
-async function leaveWorkspace() {
+const leaveWorkspace = message.withLoading("Çalışma grubundan ayrılınıyor...", async () => {
   if (leaveLoading.value) return;
   const session = captureWorkspaceSession();
   leaveLoading.value = true;
@@ -92,9 +92,9 @@ async function leaveWorkspace() {
   } catch {
     if (session.isCurrent()) message.error("Çalışma grubundan ayrılınamadı");
   } finally { leaveLoading.value = false; }
-}
+});
 
-async function saveTelegram() {
+const saveTelegram = message.withLoading("Telegram bağlanıyor...", async () => {
   if (!chatId.value) return;
   telegramLoadingButton.value = true;
 
@@ -108,9 +108,9 @@ async function saveTelegram() {
     message.warning("Geçersiz Chat ID. Lütfen tekrar dene.");
   }
   telegramLoadingButton.value = false;
-}
+});
 
-async function removeTelegram(user_id) {
+const removeTelegram = message.withLoading("Telegram bağlantısı kesiliyor...", async (user_id) => {
   if (!user_id) return;
   const result = await cancelTelegramChatId(user_id);
   console.log(result);
@@ -122,14 +122,14 @@ async function removeTelegram(user_id) {
   } else {
     message.error("Telegram bağlantısı kesilemedi");
   }
-}
+});
 
-async function telegramSavedControl() {
+const telegramSavedControl = message.withLoading("Telegram bağlantısı kontrol ediliyor...", async () => {
   telegramLoadingDiv.value = true;
   const res = await telegramControl(user?.id);
   telegramLoadingDiv.value = false;
   telegramSaved.value = res.connected;
-}
+});
 
 onMounted(() => {
   fetchWorkspace();
@@ -138,69 +138,71 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--color-surface)]">
+  <div class="min-h-screen bg-[var(--color-surface)] text-[var(--color-text-primary)]">
     <nav
-      class="h-14 bg-[var(--color-card)] border-b border-[var(--color-border)] px-4 flex items-center justify-between sticky top-0 z-30"
+      class="sticky top-0 z-30 grid h-16 w-full grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 backdrop-blur-xl sm:px-6"
     >
       <button
+        type="button"
+        aria-label="Ana sayfaya dön"
         @click="router.push('/')"
-        class="w-9 h-9 flex items-center justify-center text-[var(--color-primary-light)] active:scale-90 transition-transform"
+        class="grid size-10 shrink-0 justify-self-start place-items-center rounded-2xl border border-[var(--color-border)] text-[var(--color-text-primary)] transition hover:bg-[var(--color-surface)] active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
       >
         <svg
-          width="22"
-          height="22"
+          class="size-5"
+          aria-hidden="true"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
-          stroke-width="2"
+          stroke-width="1.9"
           stroke-linecap="round"
           stroke-linejoin="round"
         >
           <path d="M19 12H5M12 5l-7 7 7 7" />
         </svg>
       </button>
-      <div class="flex flex-col items-center">
-        <h1 class="text-lg font-black text-[var(--color-primary-light)]">
+      <div class="flex min-w-0 flex-col items-center">
+        <h1 class="text-sm font-extrabold tracking-tight sm:text-base">
           Profilim
         </h1>
-        <span v-if="user" class="text-xs text-[var(--color-text-secondary)]">{{
+        <span v-if="user" class="max-w-full truncate text-[11px] text-[var(--color-text-secondary)]">{{
           user?.username
         }}</span>
       </div>
-      <div class="w-9"></div>
+      <div class="size-10" aria-hidden="true"></div>
     </nav>
 
-    <main class="max-w-md mx-auto px-4 pt-6 pb-12 flex flex-col gap-6">
+    <main class="mx-auto flex max-w-md flex-col gap-5 px-4 pt-6 pb-12 sm:px-6">
       <!--Profil Bilgileri-->
       <div
-        class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5"
+        class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6"
       >
         <h2
-          class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)] mb-4"
+          class="mb-5 text-base font-black tracking-tight"
         >
-          PROFİL BİLGİLERİM
+          Profil bilgilerim
         </h2>
 
         <div class="flex items-center gap-4">
-          <!-- Profil fotoğrafı -->
+          <!-- Yetki rengi ve baş harf: ekip paneliyle aynı -->
           <div
-            class="w-16 h-16 shrink-0 rounded-full bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center overflow-hidden"
+            class="grid size-16 shrink-0 place-items-center rounded-2xl text-2xl font-black"
+            :class="
+                user?.role === 'manager'
+                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                  : user?.role === 'superadmin'
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                    : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+            "
+            aria-hidden="true"
           >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="none"
-              class="w-9 h-9 text-[var(--color-text-muted)]"
-            >
-              <circle cx="12" cy="8" r="3.5" fill="currentColor" />
-              <path d="M5 20c0-3.5 3.13-6 7-6s7 2.5 7 6" fill="currentColor" />
-            </svg>
+            {{ user?.username?.charAt(0)?.toLocaleUpperCase("tr-TR") || "?" }}
           </div>
 
           <!-- Kullanıcı bilgileri -->
-          <div class="flex flex-col min-w-0">
+          <div class="flex min-w-0 flex-1 flex-col">
             <span
-              class="text-lg font-bold text-[var(--color-text-primary)] truncate"
+              class="truncate text-lg font-extrabold tracking-tight text-[var(--color-text-primary)]"
             >
               {{ user?.username || "Kullanıcı" }}
             </span>
@@ -208,7 +210,7 @@ onMounted(() => {
             <span
               :class="[
                 store.roleStyles[user?.role].text,
-                'text-[13px] capitalize',
+                'mt-0.5 text-[11px] font-semibold capitalize',
               ]"
             >
               {{ user?.role || "Rol belirtilmemiş" }}
@@ -217,17 +219,17 @@ onMounted(() => {
         </div>
 
         <div
-          class="mt-4 pt-4 border-t border-[var(--color-border)] flex flex-col gap-3"
+          class="mt-5 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4"
         >
           <div class="flex items-center justify-between">
-            <span class="text-xs text-[var(--color-text-secondary)]">
+            <span class="text-xs leading-relaxed text-[var(--color-text-secondary)]">
               Durum
             </span>
 
             <span
-              class="flex items-center gap-1.5 text-xs font-medium text-green-500"
+              class="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400"
             >
-              <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+              <span class="size-1.5 rounded-full bg-emerald-500"></span>
               Aktif
             </span>
           </div>
@@ -235,17 +237,17 @@ onMounted(() => {
       </div>
       <!-- Workspace Durumu -->
       <div
-        class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5 flex flex-col gap-4"
+        class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6 flex flex-col gap-4"
       >
         <h2
-          class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]"
+          class="text-base font-black tracking-tight"
         >
-          ÇALIŞMA GURUBUM
+          Çalışma grubum
         </h2>
 
         <div
           v-if="loading"
-          class="text-center py-4 text-[var(--color-text-muted)] text-sm"
+          class="rounded-2xl bg-[var(--color-surface)] py-5 text-center text-sm text-[var(--color-text-secondary)]"
         >
           Yükleniyor...
         </div>
@@ -253,26 +255,26 @@ onMounted(() => {
         <!-- Workspace var -->
         <div v-else-if="workspace" class="flex flex-col gap-3">
           <div class="flex items-center justify-between">
-            <div class="flex flex-col gap-0.5">
-              <span class="font-bold text-[var(--color-text-primary)]">{{
+            <div class="flex min-w-0 flex-col gap-0.5">
+              <span class="truncate text-sm font-extrabold text-[var(--color-text-primary)]">{{
                 workspace.name
               }}</span>
-              <span class="text-xs text-green-500">Aktif</span>
+              <span class="text-xs font-medium text-emerald-600 dark:text-emerald-400">Aktif</span>
             </div>
           </div>
           <button
             @click="leaveWorkspace"
             :disabled="leaveLoading"
-            class="w-full py-3 rounded-2xl border border-red-500 text-red-500 font-bold text-sm transition active:scale-95 disabled:opacity-40"
+            class="w-full rounded-2xl border border-rose-300 px-4 py-3 text-sm font-bold text-rose-600 transition hover:bg-rose-500/5 active:scale-[0.99] disabled:opacity-40 dark:border-rose-800 dark:text-rose-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
           >
-            {{ leaveLoading ? "Ayrılıyor..." : "Guruptan Ayrıl" }}
+            {{ leaveLoading ? "Ayrılıyor..." : "Gruptan ayrıl" }}
           </button>
         </div>
 
         <!-- Workspace yok -->
         <div v-else class="flex flex-col gap-3">
-          <p class="text-xs text-[var(--color-text-secondary)]">
-            Henüz bir çalışma gurubuna dahil değilsiniz. Davet kodu ile
+          <p class="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+            Henüz bir çalışma grubuna dahil değilsiniz. Davet kodu ile
             katılabilirsiniz.
           </p>
           <div class="flex gap-2">
@@ -280,12 +282,12 @@ onMounted(() => {
               v-model="inviteCode"
               type="text"
               placeholder="Davet kodu"
-              class="flex-1 px-3 py-2 rounded-xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none uppercase"
+              class="min-w-0 flex-1 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-3 text-sm text-[var(--color-text-primary)] uppercase outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
             />
             <button
               @click="joinWorkspace"
               :disabled="!inviteCode || joinLoading"
-              class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-bold disabled:opacity-40"
+              class="shrink-0 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
               {{ joinLoading ? "..." : "Katıl" }}
             </button>
@@ -293,18 +295,18 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Telegram Bildirimi -->
+      <!-- Telegram bildirimi -->
       <div
-        class="bg-[var(--color-card)] rounded-2xl border border-[var(--color-border)] p-5 flex flex-col gap-4"
+        class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6 flex flex-col gap-4"
       >
         <h2
-          class="text-sm font-black tracking-widest uppercase text-[var(--color-text-muted)]"
+          class="text-base font-black tracking-tight"
         >
-          Telegram Bildirimi
+          Telegram bildirimi
         </h2>
         <div v-if="!telegramLoadingDiv">
           <div v-if="!telegramSaved" class="flex flex-col gap-3">
-            <p class="text-xs text-[var(--color-text-secondary)]">
+            <p class="text-xs leading-relaxed text-[var(--color-text-secondary)]">
               @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
               gir.
             </p>
@@ -312,24 +314,24 @@ onMounted(() => {
               v-model="chatId"
               type="number"
               placeholder="Chat ID (örn: 1234567890)"
-              class="px-4 py-3 rounded-2xl bg-indigo-50 dark:bg-slate-800 text-[var(--color-text-primary)] border border-[var(--color-border)] text-sm focus:outline-none no-spinner"
+              class="no-spinner min-w-0 w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
             />
             <button
               @click="saveTelegram"
               :disabled="!chatId || telegramLoadingButton"
-              class="w-full py-3 rounded-2xl bg-indigo-700 text-white font-bold transition active:scale-95 disabled:opacity-40"
+              class="w-full rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
               {{ telegramLoadingButton ? "Kaydediliyor..." : "Kaydet" }}
             </button>
           </div>
 
-          <div v-else class="flex items-center justify-between">
-            <span class="text-sm text-green-500 font-medium"
+          <div v-else class="flex items-center justify-between gap-3">
+            <span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400"
               >✓ Telegram bağlı</span
             >
             <button
               @click="removeTelegram(user?.id)"
-              class="text-xs text-[var(--color-text-muted)] underline"
+              class="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] underline underline-offset-4 transition hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
               Bağlantıyı kes
             </button>
@@ -337,7 +339,7 @@ onMounted(() => {
         </div>
         <div
           v-else
-          class="text-center py-4 text-[var(--color-text-muted)] text-sm"
+          class="rounded-2xl bg-[var(--color-surface)] py-5 text-center text-sm text-[var(--color-text-secondary)]"
         >
           Yükleniyor...
         </div>

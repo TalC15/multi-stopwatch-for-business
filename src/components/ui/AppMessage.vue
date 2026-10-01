@@ -1,4 +1,3 @@
-```vue
 <template>
   <div class="fixed top-5 left-1/2 -translate-x-1/2 z-9999">
     <TransitionGroup name="message" tag="div" class="flex flex-col gap-2">
@@ -12,6 +11,8 @@
           'bg-[#D14F5F] border-red-200': message.type === 'error',
 
           'bg-amber-500 border-amber-200': message.type === 'warning',
+
+          'bg-sky-600 border-sky-400': message.type === 'loading',
         }"
       >
         <!-- SUCCESS -->
@@ -58,6 +59,21 @@
           />
           <path d="M12 9V13" />
           <circle cx="12" cy="16.5" r="0.7" fill="currentColor" stroke="none" />
+        </svg>
+
+        <svg
+          v-else-if="message.type === 'loading'"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          class="w-5 h-5 text-white shrink-0 animate-spin"
+          role="status"
+          aria-label="Yükleniyor"
+        >
+          <circle cx="12" cy="12" r="9" opacity="0.25" />
+          <path d="M12 3a9 9 0 0 1 9 9" stroke-linecap="round" />
         </svg>
 
         <span>

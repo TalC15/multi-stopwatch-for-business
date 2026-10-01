@@ -4,7 +4,12 @@ import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
 import { message } from "../composables/message";
-import { saveTelegramChatId,telegramControl,getUser,cancelTelegramChatId } from "@/services/backendSync";
+import {
+  saveTelegramChatId,
+  telegramControl,
+  getUser,
+  cancelTelegramChatId,
+} from "@/services/backendSync";
 import telegramStep1 from "@/assets/telegram/telegram-step-1.png";
 import telegramStep2 from "@/assets/telegram/telegram-step-2.png";
 import telegramStep3 from "@/assets/telegram/telegram-step-3.png";
@@ -14,7 +19,7 @@ import telegramStep5 from "@/assets/telegram/telegram-step-5.png";
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
 const router = useRouter();
-const user = getUser()
+const user = getUser();
 const stopwatchStore = useStopwatchStore();
 const presetTime = ref("");
 const presetName = ref("");
@@ -57,19 +62,19 @@ const telegramSteps = [
   },
 ];
 
-async function telegramSavedControl() {
+const telegramSavedControl = message.withLoading("Telegram bağlantısı kontrol ediliyor...", async () => {
   telegramLoadingDiv.value = true;
   const res = await telegramControl(user?.id);
   telegramLoadingDiv.value = false;
   telegramSaved.value = res.connected;
-}
+});
 
 onMounted(() => {
   telegramSteps.forEach((step) => {
     const img = new Image();
     img.src = step.image;
   });
-  telegramSavedControl()
+  telegramSavedControl();
 });
 
 function openTelegramHelp() {
@@ -93,7 +98,7 @@ function previousTelegramStep() {
   }
 }
 
-async function saveTelegram() {
+const saveTelegram = message.withLoading("Telegram bağlanıyor...", async () => {
   if (!chatId.value) return;
   telegramLoadingButton.value = true;
 
@@ -108,9 +113,9 @@ async function saveTelegram() {
   }
 
   telegramLoadingButton.value = false;
-}
+});
 
-async function removeTelegram(user_id) {
+const removeTelegram = message.withLoading("Telegram bağlantısı kesiliyor...", async (user_id) => {
   if (!user_id) return;
   const result = await cancelTelegramChatId(user_id);
   console.log(result);
@@ -122,7 +127,7 @@ async function removeTelegram(user_id) {
   } else {
     message.error("Telegram bağlantısı kesilemedi");
   }
-}
+});
 
 function defaultSettings(preset) {
   if (typeof preset === "number") {
@@ -140,10 +145,12 @@ function defaultSettings(preset) {
 }
 
 function addPresetTime() {
-  if(!presetTime.value||String(presetTime.value).trim()==='') return message.warning('bir süre belirtmediniz')
-  if(presetTime.value>1440) return message.warning("çok uzun süre(en fazla 1440)")
-  if(presetTime.value<0) return message.warning("süre negatif olamaz")
-  if (!/^\d+$/.test(presetTime.value)) return message.warning("geçersiz süre")
+  if (!presetTime.value || String(presetTime.value).trim() === "")
+    return message.warning("bir süre belirtmediniz");
+  if (presetTime.value > 1440)
+    return message.warning("çok uzun süre(en fazla 1440)");
+  if (presetTime.value < 0) return message.warning("süre negatif olamaz");
+  if (!/^\d+$/.test(presetTime.value)) return message.warning("geçersiz süre");
   const isPresetTimes = store?.presetTimes.map((a) => a);
   if (isPresetTimes?.includes(presetTime.value))
     return message.warning("Bu zaman etiketi zaten mevcut");
@@ -157,8 +164,9 @@ function addPresetTime() {
 }
 
 function addPresetName() {
-  if(!presetName.value || presetName.value.trim()==='') return message.warning('bir isim koymadınız')
-  if(presetName.value.length>35) return message.warning('çok uzun isim')
+  if (!presetName.value || presetName.value.trim() === "")
+    return message.warning("bir isim koymadınız");
+  if (presetName.value.length > 35) return message.warning("çok uzun isim");
   const isPresetNames = store?.presetNames.map((a) => a);
   if (isPresetNames?.includes(presetName.value))
     return message.warning("Bu isim etiketi zaten mevcut");
@@ -195,18 +203,22 @@ function removePresetName(bIndex) {
 </script>
 
 <template>
-  <div class="min-h-screen bg-surface">
+  <div
+    class="min-h-screen bg-[var(--color-surface)] text-[var(--color-text-primary)]"
+  >
     <!-- Navbar -->
     <nav
-      class="h-14 bg-card border-b border-border px-4 flex items-center justify-between sticky top-0 z-30"
+      class="sticky top-0 z-30 grid h-16 w-full grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 backdrop-blur-xl sm:px-6"
     >
       <button
+        type="button"
+        aria-label="Ana sayfaya dön"
         @click="router.push('/')"
-        class="w-9 h-9 flex items-center justify-center text-primary-light active:scale-90 transition-transform"
+        class="grid size-10 shrink-0 justify-self-start place-items-center rounded-2xl border border-[var(--color-border)] text-[var(--color-text-primary)] transition hover:bg-[var(--color-surface)] active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
       >
         <svg
-          width="22"
-          height="22"
+          class="size-5"
+          aria-hidden="true"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -217,26 +229,33 @@ function removePresetName(bIndex) {
           <path d="M19 12H5M12 5l-7 7 7 7" />
         </svg>
       </button>
-      <h1 class="text-lg font-black text-primary-light">Ayarlar</h1>
-      <div class="w-9"></div>
+      <div class="min-w-0 text-center">
+        <p
+          class="text-[10px] font-black tracking-[0.26em] text-indigo-500 uppercase"
+        >
+          KeepTimer
+        </p>
+
+        <h1 class="text-sm font-extrabold tracking-tight sm:text-base">
+          Ayarlar
+        </h1>
+      </div>
+      <div class="size-10" aria-hidden="true"></div>
     </nav>
 
     <!-- Content -->
-    <main class="max-w-md mx-auto px-4 pt-6 pb-12">
+    <main class="mx-auto max-w-md px-4 pt-6 pb-12 sm:px-6">
       <!-- Section -->
-      <div class="mb-2 ml-1">
-        <span
-          class="text-xs font-black tracking-widest uppercase text-text-muted"
-          >Özelleştirme</span
-        >
+      <div class="mb-3 ml-1">
+        <span class="text-base font-black tracking-tight">Özelleştirme</span>
       </div>
       <div
-        class="bg-card rounded-2xl border border-border overflow-hidden mb-6"
+        class="mb-5 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm"
       >
-        <div class="flex items-center justify-between px-4 py-4">
+        <div class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <div class="flex items-center gap-3">
             <div
-              class="w-8 h-8 rounded-lg bg-primary-bg flex items-center justify-center"
+              class="grid size-10 shrink-0 place-items-center rounded-2xl bg-indigo-500/10"
             >
               <svg
                 width="16"
@@ -247,36 +266,60 @@ function removePresetName(bIndex) {
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                class="text-primary-light"
+                class="text-indigo-500"
               >
                 <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
               </svg>
             </div>
-            <span class="font-medium text-text-primary">Koyu Tema</span>
+            <span class="text-sm font-bold text-[var(--color-text-primary)]"
+              >Koyu tema</span
+            >
           </div>
           <button
+            type="button"
+            role="switch"
+            aria-label="Koyu tema"
+            :aria-checked="themeStore.isDark"
             @click="themeStore.toggleTheme()"
             :class="[
-              'w-12 h-7 rounded-full relative transition-colors duration-300',
-              themeStore.isDark ? 'bg-primary-light' : 'bg-border',
+              'relative h-8 w-14 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500',
+              themeStore.isDark
+                ? 'bg-indigo-600'
+                : 'bg-slate-300 dark:bg-slate-600',
             ]"
           >
             <div
               :class="[
-                'absolute top-0.5 w-6 h-6 bg-card rounded-full shadow transition-transform duration-300',
-                themeStore.isDark
-                  ? 'translate-x-5 left-0.5'
-                  : 'translate-x-0 left-0.5',
+                'absolute top-1 left-1 size-6 rounded-full bg-white shadow-sm transition-transform duration-200',
+                themeStore.isDark ? 'translate-x-6' : 'translate-x-0',
               ]"
             ></div>
           </button>
         </div>
       </div>
 
-      <!--time tags-->
-      <div class="relative w-full flex item-center">
+      <!-- Zaman etiketleri -->
+      <div class="mb-3 flex flex-wrap items-start justify-between gap-2 px-1">
+        <span class="text-sm font-bold">Zaman etiketleri</span>
+        <div
+          class="inline-flex max-w-full items-center gap-1.5 rounded-lg bg-indigo-500/5 px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)]"
+          role="status"
+        >
+          <span>Varsayılan:</span>
+          <span
+            class="font-semibold tabular-nums text-indigo-600 dark:text-indigo-300"
+          >
+            {{
+              stopwatchStore.duration != null && stopwatchStore.duration !== ""
+                ? `${stopwatchStore.duration} dk`
+                : "Belirlenmemiş"
+            }}
+          </span>
+        </div>
+      </div>
+      <div class="relative flex w-full items-center gap-2">
         <svg
-          class="absolute left-4 top-1/2 -translate-y-1/2 z-10"
+          class="pointer-events-none absolute top-1/2 left-4 z-10 -translate-y-1/2 text-indigo-500"
           width="23"
           height="23"
           viewBox="0 0 24 24"
@@ -285,7 +328,7 @@ function removePresetName(bIndex) {
         >
           <path
             d="M8 9H6.2C5.0799 9 4.51984 9 4.09202 9.218C3.71569 9.40973 3.40973 9.71569 3.21799 10.092C3 10.5198 3 11.0799 3 12.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21H17.787C18.9071 21 19.4671 21 19.895 20.782C20.2713 20.5903 20.5772 20.2843 20.769 19.908C20.987 19.4802 20.987 18.9201 20.987 17.8V12M6 15H6.01M10 15H10.01M11.5189 12.8945L12.8337 12.6347C13.5432 12.4945 13.8979 12.4244 14.2287 12.2953C14.5223 12.1807 14.8013 12.0318 15.06 11.8516C15.3514 11.6487 15.607 11.393 16.1184 10.8816L21.2668 5.73321C21.9541 5.04596 21.9541 3.9317 21.2668 3.24444C20.5796 2.55719 19.4653 2.55719 18.7781 3.24445L13.5416 8.48088C13.0625 8.96004 12.8229 9.19963 12.6294 9.47121C12.4576 9.71232 12.3131 9.97174 12.1986 10.2447C12.0696 10.5522 11.9921 10.8821 11.837 11.5417L11.5189 12.8945Z"
-            stroke="#4F46E5"
+            stroke="currentColor"
             stroke-width="1.776"
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -296,45 +339,69 @@ function removePresetName(bIndex) {
           v-model="presetTime"
           type="number"
           placeholder="Zaman etiketi oluşturun"
-          :class="[
-            'no-spinner w-full rounded-2xl border  bg-white/10 h-12 pl-12 pr-4  backdrop-blur-md outline-none transition-all duration-300 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/20',
-            themeStore.isDark
-              ? 'placeholder:text-white/60 text-white border-white/20'
-              : 'placeholder:text-[#0F172A] text-[#0F172A] border-[#0F172A]',
-          ]"
+          aria-label="Zaman etiketi (dakika)"
+          class="no-spinner h-12 min-w-0 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] pr-4 pl-12 text-sm text-[var(--color-text-primary)] outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
         />
         <button
-          class="ml-3 w-15 h-12 text-2xl leading-none bg-indigo-700 text-white rounded-2xl fab-shadow hover:bg-indigo-800"
+          class="grid size-12 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-2xl leading-none text-white transition hover:bg-indigo-700 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+          type="button"
+          aria-label="Zaman etiketi ekle"
           @click="addPresetTime"
         >
-          <span class="relative top-1px">+</span>
+          <span aria-hidden="true">+</span>
         </button>
       </div>
 
-      <div class="relative isolate mb-3">
-        <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
+      <div class="relative isolate mt-3 mb-5">
+        <div
+          class="custom-scroll flex gap-2 overflow-x-auto pb-2 whitespace-nowrap"
+        >
           <span
             v-for="(presetTime, index) in stopwatchStore.presetTimes"
             :key="index"
-            class="w-20% mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
+            class="inline-flex shrink-0 items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-semibold transition hover:border-indigo-500/30 hover:bg-indigo-500/5"
+            :class="
+              presetTime === stopwatchStore.duration
+                ? 'border-indigo-500/30! bg-indigo-500/10! text-indigo-600 dark:text-indigo-300'
+                : ''
+            "
           >
-            <span @click="defaultSettings(presetTime)">
+            <span
+              @click="defaultSettings(presetTime)"
+              class="cursor-pointer px-3 py-2.5"
+            >
               {{ presetTime }}
             </span>
             <button
+              type="button"
+              :aria-label="`${presetTime} dakikalık etiketi sil`"
               @click="removePresetTime(index)"
-              class="w-7 ml-3 text-xl leading-none -translate-y-0.5"
+              class="mr-1 grid size-8 shrink-0 place-items-center rounded-lg text-xl leading-none text-[var(--color-text-muted)] transition hover:bg-rose-500/10 hover:text-rose-600 focus-visible:outline-2 focus-visible:outline-indigo-500 dark:hover:text-rose-400"
             >
-              &times
+              &times;
             </button>
           </span>
         </div>
       </div>
 
-      <!--name tags-->
-      <div class="relative w-full flex item-center">
+      <!-- İsim etiketleri -->
+      <div class="mb-3 flex flex-wrap items-start justify-between gap-2 px-1">
+        <span class="text-sm font-bold">İsim etiketleri</span>
+        <div
+          class="inline-flex min-w-0 max-w-full items-baseline gap-1.5 rounded-lg bg-indigo-500/5 px-2.5 py-1 text-[11px] text-[var(--color-text-secondary)]"
+          role="status"
+        >
+          <span class="shrink-0">Varsayılan:</span>
+          <span
+            class="min-w-0 font-semibold text-indigo-600 [overflow-wrap:anywhere] dark:text-indigo-300"
+          >
+            {{ stopwatchStore.name || "Belirlenmemiş" }}
+          </span>
+        </div>
+      </div>
+      <div class="relative flex w-full items-center gap-2">
         <svg
-          class="absolute left-4 top-1/2 -translate-y-1/2 z-10"
+          class="pointer-events-none absolute top-1/2 left-4 z-10 -translate-y-1/2 text-indigo-500"
           width="23"
           height="23"
           viewBox="0 0 24 24"
@@ -343,7 +410,7 @@ function removePresetName(bIndex) {
         >
           <path
             d="M8 9H6.2C5.0799 9 4.51984 9 4.09202 9.218C3.71569 9.40973 3.40973 9.71569 3.21799 10.092C3 10.5198 3 11.0799 3 12.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21H17.787C18.9071 21 19.4671 21 19.895 20.782C20.2713 20.5903 20.5772 20.2843 20.769 19.908C20.987 19.4802 20.987 18.9201 20.987 17.8V12M6 15H6.01M10 15H10.01M11.5189 12.8945L12.8337 12.6347C13.5432 12.4945 13.8979 12.4244 14.2287 12.2953C14.5223 12.1807 14.8013 12.0318 15.06 11.8516C15.3514 11.6487 15.607 11.393 16.1184 10.8816L21.2668 5.73321C21.9541 5.04596 21.9541 3.9317 21.2668 3.24444C20.5796 2.55719 19.4653 2.55719 18.7781 3.24445L13.5416 8.48088C13.0625 8.96004 12.8229 9.19963 12.6294 9.47121C12.4576 9.71232 12.3131 9.97174 12.1986 10.2447C12.0696 10.5522 11.9921 10.8821 11.837 11.5417L11.5189 12.8945Z"
-            stroke="#4F46E5"
+            stroke="currentColor"
             stroke-width="1.776"
             stroke-linecap="round"
             stroke-linejoin="round"
@@ -354,39 +421,49 @@ function removePresetName(bIndex) {
           v-model="presetName"
           type="text"
           placeholder="İsim etiketi oluşturun"
+          aria-label="İsim etiketi"
           maxlength="35"
-          :class="[
-            'no-spinner w-full rounded-2xl border  bg-white/10 h-12 pl-12 pr-4  backdrop-blur-md outline-none transition-all duration-300 focus:border-cyan-400 focus:ring-4 focus:ring-cyan-400/20',
-            themeStore.isDark
-              ? 'placeholder:text-white/60 text-white border-white/20'
-              : 'placeholder:text-[#0F172A] text-[#0F172A] border-[#0F172A]',
-          ]"
+          class="no-spinner h-12 min-w-0 flex-1 rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] pr-4 pl-12 text-sm text-[var(--color-text-primary)] outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
         />
         <button
-          class="ml-3 w-15 h-12 text-2xl leading-none bg-indigo-700 text-white rounded-2xl fab-shadow hover:bg-indigo-800"
+          class="grid size-12 shrink-0 place-items-center rounded-2xl bg-indigo-600 text-2xl leading-none text-white transition hover:bg-indigo-700 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+          type="button"
+          aria-label="İsim etiketi ekle"
           @click="addPresetName"
         >
-          <span class="relative top-1px">+</span>
+          <span aria-hidden="true">+</span>
         </button>
       </div>
 
-      <div class="relative isolate mb-3">
-        <div class="flex gap-3 overflow-x-auto whitespace-nowrap custom-scroll">
+      <div class="relative isolate mt-3 mb-5">
+        <div
+          class="custom-scroll flex gap-2 overflow-x-auto pb-2 whitespace-nowrap"
+        >
           <div
             v-for="(presetName, index) in stopwatchStore.presetNames"
             :key="index"
             class="relative shrink-0"
           >
             <span
-              class="cursor-pointer mt-3 px-2 py-2 flex items-center justify-center rounded-2xl border border-[#4F46E5] shadow-sm text-sm font-medium hover:bg-[#4F46E5]/10 transition"
+              class="inline-flex items-center rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] text-sm font-semibold transition hover:border-indigo-500/30 hover:bg-indigo-500/5"
+              :class="
+                presetName === stopwatchStore.name
+                  ? 'border-indigo-500/30! bg-indigo-500/10! text-indigo-600 dark:text-indigo-300'
+                  : ''
+              "
             >
-              <span @click="defaultSettings(presetName)">
+              <span
+                @click="defaultSettings(presetName)"
+                class="cursor-pointer px-3 py-2.5"
+              >
                 {{ presetName }}
               </span>
 
               <button
+                type="button"
+                :aria-label="`${presetName} isim etiketini sil`"
                 @click.stop="removePresetName(index)"
-                class="w-5 ml-3 text-xl leading-none -translate-y-0.5"
+                class="mr-1 grid size-8 shrink-0 place-items-center rounded-lg text-xl leading-none text-[var(--color-text-muted)] transition hover:bg-rose-500/10 hover:text-rose-600 focus-visible:outline-2 focus-visible:outline-indigo-500 dark:hover:text-rose-400"
               >
                 &times;
               </button>
@@ -396,117 +473,130 @@ function removePresetName(bIndex) {
       </div>
 
       <!-- Telegram Bildirimi -->
-     <div v-if="!telegramLoadingDiv">
+      <div v-if="!telegramLoadingDiv">
         <div
-        class="bg-card rounded-2xl border border-border overflow-hidden mb-6"
-      >
-        <!-- Header -->
-        <div class="flex items-center justify-between px-4 py-4">
-          <!-- Sol taraf -->
-          <div class="flex items-center gap-3 min-w-0">
-            <div
-              class="w-8 h-8 shrink-0 rounded-lg bg-primary-bg flex items-center justify-center"
+          class="mb-5 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm"
+        >
+          <!-- Header -->
+          <div
+            class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6"
+          >
+            <!-- Sol taraf -->
+            <div class="flex items-center gap-3 min-w-0">
+              <div
+                class="grid size-10 shrink-0 place-items-center rounded-2xl bg-indigo-500/10"
+              >
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.8"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  class="text-indigo-500"
+                >
+                  <path d="M22 2L11 13" />
+                  <path d="M22 2L15 22 11 13 2 9l20-7z" />
+                </svg>
+              </div>
+
+              <span class="text-sm font-bold text-[var(--color-text-primary)]">
+                Telegram Bildirimi
+              </span>
+            </div>
+
+            <!-- Bilgi butonu -->
+            <button
+              type="button"
+              @click="openTelegramHelp"
+              class="grid size-9 shrink-0 place-items-center rounded-xl border border-[var(--color-border)] text-indigo-500 transition hover:bg-indigo-500/10 active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+              aria-label="Telegram bağlantısı hakkında bilgi"
             >
               <svg
-                width="16"
-                height="16"
+                width="18"
+                height="18"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.8"
+                stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                class="text-primary-light"
               >
-                <path d="M22 2L11 13" />
-                <path d="M22 2L15 22 11 13 2 9l20-7z" />
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 10v6" />
+                <path d="M12 7h.01" />
               </svg>
-            </div>
-
-            <span class="font-medium text-text-primary">
-              Telegram Bildirimi
-            </span>
+            </button>
           </div>
 
-          <!-- Bilgi butonu -->
-          <button
-            type="button"
-            @click="openTelegramHelp"
-            class="shrink-0 w-9 h-9 ml-3 rounded-full flex items-center justify-center cursor-pointer text-[#4F46E5] border border-[#432DD7] hover:bg-[#3624b5] active:scale-95 transition-all duration-200"
-            aria-label="Telegram bağlantısı hakkında bilgi"
+          <!-- Telegram bağlı değilse -->
+          <div
+            v-if="!telegramSaved"
+            class="flex flex-col gap-3 px-5 pb-5 sm:px-6"
           >
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+            <p
+              class="text-xs leading-relaxed text-[var(--color-text-secondary)]"
             >
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 10v6" />
-              <path d="M12 7h.01" />
-            </svg>
-          </button>
-        </div>
+              @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
+              gir.
+            </p>
 
-        <!-- Telegram bağlı değilse -->
-        <div v-if="!telegramSaved" class="px-4 pb-4 flex flex-col gap-2">
-          <p class="text-xs text-text-secondary">
-            @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
-            gir.
-          </p>
+            <input
+              v-model="chatId"
+              type="number"
+              placeholder="Chat ID (örn: 1234567890)"
+              class="no-spinner min-w-0 w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
+            />
 
-          <input
-            v-model="chatId"
-            type="number"
-            placeholder="Chat ID (örn: 1234567890)"
-            class="px-3 py-2 rounded-xl bg-surface text-text-primary border border-border text-sm focus:outline-none focus:border-primary no-spinner"
-          />
+            <button
+              @click="saveTelegram"
+              :disabled="!chatId || telegramLoadingButton"
+              class="rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+            >
+              {{ telegramLoadingButton ? "Kaydediliyor..." : "Kaydet" }}
+            </button>
+          </div>
 
-          <button
-            @click="saveTelegram"
-            :disabled="!chatId || telegramLoadingButton"
-            class="px-4 py-2 rounded-xl bg-indigo-700 text-white text-sm font-medium transition active:scale-95 disabled:opacity-40"
+          <!-- Telegram bağlıysa -->
+          <div
+            v-else
+            class="flex items-center justify-between gap-3 px-5 pb-5 sm:px-6"
           >
-            {{ telegramLoadingButton ? "Kaydediliyor..." : "Kaydet" }}
-          </button>
-        </div>
+            <span
+              class="text-xs font-semibold text-emerald-600 dark:text-emerald-400"
+            >
+              ✓ Telegram bağlı
+            </span>
 
-        <!-- Telegram bağlıysa -->
-        <div v-else class="px-4 pb-4 flex items-center justify-between">
-          <span class="text-xs text-green-500 font-medium">
-            ✓ Telegram bağlı
-          </span>
-
-          <button
-            @click="removeTelegram(user?.id)"
-            class="text-xs text-text-muted underline"
-          >
-            Bağlantıyı kes
-          </button>
+            <button
+              @click="removeTelegram(user?.id)"
+              class="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] underline underline-offset-4 transition hover:bg-[var(--color-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+            >
+              Bağlantıyı kes
+            </button>
+          </div>
         </div>
       </div>
-     </div>  
-     <div v-else class="text-center py-4 text-[var(--color-text-muted)] text-sm">
+      <div
+        v-else
+        class="mb-5 rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] py-5 text-center text-sm text-[var(--color-text-secondary)]"
+      >
         Yükleniyor...
-     </div>
-      
+      </div>
 
       <!-- About Section -->
-      <div class="mb-2 ml-1">
-        <span
-          class="text-xs font-black tracking-widest uppercase text-text-muted"
-          >Hakkında</span
-        >
+      <div class="mb-3 ml-1">
+        <span class="text-base font-black tracking-tight">Hakkında</span>
       </div>
-      <div class="bg-card rounded-2xl border border-border overflow-hidden">
-        <div class="flex items-center justify-between px-4 py-4">
+      <div
+        class="overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm"
+      >
+        <div class="flex items-center justify-between gap-3 px-5 py-4 sm:px-6">
           <div class="flex items-center gap-3">
             <div
-              class="w-8 h-8 rounded-lg bg-primary-bg flex items-center justify-center"
+              class="grid size-10 shrink-0 place-items-center rounded-2xl bg-indigo-500/10"
             >
               <svg
                 width="16"
@@ -517,15 +607,27 @@ function removePresetName(bIndex) {
                 stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
-                class="text-primary-light"
+                class="text-indigo-500"
               >
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4M12 8h.01" />
               </svg>
             </div>
-            <span class="font-medium text-text-primary">Versiyon</span>
+            <span class="text-sm font-bold text-[var(--color-text-primary)]"
+              >Versiyon</span
+            >
           </div>
-          <span class="text-sm text-text-muted">1.0.0</span>
+          <span
+            class="rounded-lg bg-[var(--color-surface)] px-2.5 py-1 text-xs font-semibold text-[var(--color-text-secondary)] tabular-nums"
+            >1.0.0</span
+          >
+        </div>
+        <!-- Uygulama hakkında: açıklama metnini bu div içine ekleyebilirsin. -->
+        <div
+          id="app-about-content"
+          class="mx-5 mb-5 min-h-28 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm leading-relaxed text-[var(--color-text-secondary)] [overflow-wrap:anywhere] sm:mx-6 [&_p+p]:mt-3"
+        >
+          <!-- Uygulama hakkında yazını buraya ekle. -->
         </div>
       </div>
     </main>
@@ -565,7 +667,7 @@ function removePresetName(bIndex) {
 
             <button
               @click="closeTelegramHelp"
-              class="w-9 h-9 rounded-full flex items-center justify-center text-[var(--color-text-secondary)] hover:bg-black/5 dark:hover:bg-white/5 active:scale-90 transition-all"
+              class="grid size-9 shrink-0 place-items-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface)] active:scale-95 focus-visible:outline-2 focus-visible:outline-indigo-500"
               aria-label="Kapat"
             >
               <svg
@@ -595,7 +697,9 @@ function removePresetName(bIndex) {
                 <div
                   class="h-full rounded-full transition-all duration-300"
                   :class="
-                    index <= currentTelegramStep ? 'bg-[#4F46E5] w-full' : 'w-0'
+                    index <= currentTelegramStep
+                      ? 'bg-indigo-600 w-full'
+                      : 'w-0'
                   "
                 ></div>
               </div>
@@ -608,7 +712,9 @@ function removePresetName(bIndex) {
                 Adım {{ currentTelegramStep + 1 }} / {{ telegramSteps.length }}
               </span>
 
-              <span class="text-xs font-medium text-[#4F46E5]">
+              <span
+                class="text-xs font-medium text-indigo-600 dark:text-indigo-300"
+              >
                 {{ telegramSteps[currentTelegramStep].title }}
               </span>
             </div>
@@ -633,7 +739,7 @@ function removePresetName(bIndex) {
             <div class="mt-4">
               <div class="flex items-start gap-3">
                 <div
-                  class="shrink-0 w-9 h-9 rounded-xl bg-[#4F46E5] text-white flex items-center justify-center text-sm font-bold"
+                  class="shrink-0 w-9 h-9 rounded-xl bg-indigo-600 text-white flex items-center justify-center text-sm font-bold"
                 >
                   {{ currentTelegramStep + 1 }}
                 </div>
@@ -663,7 +769,7 @@ function removePresetName(bIndex) {
                 class="transition-all duration-300 rounded-full"
                 :class="
                   index === currentTelegramStep
-                    ? 'w-6 h-2 bg-[#4F46E5]'
+                    ? 'w-6 h-2 bg-indigo-600'
                     : 'w-2 h-2 bg-[var(--color-border)]'
                 "
                 :aria-label="`Adım ${index + 1}`"
@@ -678,7 +784,7 @@ function removePresetName(bIndex) {
             <button
               @click="previousTelegramStep"
               :disabled="currentTelegramStep === 0"
-              class="flex-1 h-11 rounded-xl border border-[var(--color-border)] text-sm font-semibold text-[var(--color-text-primary)] transition-all active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none hover:bg-black/5 dark:hover:bg-white/5"
+              class="flex-1 h-11 rounded-xl border border-[var(--color-border)] text-sm font-semibold text-[var(--color-text-primary)] transition-all active:scale-[0.98] disabled:opacity-30 disabled:pointer-events-none hover:bg-[var(--color-surface)]"
             >
               Geri
             </button>
@@ -686,7 +792,7 @@ function removePresetName(bIndex) {
             <button
               v-if="currentTelegramStep < telegramSteps.length - 1"
               @click="nextTelegramStep"
-              class="flex-1 h-11 rounded-xl bg-[#4F46E5] text-white text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98] hover:bg-[#4338CA]"
+              class="flex-1 h-11 rounded-xl bg-indigo-600 text-white text-sm font-semibold shadow-sm transition-all active:scale-[0.98] hover:bg-indigo-700"
             >
               Sonraki
             </button>
@@ -694,7 +800,7 @@ function removePresetName(bIndex) {
             <button
               v-else
               @click="closeTelegramHelp"
-              class="flex-1 h-11 rounded-xl bg-[#4F46E5] text-white text-sm font-semibold shadow-lg shadow-indigo-500/20 transition-all active:scale-[0.98] hover:bg-[#4338CA]"
+              class="flex-1 h-11 rounded-xl bg-indigo-600 text-white text-sm font-semibold shadow-sm transition-all active:scale-[0.98] hover:bg-indigo-700"
             >
               Tamam
             </button>
