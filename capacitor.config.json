@@ -4,5 +4,11 @@
   "webDir": "dist",
   "android": {
     "minWebViewVersion": 107
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_keeptimer",
+      "iconColor": "#818CF8"
+    }
   }
 }

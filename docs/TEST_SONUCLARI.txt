@@ -1,0 +1,29 @@
+Bu dosya ilk patch doğrulamasıdır. İkinci patch: 297/297 test başarılı; SES_AYARLARI_EK_PATCH.md.
+
+KeepTimer doğrulama — 1 Ekim 2026
+
+Node: v24.19.0
+Test komutu: npm test
+Toplam: 283 | Başarılı: 283 | Başarısız: 0 | Atlanan: 0
+Orijinal testler: 258 | Ek regresyon testleri: 25
+
+Production Vite/Workbox derlemesi: BAŞARILI
+PWA precache: 35 kayıt; radar/dijital MP3, logo ve tıklama betiği dahil.
+Ortamın boş CPU listesi için yalnızca derleme sürecinde tek CPU bilgisi sağlandı.
+Proje bağımlılıkları yamalanmadı; ayrıntı: BILDIRIM_SES_IYILESTIRMELERI.md.
+
+Android hazırlık betiği (tekrarlı çalışma): BAŞARILI
+Capacitor 8.4.0 Android add/sync: BAŞARILI
+Local Notifications: kilit dosyasındaki 8.2.0
+Android logo/ses kaynakları birebir dosya karşılaştırması: BAŞARILI
+Manifest izinleri (tekrarsız) ve vektör XML: BAŞARILI
+Gönderilen logo ile bildirime eklenen PNG birebir karşılaştırma: BAŞARILI
+
+YAPILMAYANLAR:
+- Gerçek Android cihaz/emülatör, APK derleme/imzalama ve ses dinleme testi.
+- Chromium indirilemediği için etkileşimli tarayıcı/görsel E2E testi.
+
+Test kapsamı: 5 tur sıra, tekrar olay, konuşma hatası/zaman aşımı, anlık iptal,
+susturma, ses listesi yarışı, ID/deadline hesapları, plan güncelleme/iptali,
+yeniden açılış, kesin izin değişimi, bildirime dokunma, PWA SW/masaüstü adapteri,
+iznin reddedilmesi, asenkron iptal ve iki yerel sekmede süre dolumu yarışı.

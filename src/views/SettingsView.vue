@@ -1,4 +1,6 @@
 <script setup>
+import SoundSettings from "../components/SoundSettings.vue";
+import NotificationSettings from "../components/NotificationSettings.vue";
 import { ref, onMounted, onUnmounted } from "vue";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
@@ -245,6 +247,7 @@ function removePresetName(bIndex) {
 
     <!-- Content -->
     <main class="mx-auto max-w-md px-4 pt-6 pb-12 sm:px-6">
+      <NotificationSettings />
       <!-- Section -->
       <div class="mb-3 ml-1">
         <span class="text-base font-black tracking-tight">Özelleştirme</span>
@@ -585,6 +588,8 @@ function removePresetName(bIndex) {
       >
         Yükleniyor...
       </div>
+
+      <SoundSettings />
 
       <!-- About Section -->
       <div class="mb-3 ml-1">

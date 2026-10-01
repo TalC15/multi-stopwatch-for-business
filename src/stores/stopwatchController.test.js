@@ -1323,3 +1323,33 @@ test("confirmed shared POST cannot be erased by an older GET if follow-up GET fa
     true,
   );
 });
+
+for (const type of ['up', 'down']) {
+  test(`two local tabs crossing a ${type} deadline emit only one alarm`, async () => {
+    auth.state.user.workspace_id = null;
+    const a = makeController();
+    await a.initialize();
+    const id = await a.addTimer(input({ type }));
+    await a.startTimer(id);
+    const b = makeController();
+    await b.initialize();
+    clock += 61000;
+    await Promise.all([a.tick(), b.tick()]);
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0][3], type);
+  });
+}
+
+test('payment edit after a count-up expires while pausing does not cancel its active alarm', async () => {
+  auth.state.user.workspace_id = null;
+  const cancelled = [];
+  const c = makeController(server.request, { cancelSound: id => cancelled.push(id) });
+  await c.initialize();
+  const id = await c.addTimer(input({ type: 'up' }));
+  await c.startTimer(id); clock += 61000; await c.pauseTimer(id);
+  assert.equal(notifications.length, 1);
+  assert.equal(await c.updateIsPay(id, true), true);
+  assert.equal((await timerDb.timers.get(id)).isPay, true);
+  assert.deepEqual(cancelled, []);
+  assert.equal(notifications.length, 1);
+});

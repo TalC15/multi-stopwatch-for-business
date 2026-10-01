@@ -637,7 +637,7 @@ export function createStopwatchController({
           displayed.sharedAlarmDelivered = true;
           displayed.reachedTarget = true;
           if (alarm === "claimed")
-            Promise.resolve(notify(id, displayed.name, displayed.isPay)).catch(
+            Promise.resolve(notify(id, displayed.name, displayed.isPay, displayed.type)).catch(
               () => {},
             );
         }
@@ -678,17 +678,17 @@ export function createStopwatchController({
             await repository.removeStandaloneTimer(id);
           else await enqueuePersonalDelete(id, ctx.scope);
           assertCurrent(ctx);
-          return old;
+          return { record: old, previous: old };
         }
         const next = transform({ ...old });
-        if (!next) return old;
+        if (!next) return { record: old, previous: old };
         personalStateFromLocal(next); // Same canonical time rules for both local modes.
         const saved =
           mode === MODE.STANDALONE
             ? await repository.saveTimer(next)
             : (await enqueuePersonalPut(next, ctx.scope)).timer;
         assertCurrent(ctx);
-        return saved;
+        return { record: saved, previous: old };
       },
     );
   }
@@ -708,8 +708,13 @@ export function createStopwatchController({
         assertCurrent(ctx);
         const old = stopwatches.value.find((t) => t.id === id);
         if (!old || !visible(old, ctx)) throw new Error("Sayaç bulunamadı");
-        let record;
-        record = await localChange(id, ctx, transform, deleting);
+        const { record, previous } = await localChange(id, ctx, transform, deleting);
+        // Claim the alarm from the state read inside the IndexedDB transaction,
+        // not a possibly stale view in another tab.
+        const newAlarm = !deleting && previous.dataMode !== MODE.SHARED && (
+          (record.type === 'up' && record.reachedTarget && !previous.reachedTarget) ||
+          (record.type === 'down' && record.status === 'completed' && previous.status === 'running')
+        );
         assertCurrent(ctx);
         if (deleting) {
           stopwatches.value = stopwatches.value.filter((t) => t.id !== id);
@@ -718,19 +723,10 @@ export function createStopwatchController({
           message.success(`${old.name} ${label} silindi`);
         } else {
           publish(record, ctx);
-          if (record.status !== "running") cancelSound(id);
+          if (!newAlarm && record.status !== previous.status && ["paused", "idle"].includes(record.status)) cancelSound(id);
         }
-        if (
-          !deleting &&
-          old.dataMode !== MODE.SHARED &&
-          ((record.type === "up" &&
-            record.reachedTarget &&
-            !old.reachedTarget) ||
-            (record.type === "down" &&
-              record.status === "completed" &&
-              old.status === "running"))
-        ) {
-          Promise.resolve(notify(record.id, record.name, record.isPay)).catch(
+        if (newAlarm) {
+          Promise.resolve(notify(record.id, record.name, record.isPay, record.type)).catch(
             () => {},
           );
         }

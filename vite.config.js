@@ -8,10 +8,13 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       workbox: {
         // App navigation must reopen offline; asset/API requests are unaffected.
         navigateFallback: "/index.html",
-        // Ses dosyaları ve API çağrıları SW'dan geçmesin
+        importScripts: ['/notification-events.js'],
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,woff2}'],
+        // Alarm sounds are precached too, so the first offline alarm can play.
         runtimeCaching: [],
       },
       manifest: {
@@ -19,8 +22,10 @@ export default defineConfig({
         short_name: 'KeepTime',
         description: 'Ticari zamanlayıcı uygulaması',
         theme_color: '#ffffff',
-        // Ses izni için gerekli
-        permissions: ['notifications'],
+        start_url: '/',
+        scope: '/',
+        display: 'standalone',
+        lang: 'tr',
         icons: [
           {
             src: '/icons/pwa-192x192.png',

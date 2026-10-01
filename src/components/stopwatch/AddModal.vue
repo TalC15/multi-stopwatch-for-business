@@ -371,7 +371,7 @@ onMounted(() => {
           >
             <div class="min-w-0 flex-1">
               <p class="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Ortak Zaman
+                Ortak Zamanlayıcı
               </p>
 
               <!-- Yüklenme yalnızca bu bölümde -->
