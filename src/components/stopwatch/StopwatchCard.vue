@@ -291,30 +291,14 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { hapticTap } from "../../utils/haptics";
-import radarAlarm from "../../sounds/radar-alarm.mp3";
-import digitalAlarm from "../../sounds/digital-alarm.mp3";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 
 const props = defineProps(["timer"]);
 const store = useStopwatchStore();
 const pausedCount = computed(() => Number(props.timer.pausedCount || 0));
-const audioRadar = new Audio(radarAlarm);
-const audioDigital = new Audio(digitalAlarm);
-const isReachedTime = computed(() => {
-  return props.timer.reachedTarget;
-});
-
-watch(isReachedTime, (newValue) => {
-  if (newValue && props.timer.type === "up") {
-    audioRadar.play();
-  } else if (newValue && props.timer.type === "down") {
-    audioDigital.play();
-  }
-});
-
 const displayTime = computed(() => {
   let ms;
   if (props.timer.type === "up") {
@@ -404,8 +388,6 @@ const toggleTimer = async () => {
   if (!canChange()) return;
   if (props.timer.status === "running") {
     if (!await store.pauseTimer(props.timer.id)) return;
-    audioRadar.pause();
-    audioDigital.pause();
     hapticTap();
   } else {
     await store.startTimer(props.timer.id);
@@ -414,10 +396,6 @@ const toggleTimer = async () => {
 
 async function deleteAndStop(timer, deger) {
   if (!await store.deleteTimer(timer, deger)) return;
-  audioRadar.pause();
-  audioDigital.pause();
-  audioRadar.currentTime = 0;
-  audioDigital.currentTime = 0;
 }
 
 const confirmOpen = ref(false);

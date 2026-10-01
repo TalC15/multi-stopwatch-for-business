@@ -13,8 +13,8 @@ dist-ssr
 *.local
  
 # Capacitor
-android
-ios
+/android
+/ios
  
 # Editor directories and files
 .vscode/*

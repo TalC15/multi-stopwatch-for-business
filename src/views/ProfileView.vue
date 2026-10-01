@@ -36,63 +36,82 @@ function authHeader() {
   };
 }
 
-const fetchWorkspace = message.withLoading("Çalışma grubu yükleniyor...", async () => {
-  loading.value = true;
-  const response = await apiFetch(`${BASE_URL}/workspace`, {
-    headers: authHeader(),
-  });
-  if (response) {
-    const data = await response.json();
-    workspace.value = data.workspace;
-  }
-  loading.value = false;
-});
-
-const joinWorkspace = message.withLoading("Çalışma grubuna katılınıyor...", async () => {
-  if (!inviteCode.value || joinLoading.value) return;
-  const session = captureWorkspaceSession();
-  joinLoading.value = true;
-  try {
-    const response = await apiFetch(`${BASE_URL}/workspace/join`, {
-      method: "POST", headers: authHeader(), isRequestCurrent: session.isCurrent,
-      body: JSON.stringify({ inviteCode: inviteCode.value }),
+const fetchWorkspace = message.withLoading(
+  "Çalışma grubu yükleniyor...",
+  async () => {
+    loading.value = true;
+    const response = await apiFetch(`${BASE_URL}/workspace`, {
+      headers: authHeader(),
     });
-    if (!response) return;
-    const data = await response.json();
-    if (!session.isCurrent()) return;
-    if (response.ok) {
-      if (!session.saveWorkspace(data.workspace?.id)) return;
-      message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
-      inviteCode.value = "";
+    if (response) {
+      const data = await response.json();
       workspace.value = data.workspace;
-      disconnectSocket(); connectSocket();
-    } else message.warning(data.error || "Geçersiz davet kodu");
-  } catch {
-    if (session.isCurrent()) message.error("Çalışma grubuna katılınamadı");
-  } finally { joinLoading.value = false; }
-});
+    }
+    loading.value = false;
+  },
+);
 
-const leaveWorkspace = message.withLoading("Çalışma grubundan ayrılınıyor...", async () => {
-  if (leaveLoading.value) return;
-  const session = captureWorkspaceSession();
-  leaveLoading.value = true;
-  try {
-    const response = await apiFetch(`${BASE_URL}/workspace/leave`, {
-      method: "POST", headers: authHeader(), isRequestCurrent: session.isCurrent,
-    });
-    if (!response) return;
-    const data = await response.json();
-    if (!session.isCurrent()) return;
-    if (response.ok) {
-      if (!session.saveWorkspace(null)) return;
-      message.success("Çalışma gurubundan ayrıldınız");
-      workspace.value = null;
-      disconnectSocket(); connectSocket();
-    } else message.error(data.error || "Ayrılma başarısız");
-  } catch {
-    if (session.isCurrent()) message.error("Çalışma grubundan ayrılınamadı");
-  } finally { leaveLoading.value = false; }
-});
+const joinWorkspace = message.withLoading(
+  "Çalışma grubuna katılınıyor...",
+  async () => {
+    if (!inviteCode.value || joinLoading.value) return;
+    const session = captureWorkspaceSession();
+    joinLoading.value = true;
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/join`, {
+        method: "POST",
+        headers: authHeader(),
+        isRequestCurrent: session.isCurrent,
+        body: JSON.stringify({ inviteCode: inviteCode.value }),
+      });
+      if (!response) return;
+      const data = await response.json();
+      if (!session.isCurrent()) return;
+      if (response.ok) {
+        if (!session.saveWorkspace(data.workspace?.id)) return;
+        message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
+        inviteCode.value = "";
+        workspace.value = data.workspace;
+        disconnectSocket();
+        connectSocket();
+      } else message.warning(data.error || "Geçersiz davet kodu");
+    } catch {
+      if (session.isCurrent()) message.error("Çalışma grubuna katılınamadı");
+    } finally {
+      joinLoading.value = false;
+    }
+  },
+);
+
+const leaveWorkspace = message.withLoading(
+  "Çalışma grubundan ayrılınıyor...",
+  async () => {
+    if (leaveLoading.value) return;
+    const session = captureWorkspaceSession();
+    leaveLoading.value = true;
+    try {
+      const response = await apiFetch(`${BASE_URL}/workspace/leave`, {
+        method: "POST",
+        headers: authHeader(),
+        isRequestCurrent: session.isCurrent,
+      });
+      if (!response) return;
+      const data = await response.json();
+      if (!session.isCurrent()) return;
+      if (response.ok) {
+        if (!session.saveWorkspace(null)) return;
+        message.success("Çalışma gurubundan ayrıldınız");
+        workspace.value = null;
+        disconnectSocket();
+        connectSocket();
+      } else message.error(data.error || "Ayrılma başarısız");
+    } catch {
+      if (session.isCurrent()) message.error("Çalışma grubundan ayrılınamadı");
+    } finally {
+      leaveLoading.value = false;
+    }
+  },
+);
 
 const saveTelegram = message.withLoading("Telegram bağlanıyor...", async () => {
   if (!chatId.value) return;
@@ -110,26 +129,32 @@ const saveTelegram = message.withLoading("Telegram bağlanıyor...", async () =>
   telegramLoadingButton.value = false;
 });
 
-const removeTelegram = message.withLoading("Telegram bağlantısı kesiliyor...", async (user_id) => {
-  if (!user_id) return;
-  const result = await cancelTelegramChatId(user_id);
-  console.log(result);
-  if (result?.success) {
-    localStorage.removeItem("telegramChatId");
-    telegramSaved.value = false;
-    chatId.value = "";
-    message.success("Telegram bağlantısı kesildi");
-  } else {
-    message.error("Telegram bağlantısı kesilemedi");
-  }
-});
+const removeTelegram = message.withLoading(
+  "Telegram bağlantısı kesiliyor...",
+  async (user_id) => {
+    if (!user_id) return;
+    const result = await cancelTelegramChatId(user_id);
+    console.log(result);
+    if (result?.success) {
+      localStorage.removeItem("telegramChatId");
+      telegramSaved.value = false;
+      chatId.value = "";
+      message.success("Telegram bağlantısı kesildi");
+    } else {
+      message.error("Telegram bağlantısı kesilemedi");
+    }
+  },
+);
 
-const telegramSavedControl = message.withLoading("Telegram bağlantısı kontrol ediliyor...", async () => {
-  telegramLoadingDiv.value = true;
-  const res = await telegramControl(user?.id);
-  telegramLoadingDiv.value = false;
-  telegramSaved.value = res.connected;
-});
+const telegramSavedControl = message.withLoading(
+  "Telegram bağlantısı kontrol ediliyor...",
+  async () => {
+    telegramLoadingDiv.value = true;
+    const res = await telegramControl(user?.id);
+    telegramLoadingDiv.value = false;
+    telegramSaved.value = res.connected;
+  },
+);
 
 onMounted(() => {
   fetchWorkspace();
@@ -138,7 +163,9 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-[var(--color-surface)] text-[var(--color-text-primary)]">
+  <div
+    class="min-h-screen bg-[var(--color-surface)] text-[var(--color-text-primary)]"
+  >
     <nav
       class="sticky top-0 z-30 grid h-16 w-full grid-cols-[2.5rem_minmax(0,1fr)_2.5rem] items-center gap-3 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 backdrop-blur-xl sm:px-6"
     >
@@ -162,12 +189,14 @@ onMounted(() => {
         </svg>
       </button>
       <div class="flex min-w-0 flex-col items-center">
-        <h1 class="text-sm font-extrabold tracking-tight sm:text-base">
+        <h1 class="text-lg font-extrabold tracking-tight sm:text-base">
           Profilim
         </h1>
-        <span v-if="user" class="max-w-full truncate text-[11px] text-[var(--color-text-secondary)]">{{
-          user?.username
-        }}</span>
+        <span
+          v-if="user"
+          class="max-w-full truncate text-[11px] text-[var(--color-text-secondary)]"
+          >{{ user?.username }}</span
+        >
       </div>
       <div class="size-10" aria-hidden="true"></div>
     </nav>
@@ -177,9 +206,7 @@ onMounted(() => {
       <div
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6"
       >
-        <h2
-          class="mb-5 text-base font-black tracking-tight"
-        >
+        <h2 class="mb-5 text-base font-black tracking-tight">
           Profil bilgilerim
         </h2>
 
@@ -188,11 +215,13 @@ onMounted(() => {
           <div
             class="grid size-16 shrink-0 place-items-center rounded-2xl text-2xl font-black"
             :class="
-                user?.role === 'manager'
-                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                  : user?.role === 'superadmin'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                    : 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-300'
+              user?.role === 'manager'
+                ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                : user?.role === 'superadmin'
+                  ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                  : user?.role === 'worker'
+                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                    : ''
             "
             aria-hidden="true"
           >
@@ -222,7 +251,9 @@ onMounted(() => {
           class="mt-5 flex flex-col gap-3 border-t border-[var(--color-border)] pt-4"
         >
           <div class="flex items-center justify-between">
-            <span class="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+            <span
+              class="text-xs leading-relaxed text-[var(--color-text-secondary)]"
+            >
               Durum
             </span>
 
@@ -239,11 +270,7 @@ onMounted(() => {
       <div
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6 flex flex-col gap-4"
       >
-        <h2
-          class="text-base font-black tracking-tight"
-        >
-          Çalışma grubum
-        </h2>
+        <h2 class="text-base font-black tracking-tight">Çalışma grubum</h2>
 
         <div
           v-if="loading"
@@ -256,10 +283,14 @@ onMounted(() => {
         <div v-else-if="workspace" class="flex flex-col gap-3">
           <div class="flex items-center justify-between">
             <div class="flex min-w-0 flex-col gap-0.5">
-              <span class="truncate text-sm font-extrabold text-[var(--color-text-primary)]">{{
-                workspace.name
-              }}</span>
-              <span class="text-xs font-medium text-emerald-600 dark:text-emerald-400">Aktif</span>
+              <span
+                class="truncate text-sm font-extrabold text-[var(--color-text-primary)]"
+                >{{ workspace.name }}</span
+              >
+              <span
+                class="text-xs font-medium text-emerald-600 dark:text-emerald-400"
+                >Aktif</span
+              >
             </div>
           </div>
           <button
@@ -299,14 +330,12 @@ onMounted(() => {
       <div
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6 flex flex-col gap-4"
       >
-        <h2
-          class="text-base font-black tracking-tight"
-        >
-          Telegram bildirimi
-        </h2>
+        <h2 class="text-base font-black tracking-tight">Telegram bildirimi</h2>
         <div v-if="!telegramLoadingDiv">
           <div v-if="!telegramSaved" class="flex flex-col gap-3">
-            <p class="text-xs leading-relaxed text-[var(--color-text-secondary)]">
+            <p
+              class="text-xs leading-relaxed text-[var(--color-text-secondary)]"
+            >
               @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
               gir.
             </p>
@@ -326,7 +355,8 @@ onMounted(() => {
           </div>
 
           <div v-else class="flex items-center justify-between gap-3">
-            <span class="text-sm font-semibold text-emerald-600 dark:text-emerald-400"
+            <span
+              class="text-sm font-semibold text-emerald-600 dark:text-emerald-400"
               >✓ Telegram bağlı</span
             >
             <button

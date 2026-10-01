@@ -1,4 +1,5 @@
 <script setup>
+import NotificationSettings from "../NotificationSettings.vue";
 import { computed } from "vue";
 import { useStopwatchStore } from "../../stores/stopwatchStore.js";
 import { RouterLink } from "vue-router";
@@ -21,7 +22,7 @@ const themeStore = useThemeStore();
 
     <!-- Drawer Panel -->
     <div
-      class="absolute inset-y-0 left-0 w-72 bg-[var(--color-card)] shadow-xl transition-transform p-6"
+      class="absolute inset-y-0 left-0 w-80 max-w-full overflow-y-auto bg-[var(--color-card)] shadow-xl transition-transform p-6"
     >
       <!-- Header -->
       <div class="flex justify-between items-center mb-8">
