@@ -9,7 +9,12 @@ import StopwatchCard from "@/components/stopwatch/StopwatchCard.vue";
 import AddModal from "@/components/stopwatch/AddModal.vue";
 import ConfirmModal from "@/components/ui/ConfirmModal.vue";
 import { message } from "../composables/message";
-import { sortTimers, TIMER_SORT, normalizeTimerSort } from "../domain/timerSort.js";
+import {
+  sortTimers,
+  TIMER_SORT,
+  normalizeTimerSort,
+} from "../domain/timerSort.js";
+import TimerSortMenu from "@/components/stopwatch/TimerSortMenu.vue";
 
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
@@ -19,7 +24,9 @@ const isDrawerOpen = ref(false);
 const isModalOpen = ref(false);
 const isPausedAll = ref(false);
 const sortDirection = ref(TIMER_SORT.NEAREST);
-function changeSort(value) { sortDirection.value = normalizeTimerSort(value); }
+function changeSort(value) {
+  sortDirection.value = normalizeTimerSort(value);
+}
 
 const filteredTimers = computed(() =>
   store.stopwatches.filter((t) => t.type === activeTab.value && !t.isShared),
@@ -30,11 +37,13 @@ const sharedTimers = computed(() =>
 );
 
 // Sorting affects only the visible cards, never the store or bulk action order.
-const visibleTimers = computed(previous => sortTimers(
-  activeTab.value === 'shared' ? sharedTimers.value : filteredTimers.value,
-  sortDirection.value,
-  previous,
-));
+const visibleTimers = computed((previous) =>
+  sortTimers(
+    activeTab.value === "shared" ? sharedTimers.value : filteredTimers.value,
+    sortDirection.value,
+    previous,
+  ),
+);
 
 function openAdd() {
   if (activeTab.value === "shared" && !store.requireSharedWrite()) return;
@@ -50,7 +59,7 @@ const noticeStyles = {
     "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200",
 };
 
-//bu fonksiyonun çağrıldığı yerler yorum satırında.İleride yorum satırı açılırsa sharedControls.test.js dosyasındaki 'test("Home hides personal notice and...' bölümünün güncellenmesi gerekir ki test edilebilsin. 
+//bu fonksiyonun çağrıldığı yerler yorum satırında.İleride yorum satırı açılırsa sharedControls.test.js dosyasındaki 'test("Home hides personal notice and...' bölümünün güncellenmesi gerekir ki test edilebilsin.
 const personalNotice = computed(() => {
   if (!store.ready)
     return { tone: "neutral", message: "Sayaçlarınız açılıyor…" };
@@ -488,26 +497,10 @@ onMounted(() => {
               </g>
             </svg>
           </button>
-          <div class="relative shrink-0 rounded-lg text-indigo-600 focus-within:ring-2 focus-within:ring-indigo-500 focus-within:ring-offset-2 dark:text-indigo-400">
-            <label for="timer-sort-order" class="flex min-h-11 items-center gap-1.5 px-1 text-sm font-semibold">
-              <span aria-hidden="true" class="flex flex-col items-center gap-[3px]">
-                <span class="block h-[2px] w-4 rounded-full bg-current"></span>
-                <span class="block h-[2px] w-3 rounded-full bg-current"></span>
-                <span class="block h-[2px] w-2 rounded-full bg-current"></span>
-              </span>
-              Sırala
-            </label>
-            <select
-              id="timer-sort-order"
-              aria-label="Sayaçları sırala"
-              :value="sortDirection"
-              @change="changeSort($event.target.value)"
-              class="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-            >
-              <option :value="TIMER_SORT.NEAREST">Bitmiş → en yakın → en uzak</option>
-              <option :value="TIMER_SORT.FARTHEST">En uzak → en yakın → bitmiş</option>
-            </select>
-          </div>
+          <TimerSortMenu
+            :model-value="sortDirection"
+            @update:model-value="changeSort"
+          />
         </div>
       </div>
 

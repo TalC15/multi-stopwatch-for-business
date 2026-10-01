@@ -247,7 +247,6 @@ function removePresetName(bIndex) {
 
     <!-- Content -->
     <main class="mx-auto max-w-md px-4 pt-6 pb-12 sm:px-6">
-      <NotificationSettings />
       <!-- Section -->
       <div class="mb-3 ml-1">
         <span class="text-base font-black tracking-tight">Özelleştirme</span>
@@ -542,8 +541,7 @@ function removePresetName(bIndex) {
             <p
               class="text-xs leading-relaxed text-[var(--color-text-secondary)]"
             >
-              @KeepTimeApp_bot'a <strong>/start</strong> yaz, sonra chat ID'ni
-              gir.
+              Çalışma gurubunda bulunan ve telegram bildirimleri bağlı olan herkese zamanlayıcı bitince bildirim gönderilir.
             </p>
 
             <input
@@ -588,7 +586,7 @@ function removePresetName(bIndex) {
       >
         Yükleniyor...
       </div>
-
+      <NotificationSettings />
       <SoundSettings />
 
       <!-- About Section -->
@@ -632,8 +630,10 @@ function removePresetName(bIndex) {
           id="app-about-content"
           class="mx-5 mb-5 min-h-28 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm leading-relaxed text-[var(--color-text-secondary)] [overflow-wrap:anywhere] sm:mx-6 [&_p+p]:mt-3"
         >
-          <!-- Uygulama hakkında yazını buraya ekle. -->
-        </div>
+        <p>
+          <b>KeepTimer</b> uygulaması ile zaman yönetiminizi kolaylaştırın, karışan zaman durumlarına son verin ve uçup gider süreleri çıkarım yapabileceğiniz verilere çevirin.
+        </p>    
+      </div>
       </div>
     </main>
     <!-- Telegram Help Modal -->
