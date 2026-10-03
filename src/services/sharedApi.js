@@ -23,9 +23,9 @@ export function createSharedApi({ backend, online = ()=>globalThis.navigator?.on
     if (!online()) throw Object.assign(new Error('Ortak sayacı değiştirmek için internet bağlantınızı kontrol edin.'),{status:0});
     const user=backend.getUser();
     const scope={workspaceId:user?.workspace_id,userId:user?.id};
-    const generation=backend.getAuthGeneration(), identity=backend.getTabSessionIdentity(), refresh=backend.getRefreshToken();
+    const generation=backend.getAuthGeneration(), identity=backend.getTabSessionIdentity(), marker=backend.getSessionMarker();
     const current=()=>backend.isTabSessionCurrent() && backend.getAuthGeneration()===generation && backend.getTabSessionIdentity()===identity &&
-      backend.getRefreshToken()===refresh && backend.getUser()?.id===scope.userId && backend.getUser()?.workspace_id===scope.workspaceId &&
+      backend.getSessionMarker()===marker && backend.getUser()?.id===scope.userId && backend.getUser()?.workspace_id===scope.workspaceId &&
       !backend.getUser()?.disabled_at && options.isRequestCurrent();
     if (!scope.workspaceId || !current()) throw Object.assign(new Error('Oturum geçerli değil'),{status:401});
     const abort=new AbortController(); const timeout=setTimeout(()=>abort.abort(),15000); timeout.unref?.();

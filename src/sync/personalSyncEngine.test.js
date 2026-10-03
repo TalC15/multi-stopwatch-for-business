@@ -247,7 +247,7 @@ for (const [name, switchSession] of [
   ["workspace X to Y", () => { auth.state.user.workspace_id = ids.otherWorkspace; }],
   ["stale tab", () => { auth.state.current = false; }],
   ["logout", () => { auth.state.user = null; auth.state.generation += 1; }],
-  ["same account new session", () => { auth.state.identity = "session-new"; auth.state.refresh = "refresh-new"; }],
+  ["same account new session", () => { auth.state.identity = "session-new"; auth.state.marker = "marker-new"; }],
   ["disabled account", () => { auth.state.user.disabled_at = new Date().toISOString(); }],
 ]) test(`pending response after ${name} cannot acknowledge or send next operation`, async () => {
   await create(); await enqueuePersonalPut(timer({ name: "Next" }), scope);
@@ -263,7 +263,7 @@ for (const [name, switchSession] of [
 
 test("new login of same account retries previous session's uncertain operation", async () => {
   await create();
-  await engine(api(async (...args) => { const res = await server.request(...args); auth.state.identity = "new"; auth.state.refresh = "new"; return res; })).flush();
+  await engine(api(async (...args) => { const res = await server.request(...args); auth.state.identity = "new"; auth.state.marker = "new"; return res; })).flush();
   time += 6000;
   assert.equal((await engine().flush()).acknowledged, 1);
   assert.equal(server.requests[0].body, server.requests[1].body);

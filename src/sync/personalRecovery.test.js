@@ -40,7 +40,7 @@ test("server-deleted local edit is kept until explicit reviewed acceptance",asyn
 test("confirmation from previous session cannot alter a new session's queue",async()=>{
   await create(); server.rows.set(ids.timer,serverTimer({sync_revision:9}));
   const e=engine(); await e.flush(); const review=await e.review(ids.timer);
-  auth.state.identity="new-login"; auth.state.refresh="new-refresh";
+  auth.state.identity="new-login"; auth.state.marker="new-marker";
   assert.equal((await e.acceptServer(review)).status,"session-changed");
   assert.equal((await queue()).length,1);
 });

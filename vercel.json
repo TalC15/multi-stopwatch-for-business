@@ -1,0 +1,20 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/auth/:path*",
+      "destination": "https://multi-stopwatch-backend.onrender.com/auth/:path*"
+    },
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/api/auth/:path*",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "CDN-Cache-Control", "value": "no-store" },
+        { "key": "Vercel-CDN-Cache-Control", "value": "no-store" },
+        { "key": "x-vercel-enable-rewrite-caching", "value": "0" }
+      ]
+    }
+  ]
+}

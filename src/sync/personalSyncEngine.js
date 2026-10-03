@@ -16,7 +16,12 @@ export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks 
     if (!locks?.request) return { status: "unsupported-locks" };
     return locks.request(`keeptimer-personal:${session.userId}:${session.workspaceId}`, { mode: "exclusive", ifAvailable: true }, async (lock) => {
       if (!lock) return { status: "busy" };
-      try { session.assertCurrent(); return await work(session); }
+      try {
+        session.assertCurrent();
+        if (api.ensureReady) await api.ensureReady(session);
+        session.assertCurrent();
+        return await work(session);
+      }
       catch (error) {
         if (error.code === "session-changed") return { status: "session-changed" };
         throw error;

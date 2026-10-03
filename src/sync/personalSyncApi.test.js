@@ -11,11 +11,14 @@ const storage = () => {
 };
 const token = (type, sessionId = "session-one", serial = 1) => `header.${Buffer.from(JSON.stringify({ id: ids.user, sessionId, type, serial })).toString("base64url")}.signature`;
 let server, operation;
-beforeEach(() => {
+beforeEach(async () => {
   globalThis.localStorage = storage(); globalThis.sessionStorage = storage(); globalThis.window = new EventTarget();
   sessionStorage.setItem("keeptimer-tab-auth-session", `${ids.user}:session-one`);
-  backend.saveTokens(token("access"), token("refresh"));
-  backend.saveUser({ id: ids.user, workspace_id: ids.workspace });
+  backend.initializeAuthSession();
+  globalThis.fetch = async () => ({ ...response(200, {
+    accessToken: token("access"), sessionId: "session-one", user: { id: ids.user, workspace_id: ids.workspace },
+  }), ok: true });
+  assert.equal((await backend.login("test", "test")).success, true);
   server = mockServer();
   const payload = personalStateFromLocal(timer());
   operation = { ...scope, timerId: ids.timer, method: "PUT", mutationId: crypto.randomUUID(), expectedRevision: 0, payload };
@@ -26,7 +29,7 @@ after(() => { globalThis.fetch = originalFetch; delete globalThis.localStorage; 
 test("real apiFetch refreshes once and repeats the exact personal body with same-session token", async () => {
   let mutations = 0; let refreshes = 0; const bodies = [];
   globalThis.fetch = async (url, options) => {
-    if (url.endsWith("/auth/refresh")) { refreshes++; return { ...response(200, { accessToken: token("access", "session-one", 2) }), ok: true }; }
+    if (url.endsWith("/auth/refresh")) { refreshes++; return { ...response(200, { accessToken: token("access", "session-one", 2), sessionId: "session-one" }), ok: true }; }
     bodies.push(options.body); mutations++;
     if (mutations === 1) return response(401, {});
     assert.equal(new Headers(options.headers).get("Authorization"), `Bearer ${token("access", "session-one", 2)}`);
@@ -57,7 +60,7 @@ test("real apiFetch does not retry mutation after workspace changes during refre
   globalThis.fetch = async (url) => {
     if (url.endsWith("/auth/refresh")) {
       backend.saveUser({ id: ids.user, workspace_id: ids.otherWorkspace });
-      return { ...response(200, { accessToken: token("access", "session-one", 2) }), ok: true };
+      return { ...response(200, { accessToken: token("access", "session-one", 2), sessionId: "session-one" }), ok: true };
     }
     mutations++; return response(401, {});
   };
@@ -77,7 +80,7 @@ test("real apiFetch hard refresh failure clears only current auth", async () => 
 test("same-account new session cannot receive old HTTP acknowledgement", async () => {
   globalThis.fetch = async (...args) => {
     const result = await server.request(...args);
-    backend.saveTokens(token("access", "session-two"), token("refresh", "session-two"));
+    localStorage.setItem(backend.AUTH_SESSION_KEY, `${ids.user}:session-two`);
     sessionStorage.setItem("keeptimer-tab-auth-session", `${ids.user}:session-two`);
     return result;
   };
@@ -99,7 +102,7 @@ test("timeout during existing refresh prevents a late mutation retry", async () 
   globalThis.fetch = async (url) => {
     if (url.endsWith("/auth/refresh")) {
       await release.promise;
-      return { status: 200, ok: true, json: async () => { finished.resolve(); return { accessToken: token("access", "session-one", 2) }; } };
+      return { status: 200, ok: true, json: async () => { finished.resolve(); return { accessToken: token("access", "session-one", 2), sessionId: "session-one" }; } };
     }
     mutations++; return response(401, {});
   };

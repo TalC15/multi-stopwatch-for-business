@@ -20,11 +20,12 @@ export const serverTimer = (changes = {}) => ({
   last_sync_mutation_id: "00000000-0000-4000-8000-000000000007", ...changes,
 });
 export function fakeAuth() {
-  const state = { user: { id: ids.user, workspace_id: ids.workspace }, generation: 1, identity: "session-A", refresh: "refresh-A", current: true, access: "access-A" };
+  const state = { user: { id: ids.user, workspace_id: ids.workspace }, generation: 1, identity: "session-A", marker: "marker-A", current: true, access: "access-A" };
   return {
+    ensureAccessToken: async () => ({ ok: Boolean(state.access) }),
     state, getUser: () => state.user, getAuthGeneration: () => state.generation,
     getTabSessionIdentity: () => state.identity, isTabSessionCurrent: () => state.current,
-    getRefreshToken: () => state.refresh, getAccessToken: () => state.access,
+    getSessionMarker: () => state.marker, getAccessToken: () => state.access,
     getTokenSessionIdentity: () => state.identity,
   };
 }
