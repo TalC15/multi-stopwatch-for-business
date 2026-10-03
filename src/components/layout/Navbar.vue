@@ -10,7 +10,8 @@ const store = useStopwatchStore();
 const user = computed(() => store.user);
 
 const logout = message.withLoading("Çıkış yapılıyor...", async () => {
-  await apiLogout();
+  const result = await apiLogout();
+  if (!result.success) message.error(result.error);
 });
 </script>
 

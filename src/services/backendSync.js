@@ -1,749 +1,248 @@
 export const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
-
-// Her login / token temizleme yeni bir auth oturumu olarak değerlendirilir.
-// Access token refresh olmak authGeneration'ı değiştirmez.
-let authGeneration = 0;
-
-// Devam eden refresh hangi auth oturumuna ait, onu da takip et.
-// Eski bir refresh'in yeni oturumun refresh state'ini bozmasını engeller.
-let refreshState = null;
-
-export function getAuthGeneration() {
-  return authGeneration;
-}
-
-function advanceAuthGeneration() {
-  authGeneration += 1;
-  return authGeneration;
-}
-
+export const AUTH_SESSION_KEY = "keeptimer-auth-session";
+const TAB_AUTH_SESSION_KEY = "keeptimer-tab-auth-session";
 const AUTH_LOCK_NAME = "keeptimer-auth";
 export const AUTH_LOGIN_REQUIRED_EVENT = "keeptimer:auth-login-required";
-
-async function withAuthMutationLock(callback) {
-  if (typeof navigator !== "undefined" && navigator.locks?.request) {
-    return navigator.locks.request(AUTH_LOCK_NAME, callback);
-  }
-
-  // Tek WebView / desteklenmeyen ortam için fallback.
-  return callback();
-}
-
 export const AUTH_SESSION_CHANGED_EVENT = "keeptimer:auth-session-changed";
 export const AUTH_USER_CHANGED_EVENT = "keeptimer:auth-user-changed";
 export const AUTH_LOCAL_LOGOUT_EVENT = "keeptimer:auth-local-logout";
-export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT =
-  "keeptimer:auth-access-token-refreshed";
+export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT = "keeptimer:auth-access-token-refreshed";
 
-const TAB_AUTH_SESSION_KEY = "keeptimer-tab-auth-session";
+let accessToken = null; // Never persisted or broadcast to another tab.
+let authGeneration = 0;
+let refreshState = null;
+let localAuthQueue = Promise.resolve();
+const emit = name => globalThis.window?.dispatchEvent(new Event(name));
+export const getAuthGeneration = () => authGeneration;
+
+function withAuthMutationLock(callback) {
+  if (globalThis.navigator?.locks?.request) return navigator.locks.request(AUTH_LOCK_NAME, callback);
+  // Serializes this JS runtime only. No cross-tab guarantee without Web Locks.
+  const work = localAuthQueue.then(callback, callback);
+  localAuthQueue = work.catch(() => {});
+  return work;
+}
 
 function decodeJwtPayload(token) {
-  if (typeof token !== "string") {
-    return null;
-  }
-
+  if (typeof token !== "string") return null;
   try {
     const parts = token.split(".");
-
-    if (parts.length !== 3) {
-      return null;
-    }
-
+    if (parts.length !== 3) return null;
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-
-    return JSON.parse(atob(padded));
-  } catch {
-    return null;
-  }
+    return JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")));
+  } catch { return null; }
 }
-
+// Used only for the access JWT's local session consistency, not authorization.
 export function getTokenSessionIdentity(token, expectedType) {
   const payload = decodeJwtPayload(token);
-
-  if (
-    !payload ||
-    payload.type !== expectedType ||
-    !payload.id ||
-    !payload.sessionId
-  ) {
-    return null;
-  }
-
-  return `${payload.id}:${payload.sessionId}`;
+  return payload?.type === expectedType && payload.id && payload.sessionId
+    ? `${payload.id}:${payload.sessionId}` : null;
 }
-
+export function getSessionMarker() {
+  return globalThis.localStorage?.getItem(AUTH_SESSION_KEY) || null;
+}
 export function getTabSessionIdentity() {
-  if (typeof sessionStorage === "undefined") {
-    return null;
-  }
-
-  return sessionStorage.getItem(TAB_AUTH_SESSION_KEY);
+  return globalThis.sessionStorage?.getItem(TAB_AUTH_SESSION_KEY) || null;
 }
-
 export function isTabSessionCurrent() {
-  const tabIdentity = getTabSessionIdentity();
-
-  const storedIdentity = getTokenSessionIdentity(getRefreshToken(), "refresh");
-
-  return Boolean(
-    tabIdentity && storedIdentity && tabIdentity === storedIdentity,
-  );
+  const identity = getTabSessionIdentity();
+  return Boolean(identity && identity === getSessionMarker());
 }
-
-function bindTabToRefreshToken(refreshToken) {
-  const identity = getTokenSessionIdentity(refreshToken, "refresh");
-
-  if (!identity) {
-    return false;
-  }
-
-  sessionStorage.setItem(TAB_AUTH_SESSION_KEY, identity);
-
-  return true;
-}
-
-function isSameAuthSession(expectedGeneration, expectedRefreshToken) {
-  return (
-    expectedGeneration === authGeneration &&
-    getRefreshToken() === expectedRefreshToken
-  );
-}
-
-export async function clearAuthSessionIfCurrent(
-  expectedGeneration,
-  expectedRefreshToken,
-) {
-  return withAuthMutationLock(async () => {
-    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
-      return false;
-    }
-
-    advanceAuthGeneration();
-
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
-
-    return true;
-  });
-}
-
-// Token yönetimi
-export function getAccessToken() {
-  return localStorage.getItem("accessToken");
-}
-
-export function getRefreshToken() {
-  return localStorage.getItem("refreshToken");
-}
-
-function initializeTabSessionBinding() {
-  if (typeof window === "undefined" || typeof sessionStorage === "undefined") {
-    return;
-  }
-
-  // Reload sırasında mevcut sekmenin eski session bağı korunur.
-  if (getTabSessionIdentity()) {
-    return;
-  }
-
-  // Gerçekten yeni sekmeyse mevcut aktif login'i devralabilir.
-  const refreshToken = getRefreshToken();
-
-  if (refreshToken) {
-    bindTabToRefreshToken(refreshToken);
-  }
-}
-
-initializeTabSessionBinding();
-export function saveTokens(accessToken, refreshToken) {
-  localStorage.setItem("accessToken", accessToken);
-  if (refreshToken) localStorage.setItem("refreshToken", refreshToken);
-}
-
 export function getUser() {
-  if (!isTabSessionCurrent()) {
-    return null;
-  }
-
-  const user = localStorage.getItem("user");
-  return user ? JSON.parse(user) : null;
+  if (!isTabSessionCurrent()) return null;
+  try {
+    const user = JSON.parse(localStorage.getItem("user"));
+    return user?.id && getSessionMarker()?.startsWith(`${user.id}:`) ? user : null;
+  } catch { return null; }
 }
-
 export function saveUser(user) {
   localStorage.setItem("user", JSON.stringify(user));
-  if (typeof window !== "undefined") window.dispatchEvent(new Event(AUTH_USER_CHANGED_EVENT));
+  emit(AUTH_USER_CHANGED_EVENT);
 }
-
+// Local UI/scope availability is independent of network/access-token readiness.
 export function isLoggedIn() {
-  if (!isTabSessionCurrent()) {
-    return false;
+  const user = getUser();
+  return Boolean(user && !user.disabled_at);
+}
+export function getAccessToken() {
+  return isLoggedIn() && getTokenSessionIdentity(accessToken, "access") === getTabSessionIdentity()
+    ? accessToken : null;
+}
+export function hasUsableAccessToken() {
+  const token = getAccessToken();
+  const payload = decodeJwtPayload(token);
+  return Boolean(token && (!payload.exp || payload.exp * 1000 > Date.now()));
+}
+export function initializeAuthSession() {
+  accessToken = null;
+  authGeneration++;
+  // No legacy token is read or exchanged. Keep user cache and IndexedDB intact.
+  for (const storage of [globalThis.localStorage, globalThis.sessionStorage]) {
+    storage?.removeItem("accessToken");
+    storage?.removeItem("refreshToken");
   }
-
-  const accessToken = getAccessToken();
-  const tabSessionIdentity = getTabSessionIdentity();
-
-  if (!accessToken || !tabSessionIdentity) {
-    return false;
-  }
-
-  return getTokenSessionIdentity(accessToken, "access") === tabSessionIdentity;
+  const marker = getSessionMarker();
+  if (marker && !getTabSessionIdentity()) sessionStorage.setItem(TAB_AUTH_SESSION_KEY, marker);
 }
-
-// Auth header
-function authHeader() {
-  return {
-    "Content-Type": "application/json",
-    Authorization: `Bearer ${getAccessToken()}`,
-  };
-}
-
-function getBearerTokenFromHeaders(headers) {
-  const normalizedHeaders = new Headers(headers || {});
-
-  const authorization = normalizedHeaders.get("Authorization");
-
-  if (!authorization || !authorization.startsWith("Bearer ")) {
-    return null;
-  }
-
-  return authorization.slice(7);
-}
-
-function withAccessToken(options, accessToken) {
-  const headers = new Headers(options.headers || {});
-
-  headers.set("Authorization", `Bearer ${accessToken}`);
-
-  return {
-    ...options,
-    headers,
-  };
-}
-
-async function captureApiRequestContext(options) {
-  return withAuthMutationLock(async () => {
-    const generation = getAuthGeneration();
-
-    const tabIdentity = getTabSessionIdentity();
-
-    const refreshToken = getRefreshToken();
-
-    const activeIdentity = getTokenSessionIdentity(refreshToken, "refresh");
-
-    const accessToken = getAccessToken();
-
-    const accessIdentity = getTokenSessionIdentity(accessToken, "access");
-
-    const requestToken = getBearerTokenFromHeaders(options.headers);
-
-    const requestIdentity = getTokenSessionIdentity(requestToken, "access");
-
-    // Bu sekme artık browser'daki aktif session'a ait değil.
-    if (!tabIdentity || activeIdentity !== tabIdentity) {
-      return { ok: false };
+if (typeof window !== "undefined") {
+  initializeAuthSession();
+  window.addEventListener("storage", event => {
+    if (event.key === AUTH_SESSION_KEY || event.key === null) {
+      if (!isTabSessionCurrent()) { accessToken = null; authGeneration++; }
+      emit(AUTH_SESSION_CHANGED_EVENT);
     }
-
-    // Stored access token da aynı session'a ait olmalı.
-    if (!accessToken || accessIdentity !== tabIdentity) {
-      return { ok: false };
-    }
-
-    // İsteğin Authorization header'ı başka session'a aitse
-    // request'i kesinlikle gönderme.
-    if (!requestToken || requestIdentity !== tabIdentity) {
-      return { ok: false };
-    }
-
-    return {
-      ok: true,
-      generation,
-      tabIdentity,
-      refreshToken,
-      accessToken,
-      requestToken,
-    };
   });
 }
-
-function isApiRequestContextCurrent(context) {
-  if (!context?.ok) {
-    return false;
-  }
-
-  if (context.generation !== getAuthGeneration()) {
-    return false;
-  }
-
-  if (context.tabIdentity !== getTabSessionIdentity()) {
-    return false;
-  }
-
-  // Cross-tab login/logout kontrolü.
-  if (context.refreshToken !== getRefreshToken()) {
-    return false;
-  }
-
-  return (
-    getTokenSessionIdentity(getRefreshToken(), "refresh") ===
-    context.tabIdentity
-  );
+function isSameAuthSession(generation, marker) {
+  return generation === authGeneration && marker === getSessionMarker();
 }
-
-async function clearApiRequestSessionIfCurrent(context) {
-  return withAuthMutationLock(async () => {
-    // Refresh sonucu geldikten sonra başka bir login/session
-    // devreye girdiyse onun tokenlarına dokunma.
-    if (!isApiRequestContextCurrent(context)) {
-      return false;
-    }
-
-    // Bu sekmedeki bekleyen eski auth işlerini geçersiz kıl.
-    advanceAuthGeneration();
-
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
-
-    return true;
-  });
+function clearCurrentSession(generation, marker) {
+  if (!marker || !isSameAuthSession(generation, marker) || !isTabSessionCurrent()) return false;
+  authGeneration++;
+  accessToken = null;
+  emit(AUTH_LOCAL_LOGOUT_EVENT);
+  localStorage.removeItem(AUTH_SESSION_KEY);
+  localStorage.removeItem("user");
+  sessionStorage.removeItem(TAB_AUTH_SESSION_KEY);
+  emit(AUTH_SESSION_CHANGED_EVENT);
+  emit(AUTH_LOGIN_REQUIRED_EVENT);
+  return true;
 }
+export function clearAuthSessionIfCurrent(generation, marker) {
+  return withAuthMutationLock(() => clearCurrentSession(generation, marker));
+}
+const sessionIdFrom = marker => marker?.slice(marker.indexOf(":") + 1);
+const staleResult = generation => ({ ok: false, hardFail: false, stale: true, generation });
 
-// Token yenile
-async function performRefresh(expectedGeneration, expectedRefreshToken) {
-  // Aynı sekmede oturum değişmiş olabilir veya başka sekmede
-  // localStorage'daki refresh token değişmiş olabilir.
-  if (
-    !expectedRefreshToken ||
-    !isSameAuthSession(expectedGeneration, expectedRefreshToken)
-  ) {
-    return {
-      ok: false,
-      hardFail: false,
-      stale: true,
-      generation: expectedGeneration,
-    };
-  }
-
+async function authRequest(path, body, timeoutMs = 0) {
+  const controller = new AbortController();
+  // Refresh has no cookie mutation. Login/logout keep the lock until fetch and
+  // body settle; do not release it early via a timeout Promise.race.
+  const timeout = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
   try {
-    const response = await fetch(`${BASE_URL}/auth/refresh`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        refreshToken: expectedRefreshToken,
-      }),
+    const response = await fetch(`/api/auth/${path}`, {
+      method: "POST", credentials: "same-origin", cache: "no-store",
+      headers: { "Content-Type": "application/json", "X-KeepTimer-CSRF": "1" },
+      body: JSON.stringify(body), signal: controller.signal,
     });
-
-    // Fetch beklerken aynı veya başka sekmede oturum değişmiş olabilir.
-    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
-      return {
-        ok: false,
-        hardFail: false,
-        stale: true,
-        generation: expectedGeneration,
-      };
-    }
-
-    if (response.ok) {
-      const data = await response.json();
-
-      if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
-        return {
-          ok: false,
-          hardFail: false,
-          stale: true,
-          generation: expectedGeneration,
-        };
-      }
-
-      // Backend beklenmedik şekilde geçerli access token
-      // döndürmediyse mevcut oturumu bozma.
-      if (typeof data?.accessToken !== "string" || !data.accessToken.trim()) {
-        return {
-          ok: false,
-          hardFail: false,
-          stale: false,
-          generation: expectedGeneration,
-        };
-      }
-
-      const committed = await withAuthMutationLock(async () => {
-        // Lock'u beklerken başka sekmede login gerçekleşmiş olabilir.
-        // Kontrolü lock İÇİNDE tekrar yapmak kritik.
-        if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
-          return false;
-        }
-
-        saveTokens(data.accessToken, null);
-        return true;
-      });
-
-      if (!committed) {
-        return {
-          ok: false,
-          hardFail: false,
-          stale: true,
-          generation: expectedGeneration,
-        };
-      }
-
-      // Yeni access token gerçekten aynı session'a commit edildikten
-      // sonra consumer'lara haber ver.
-      // Bu event kendi başına reconnect başlatmaz.
-      window.dispatchEvent(new Event(AUTH_ACCESS_TOKEN_REFRESHED_EVENT));
-
-      return {
-        ok: true,
-        hardFail: false,
-        stale: false,
-        generation: expectedGeneration,
-      };
-    }
-
-    // Response geldikten sonra session değişmişse eski 401/403
-    // yeni kullanıcıyı logout ettirmemeli.
-    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
-      return {
-        ok: false,
-        hardFail: false,
-        stale: true,
-        generation: expectedGeneration,
-      };
-    }
-
-    const hardFail = response.status === 401 || response.status === 403;
-
-    return {
-      ok: false,
-      hardFail,
-      stale: false,
-      generation: expectedGeneration,
-    };
-  } catch {
-    if (!isSameAuthSession(expectedGeneration, expectedRefreshToken)) {
-      return {
-        ok: false,
-        hardFail: false,
-        stale: true,
-        generation: expectedGeneration,
-      };
-    }
-
-    return {
-      ok: false,
-      hardFail: false,
-      stale: false,
-      generation: expectedGeneration,
-    };
-  }
+    let data = null;
+    try { data = await response.json(); } catch { /* HTTP status remains authoritative. */ }
+    return { response, data };
+  } finally { if (timeout) clearTimeout(timeout); }
 }
 
-// Aynı anda birden fazla apiFetch 401 alırsa, hepsi TEK bir refresh'i paylaşsın
-export async function refreshAccessToken(
-  expectedGeneration = authGeneration,
-  expectedRefreshToken = getRefreshToken(),
-) {
-  if (
-    expectedGeneration !== authGeneration ||
-    getRefreshToken() !== expectedRefreshToken
-  ) {
-    return {
-      ok: false,
-      hardFail: false,
-      stale: true,
-      generation: expectedGeneration,
-    };
-  }
-
-  if (!expectedRefreshToken) {
-    return {
-      ok: false,
-      hardFail: true,
-      stale: false,
-      generation: expectedGeneration,
-    };
-  }
-
-  // Aynı generation yetmez.
-  // Başka sekmede logout/login olduysa refresh token değişmiş olabilir.
-  if (
-    refreshState &&
-    refreshState.generation === expectedGeneration &&
-    refreshState.refreshToken === expectedRefreshToken
-  ) {
-    return refreshState.promise;
-  }
-
-  const promise = performRefresh(
-    expectedGeneration,
-    expectedRefreshToken,
-  ).finally(() => {
-    // Eski refresh tamamlanırken yeni session için başka refresh
-    // başlamış olabilir. Yalnız kendi state'imizi temizleyebiliriz.
-    if (
-      refreshState?.generation === expectedGeneration &&
-      refreshState?.refreshToken === expectedRefreshToken &&
-      refreshState?.promise === promise
-    ) {
-      refreshState = null;
+export async function refreshAccessToken(generation = authGeneration, marker = getSessionMarker()) {
+  if (!marker || !isSameAuthSession(generation, marker) || !isLoggedIn()) return staleResult(generation);
+  if (globalThis.navigator?.onLine === false) return { ok: false, hardFail: false, status: 0, generation };
+  if (refreshState?.generation === generation && refreshState.marker === marker) return refreshState.promise;
+  const promise = withAuthMutationLock(async () => {
+    if (!isSameAuthSession(generation, marker) || !isLoggedIn()) return staleResult(generation);
+    try {
+      const { response, data } = await authRequest("refresh", { sessionId: sessionIdFrom(marker) }, 15000);
+      if (!isSameAuthSession(generation, marker) || !isLoggedIn()) return staleResult(generation);
+      if (response.status === 401) {
+        clearCurrentSession(generation, marker);
+        return { ok: false, hardFail: true, stale: false, status: 401, generation };
+      }
+      if (response.ok && data?.sessionId === sessionIdFrom(marker) &&
+          getTokenSessionIdentity(data.accessToken, "access") === marker) {
+        accessToken = data.accessToken;
+        emit(AUTH_ACCESS_TOKEN_REFRESHED_EVENT);
+        return { ok: true, hardFail: false, stale: false, generation };
+      }
+      return { ok: false, hardFail: false, stale: response.status === 409, status: response.status, generation };
+    } catch {
+      return isSameAuthSession(generation, marker) ? { ok: false, hardFail: false, status: 0, generation } : staleResult(generation);
     }
-  });
-
-  refreshState = {
-    generation: expectedGeneration,
-    refreshToken: expectedRefreshToken,
-    promise,
-  };
-
+  }).finally(() => { if (refreshState?.promise === promise) refreshState = null; });
+  refreshState = { generation, marker, promise };
   return promise;
 }
+export async function ensureAccessToken() {
+  if (!isLoggedIn()) return staleResult(authGeneration);
+  if (hasUsableAccessToken()) return { ok: true, generation: authGeneration };
+  return refreshAccessToken();
+}
 
-// Genel fetch — token süresi dolunca otomatik yeniler
+function withAccessToken(options, token) {
+  const headers = new Headers(options.headers || {});
+  headers.set("Authorization", `Bearer ${token}`);
+  return { ...options, headers };
+}
+function authHeader() {
+  return { "Content-Type": "application/json", Authorization: `Bearer ${getAccessToken()}` };
+}
+function apiContextCurrent(context) {
+  return isSameAuthSession(context.generation, context.marker) &&
+    getTabSessionIdentity() === context.identity && isLoggedIn();
+}
 export async function apiFetch(url, options = {}) {
-  // Optional caller scope guard: personal sync must also retain its workspace.
-  const requestIsCurrent = () => !options.isRequestCurrent || options.isRequestCurrent();
-  const context = await captureApiRequestContext(options);
-
-  if (!context.ok || !requestIsCurrent()) {
-    return null;
+  const context = { generation: authGeneration, marker: getSessionMarker(), identity: getTabSessionIdentity() };
+  const current = () => apiContextCurrent(context) && !options.signal?.aborted &&
+    (!options.isRequestCurrent || options.isRequestCurrent());
+  const supplied = new Headers(options.headers || {}).get("Authorization")?.replace(/^Bearer /, "");
+  if (!current() || (supplied && supplied !== "null" && getTokenSessionIdentity(supplied, "access") !== context.identity)) return null;
+  const ready = await ensureAccessToken();
+  if (!ready.ok || !current()) return null;
+  // Retain the existing auth-lock checkpoint before sending a scoped request.
+  const token = await withAuthMutationLock(() => current() ? getAccessToken() : null);
+  if (!token || !current()) return null;
+  let response = await fetch(url, withAccessToken(options, token));
+  if (!current()) return null;
+  if (response.status !== 401) return response;
+  let nextToken = getAccessToken();
+  if (nextToken === token || !nextToken) {
+    const result = await refreshAccessToken(context.generation, context.marker);
+    if (!result.ok || !current()) return null;
+    nextToken = getAccessToken();
   }
-
-  // options hazırlanırken eski access token kullanılmış,
-  // fakat aynı server session içinde başka request refresh
-  // etmiş olabilir.
-  //
-  // Session identity aynı olduğu için başka kullanıcı değildir;
-  // ilk isteği güncel access token ile gönder.
-  const firstRequestOptions =
-    context.requestToken === context.accessToken
-      ? options
-      : withAccessToken(options, context.accessToken);
-
-  let response = await fetch(url, firstRequestOptions);
-
-  // Request beklerken aynı sekmede veya başka sekmede
-  // auth session değişmiş olabilir.
-  //
-  // 200 dahil hiçbir eski response yeni session'a ulaşmamalı.
-  if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
-    return null;
-  }
-
-  if (response.status === 401) {
-    const currentAccessToken = getAccessToken();
-
-    const currentAccessIdentity = getTokenSessionIdentity(
-      currentAccessToken,
-      "access",
-    );
-
-    // Bizim request T0 ile gitti.
-    // Bu sırada aynı session'daki başka bir request
-    // T1 üretmiş olabilir.
-    //
-    // Yeni bir refresh başlatmak yerine T1 ile yalnız
-    // bir kez retry ediyoruz.
-    if (
-      currentAccessToken &&
-      currentAccessIdentity === context.tabIdentity &&
-      currentAccessToken !== context.accessToken
-    ) {
-      response = await fetch(url, withAccessToken(options, currentAccessToken));
-
-      // Retry beklenirken session değiştiyse
-      // eski cevabı yeni kullanıcıya verme.
-      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
-        return null;
-      }
-
-      // Burada ikinci 401 olsa bile yeni refresh YOK.
-      return response;
-    }
-
-    const result = await refreshAccessToken(
-      context.generation,
-      context.refreshToken,
-    );
-    if (result.ok) {
-      // Refresh beklerken session değişmiş olabilir.
-      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
-        return null;
-      }
-
-      const refreshedAccessToken = getAccessToken();
-
-      const refreshedAccessIdentity = getTokenSessionIdentity(
-        refreshedAccessToken,
-        "access",
-      );
-
-      // Backend'den gelen yeni access token mutlaka
-      // bu request'in başladığı server session'a ait olmalı.
-      if (
-        !refreshedAccessToken ||
-        refreshedAccessIdentity !== context.tabIdentity
-      ) {
-        return null;
-      }
-
-      response = await fetch(
-        url,
-        withAccessToken(options, refreshedAccessToken),
-      );
-
-      // Retry beklerken login/logout/session değiştiyse
-      // cevabı discard et.
-      if (!isApiRequestContextCurrent(context) || !requestIsCurrent()) {
-        return null;
-      }
-
-      // Bu ikinci istek 401 olsa bile burada tekrar
-      // refresh zinciri başlatılmayacak.
-      return response;
-    } else if (result.hardFail) {
-      const cleared = await clearApiRequestSessionIfCurrent(context);
-
-      if (!cleared) {
-        // HardFail eski/stale session'a aitti.
-        // Yeni session'a hiçbir şey yapma.
-        return null;
-      }
-
-      // Aynı sekmedeki socket ve auth consumer'larına
-      // session'ın artık aktif olmadığını bildir.
-      window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
-
-      window.dispatchEvent(new Event(AUTH_LOGIN_REQUIRED_EVENT));
-
-      return null;
-    }
-    // hardFail false (geçici sorun) → oturumu koru, sadece bu istek başarısız sayılır
-  }
-
-  return response;
+  if (!nextToken || !current()) return null;
+  response = await fetch(url, withAccessToken(options, nextToken));
+  return current() ? response : null; // One retry, same body/mutation identity.
 }
 
-// Giriş
 export async function login(username, pin) {
-  try {
-    const response = await fetch(`${BASE_URL}/auth/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, pin }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      return {
-        success: false,
-        error: data.error,
-      };
-    }
-
-    const refreshIdentity = getTokenSessionIdentity(
-      data.refreshToken,
-      "refresh",
-    );
-
-    const accessIdentity = getTokenSessionIdentity(data.accessToken, "access");
-
-    if (!refreshIdentity || accessIdentity !== refreshIdentity) {
-      return {
-        success: false,
-        error: "Sunucudan geçersiz oturum bilgisi alındı",
-      };
-    }
-
-    await withAuthMutationLock(async () => {
-      advanceAuthGeneration();
-
-      saveTokens(data.accessToken, data.refreshToken);
-
+  if (globalThis.navigator?.onLine === false) return { success: false, error: "Giriş için internet bağlantısı gerekli." };
+  return withAuthMutationLock(async () => {
+    const generation = authGeneration, marker = getSessionMarker();
+    try {
+      const { response, data } = await authRequest("login", { username, pin });
+      if (!isSameAuthSession(generation, marker)) return { success: false, stale: true, error: "Oturum değişti; giriş sonucu uygulanmadı." };
+      if (!response.ok) return { success: false, status: response.status, error: data?.error || "Giriş yapılamadı." };
+      const identity = data?.user?.id && data?.sessionId ? `${data.user.id}:${data.sessionId}` : null;
+      if (!identity || getTokenSessionIdentity(data.accessToken, "access") !== identity) {
+        return { success: false, error: "Sunucudan geçersiz oturum bilgisi alındı." };
+      }
+      authGeneration++;
+      accessToken = data.accessToken;
+      localStorage.setItem(AUTH_SESSION_KEY, identity);
+      sessionStorage.setItem(TAB_AUTH_SESSION_KEY, identity);
       saveUser(data.user);
-
-      // Bu sekme artık yeni login session'ına bağlı.
-      sessionStorage.setItem(TAB_AUTH_SESSION_KEY, refreshIdentity);
-
-      // Aynı sekmedeki eski socket'e session değiştiğini bildir.
-      window.dispatchEvent(new Event(AUTH_SESSION_CHANGED_EVENT));
-    });
-
-    return {
-      success: true,
-      user: data.user,
-    };
-  } catch {
-    return { success: false, error: "Sunucuya bağlanılamadı" };
-  }
-}
-
-// Çıkış — backend'e haber ver (oturumu iptal et), sonra local temizle
-export async function logout() {
-  // İlk await'ten ÖNCE bu sekmenin hangi session'a ait olduğunu snapshot al.
-  const logoutTabIdentity = getTabSessionIdentity();
-
-  const logoutRefreshToken = getRefreshToken();
-
-  const logoutRefreshIdentity = getTokenSessionIdentity(
-    logoutRefreshToken,
-    "refresh",
-  );
-
-  // Bu tab gerçekten localStorage'daki aktif session'ın sahibi mi?
-  const ownsActiveSession = Boolean(
-    logoutTabIdentity && logoutRefreshIdentity === logoutTabIdentity,
-  );
-
-  // KRİTİK:
-  // Socket ilk await'ten önce kapanır.
-  window.dispatchEvent(new Event(AUTH_LOCAL_LOGOUT_EVENT));
-
-  // Bu sekmedeki bekleyen eski HTTP/refresh işlerini stale yap.
-  const logoutGeneration = advanceAuthGeneration();
-
-  // Local cleanup network beklemez.
-  await withAuthMutationLock(async () => {
-    // Stale A tab, localStorage'daki B session'ını silemez.
-    if (
-      !ownsActiveSession ||
-      getTabSessionIdentity() !== logoutTabIdentity ||
-      getRefreshToken() !== logoutRefreshToken
-    ) {
-      return;
-    }
-
-    localStorage.removeItem("accessToken");
-    localStorage.removeItem("refreshToken");
-    localStorage.removeItem("user");
+      emit(AUTH_SESSION_CHANGED_EVENT);
+      return { success: true, user: data.user };
+    } catch { return { success: false, error: "Giriş sonucu doğrulanamadı. İnternet bağlantınızı kontrol edin." }; }
   });
-
-  // Server logout LOCAL logout'u bloklamaz.
-  //
-  // Yalnız snapshot'ın gerçekten bu tab session'ına
-  // ait access token olduğunu biliyorsak gönder.
-  if (ownsActiveSession && logoutRefreshToken) {
-    void fetch(`${BASE_URL}/auth/logout`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        refreshToken: logoutRefreshToken,
-      }),
-      keepalive: true,
-    }).catch(() => {});
-  }
-
-  // Logout başladıktan sonra aynı sekmede yeni login olduysa
-  // eski logout yeni session'ı /login'e gönderemez.
-  if (getAuthGeneration() === logoutGeneration) {
-    window.dispatchEvent(new Event(AUTH_LOGIN_REQUIRED_EVENT));
-  }
+}
+export async function logout() {
+  const generation = authGeneration, marker = getSessionMarker();
+  if (!isLoggedIn()) return { success: false, stale: true, error: "Bu sekmenin oturumu geçerli değil." };
+  if (globalThis.navigator?.onLine === false) return { success: false, error: "Çıkış için internet bağlantısı gerekli." };
+  return withAuthMutationLock(async () => {
+    if (!isSameAuthSession(generation, marker) || !isLoggedIn()) return { success: false, stale: true, error: "Oturum değişti." };
+    try {
+      const { response, data } = await authRequest("logout", { sessionId: sessionIdFrom(marker) });
+      if (!isSameAuthSession(generation, marker) || !isLoggedIn()) return { success: false, stale: true, error: "Oturum değişti." };
+      if (response.status === 401) {
+        clearCurrentSession(generation, marker);
+        return { success: false, expired: true, error: "Oturum artık geçerli değil. Yeniden giriş yapın." };
+      }
+      if (response.status === 200 && data?.success === true && data.sessionId === sessionIdFrom(marker)) {
+        clearCurrentSession(generation, marker);
+        return { success: true };
+      }
+      return { success: false, status: response.status, stale: response.status === 409, error: data?.error || "Çıkış doğrulanamadı; oturumunuz açık tutuldu." };
+    } catch { return { success: false, error: "Çıkış doğrulanamadı; oturumunuz açık tutuldu. İnternet bağlantınızı kontrol edin." }; }
+  });
 }
 
 // Telegram chat ID kaydet

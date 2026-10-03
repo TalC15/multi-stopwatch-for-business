@@ -5,14 +5,16 @@ import {
   AUTH_ACCESS_TOKEN_REFRESHED_EVENT,
   AUTH_LOGIN_REQUIRED_EVENT,
   getAuthGeneration,
-  getRefreshToken,
+  getSessionMarker,
   refreshAccessToken,
   clearAuthSessionIfCurrent,
   getAccessToken,
   getTabSessionIdentity,
   getTokenSessionIdentity,
   isTabSessionCurrent,
-} from "./backendSync";
+  ensureAccessToken,
+  AUTH_SESSION_KEY,
+} from "./backendSync.js";
 
 const SOCKET_URL = "https://multi-stopwatch-backend.onrender.com";
 const TRANSIENT_SOCKET_RETRY_DELAYS_MS = [1000, 3000, 7000];
@@ -58,6 +60,7 @@ let hasConnectedBefore = false;
 let currentConnectionInfo = null;
 
 let connectionWanted = false;
+let connectionRequest = 0;
 // Yalnız o anda global `socket` olarak tutulan instance'ın
 // auth-retry state'ine işaret eder.
 let socketAuthRetryState = null;
@@ -199,7 +202,18 @@ function scheduleTransientSocketRetry(
   }, delay);
 }
 
-export function connectSocket() {
+export async function connectSocket() {
+  const identity = getTabSessionIdentity();
+  if (!isTabSessionCurrent()) { disconnectSocket(); return null; }
+  connectionWanted = true;
+  const request = ++connectionRequest;
+  const result = await ensureAccessToken();
+  if (!result.ok || !connectionWanted || request !== connectionRequest ||
+      identity !== getTabSessionIdentity() || !isTabSessionCurrent()) return null;
+  return connectAuthenticatedSocket();
+}
+
+function connectAuthenticatedSocket() {
   const tabSessionIdentity = getTabSessionIdentity();
 
   if (!isTabSessionCurrent() || !tabSessionIdentity) {
@@ -396,7 +410,7 @@ export function connectSocket() {
 
       const currentAccessToken = getAccessToken();
 
-      const currentRefreshToken = getRefreshToken();
+      const currentMarker = getSessionMarker();
 
       const currentTabIdentity = getTabSessionIdentity();
 
@@ -404,12 +418,11 @@ export function connectSocket() {
         !isTabSessionCurrent() ||
         !rejectedToken ||
         !currentAccessToken ||
-        !currentRefreshToken ||
+        !currentMarker ||
         currentTabIdentity !== instanceSessionIdentity ||
         getTokenSessionIdentity(currentAccessToken, "access") !==
           instanceSessionIdentity ||
-        getTokenSessionIdentity(currentRefreshToken, "refresh") !==
-          instanceSessionIdentity
+        currentMarker !== instanceSessionIdentity
       ) {
         return;
       }
@@ -431,11 +444,11 @@ export function connectSocket() {
 
       const expectedGeneration = getAuthGeneration();
 
-      const expectedRefreshToken = currentRefreshToken;
+      const expectedMarker = currentMarker;
 
       const result = await refreshAccessToken(
         expectedGeneration,
-        expectedRefreshToken,
+        expectedMarker,
       );
 
       // Await sırasında logout/login/socket değişmiş olabilir.
@@ -457,7 +470,7 @@ export function connectSocket() {
       if (result.hardFail) {
         const cleared = await clearAuthSessionIfCurrent(
           expectedGeneration,
-          expectedRefreshToken,
+          expectedMarker,
         );
 
         if (!cleared) {
@@ -470,6 +483,8 @@ export function connectSocket() {
 
         return;
       }
+
+      if (result.stale || [400, 403, 409, 415].includes(result.status)) return;
 
       // Network / 503 gibi geçici refresh hatasında
       // session'ı silme.
@@ -567,7 +582,7 @@ export function connectSocket() {
 }
 
 export function getSocket() {
-  if (socket && !isCurrent(socket, socketSessionIdentity)) {
+  if (!isTabSessionCurrent() || (socket && !isCurrent(socket, socketSessionIdentity))) {
     disconnectSocket();
   }
 
@@ -613,6 +628,7 @@ export function onSocketConnected(callback) {
 }
 
 export function disconnectSocket() {
+  connectionRequest++;
   connectionWanted = false;
   if (socketAuthRetryState?.transientRetryTimer) {
     clearTimeout(socketAuthRetryState.transientRetryTimer);
@@ -644,6 +660,7 @@ if (typeof window !== "undefined") {
   // Online olayı yalnızca bir ipucudur.
   // Bağlantı kararını sadece navigator.onLine'a bağlamıyoruz.
   window.addEventListener("online", () => {
+    if (connectionWanted && !socket) { void connectSocket(); return; }
     const current = socket;
     const identity = socketSessionIdentity;
 
@@ -667,6 +684,7 @@ if (typeof window !== "undefined") {
     disconnectSocket();
   });
   window.addEventListener(AUTH_ACCESS_TOKEN_REFRESHED_EVENT, () => {
+    if (connectionWanted && !socket && isTabSessionCurrent()) { void connectSocket(); return; }
     const currentSocket = socket;
     const currentIdentity = socketSessionIdentity;
     const currentAuthRetryState = socketAuthRetryState;
@@ -692,14 +710,14 @@ if (typeof window !== "undefined") {
   });
   // Aynı sekmede yeni login.
   window.addEventListener(AUTH_SESSION_CHANGED_EVENT, () => {
-    if (socket && !isCurrent(socket, socketSessionIdentity)) {
+    if (!isTabSessionCurrent() || (socket && !isCurrent(socket, socketSessionIdentity))) {
       disconnectSocket();
     }
   });
 
   // Başka sekmede login/logout.
   window.addEventListener("storage", (event) => {
-    if (event.key !== "refreshToken") {
+    if (event.key !== AUTH_SESSION_KEY && event.key !== null) {
       return;
     }
 

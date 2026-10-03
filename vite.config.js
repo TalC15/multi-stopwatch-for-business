@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import path from 'path'
 import { VitePWA } from 'vite-plugin-pwa'
+import { BASE_URL } from './src/services/backendSync.js'
  
 export default defineConfig({
   plugins: [
@@ -12,6 +13,7 @@ export default defineConfig({
       workbox: {
         // App navigation must reopen offline; asset/API requests are unaffected.
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\/auth(?:\/|$)/],
         importScripts: ['/notification-events.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,woff2}'],
         // Alarm sounds are precached too, so the first offline alarm can play.
@@ -41,6 +43,18 @@ export default defineConfig({
       }
     })
   ],
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: {
+      '^/api/auth(?:/|$)': {
+        target: BASE_URL,
+        changeOrigin: true,
+        secure: true,
+        rewrite: path => path.replace(/^\/api\/auth(?=\/|$)/, '/auth'),
+      },
+    },
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

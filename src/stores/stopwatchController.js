@@ -418,7 +418,7 @@ export function createStopwatchController({
       key: JSON.stringify([
         backend.getAuthGeneration(),
         backend.getTabSessionIdentity(),
-        backend.getRefreshToken(),
+        backend.getSessionMarker(),
         current?.id,
         current?.workspace_id,
       ]),
@@ -1359,7 +1359,7 @@ export function createStopwatchController({
     void initialize();
   });
   listen(events, "storage", (event) => {
-    if ([null, "user", "refreshToken", "accessToken"].includes(event.key))
+    if ([null, "user", backend.AUTH_SESSION_KEY].includes(event.key))
       void initialize();
   });
   listen(events, "offline", () => {

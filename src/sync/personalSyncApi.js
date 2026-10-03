@@ -29,7 +29,7 @@ export function createPersonalSyncApi({
     requireScope(scope);
     const generation = auth.getAuthGeneration();
     const identity = auth.getTabSessionIdentity();
-    const refreshToken = auth.getRefreshToken();
+    const sessionMarker = auth.getSessionMarker();
     const assertCurrent = () => {
       const current = auth.getUser();
       if (
@@ -37,19 +37,23 @@ export function createPersonalSyncApi({
         !auth.isTabSessionCurrent() ||
         auth.getAuthGeneration() !== generation ||
         auth.getTabSessionIdentity() !== identity ||
-        auth.getRefreshToken() !== refreshToken ||
+        auth.getSessionMarker() !== sessionMarker ||
         current?.id !== scope.userId ||
         current?.workspace_id !== scope.workspaceId ||
-        current?.disabled_at ||
-        !auth.getAccessToken() ||
-        auth.getTokenSessionIdentity(auth.getAccessToken(), "access") !==
-          identity
+        current?.disabled_at
       ) {
         throw failure("session-changed");
       }
     };
     assertCurrent();
     return Object.freeze({ ...scope, assertCurrent });
+  }
+
+  async function ensureReady(session) {
+    session.assertCurrent();
+    const result = await auth.ensureAccessToken();
+    session.assertCurrent();
+    if (!result.ok) throw failure("auth-unavailable", result.status || 503);
   }
 
   async function send(session, path, method, body) {
@@ -118,6 +122,7 @@ export function createPersonalSyncApi({
 
   return {
     captureSession,
+    ensureReady,
     async list(session) {
       const data = await send(session, "/timers/personal", "GET");
       session.assertCurrent();

@@ -6,12 +6,12 @@ export function captureWorkspaceSession(auth = backend) {
   const user = auth.getUser();
   const userId = user?.id, workspaceId = user?.workspace_id;
   const generation = auth.getAuthGeneration(), identity = auth.getTabSessionIdentity();
-  const refresh = auth.getRefreshToken();
+  const marker = auth.getSessionMarker();
   const isCurrent = () => {
     const current = auth.getUser();
     return Boolean(userId && identity && auth.isTabSessionCurrent() &&
       auth.getAuthGeneration() === generation && auth.getTabSessionIdentity() === identity &&
-      auth.getRefreshToken() === refresh && current?.id === userId &&
+      auth.getSessionMarker() === marker && current?.id === userId &&
       current?.workspace_id === workspaceId && !current?.disabled_at);
   };
   return {

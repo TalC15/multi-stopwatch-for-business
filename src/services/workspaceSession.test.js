@@ -6,7 +6,7 @@ import { fakeAuth, ids, deferred } from "../sync/testSupport/fixtures.js";
 for (const [name, change] of [
   ["account", state => { state.user = { id: ids.other, workspace_id: ids.otherWorkspace }; }],
   ["workspace", state => { state.user.workspace_id = ids.otherWorkspace; }],
-  ["same-account new session", state => { state.generation++; state.identity = "session-B"; state.refresh = "refresh-B"; }],
+  ["same-account new session", state => { state.generation++; state.identity = "session-B"; state.marker = "marker-B"; }],
   ["logout", state => { state.current = false; state.user = null; }],
 ]) {
   test(`workspace response cannot save stale user state after ${name} changes during JSON read`, async () => {
