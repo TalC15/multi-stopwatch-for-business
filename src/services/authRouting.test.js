@@ -18,9 +18,11 @@ test('Vercel auth rewrite precedes SPA and no-store is limited to auth', async (
   const config = JSON.parse(await readFile(new URL('../../vercel.json', import.meta.url), 'utf8'));
   assert.deepEqual(config.rewrites[0], { source: '/api/auth/:path*', destination: 'https://multi-stopwatch-backend.onrender.com/auth/:path*' });
   assert.equal(config.rewrites[1].destination, '/index.html');
-  assert.equal(config.headers.length, 1); assert.equal(config.headers[0].source, '/api/auth/:path*');
+  const authHeaders = config.headers.filter(rule => rule.source === '/api/auth/:path*');
+  assert.equal(authHeaders.length, 1);
+  assert.equal(authHeaders[0].headers.find(h => h.key === 'x-vercel-enable-rewrite-caching').value, '0');
   for (const key of ['Cache-Control', 'CDN-Cache-Control', 'Vercel-CDN-Cache-Control']) {
-    assert.equal(config.headers[0].headers.find(h => h.key === key).value, 'no-store');
+    assert.equal(authHeaders[0].headers.find(h => h.key === key).value, 'no-store');
   }
 });
 test('PWA navigation excludes auth; existing static precache and empty runtime cache rules remain', async () => {
