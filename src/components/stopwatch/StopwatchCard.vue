@@ -40,7 +40,21 @@
 
         <span v-if="timer.reachedTarget">⚠</span>
 
-        {{ statusLabel ==='PAUSED' ? 'DURDU': statusLabel==='RUNNING' ? 'ÇALIŞIYOR' : statusLabel=='TIME REACHED' ? 'SÜRE DOLDU' : statusLabel=='IDLE' ? 'BEKLEMEDE' : statusLabel=='FINISHED' ? 'BİTTİ' : '' }}
+        {{
+          statusLabel === "PAUSED"
+            ? "DURDU"
+            : statusLabel === "RUNNING"
+              ? "ÇALIŞIYOR"
+              : statusLabel == "TIME REACHED"
+                ? "SÜRE DOLDU"
+                : statusLabel == "IDLE"
+                  ? "BEKLEMEDE"
+                  : statusLabel === "Bitiş onayı bekleniyor"
+                    ? "Bitiş onayı bekleniyor"
+                    : statusLabel == "FINISHED"
+                      ? "BİTTİ"
+                      : ""
+        }}
       </span>
     </div>
 
@@ -166,13 +180,27 @@
           v-if="timer.targetMinutes"
           :class="['text-sm mt-0.5', cardStyle.subtitle]"
         >
-          From: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
+          Başlangıç: {{ String(timer.targetMinutes).padStart(2, "0") }}:00
         </p>
       </div>
       <span
         :class="['text-xs font-black px-3 py-1.5 rounded-lg', cardStyle.badge]"
       >
-        {{ statusLabel }}
+        {{
+          statusLabel === "PAUSED"
+            ? "DURDU"
+            : statusLabel === "RUNNING"
+              ? "ÇALIŞIYOR"
+              : statusLabel == "TIME REACHED"
+                ? "SÜRE DOLDU"
+                : statusLabel == "IDLE"
+                  ? "BEKLEMEDE"
+                  : statusLabel === "Bitiş onayı bekleniyor"
+                    ? "Bitiş onayı bekleniyor"
+                    : statusLabel == "FINISHED"
+                      ? "BİTTİ"
+                      : ""
+        }}
       </span>
     </div>
 
@@ -252,7 +280,7 @@
       </button>
 
       <button
-        @click="requestDelete(timer, 'zamanlayıcısı')"
+        @click="requestDelete(timer, 'sayacı')"
         :aria-label="'Sil: ' + timer.name"
         :aria-disabled="sharedBlocked"
         :style="sharedBlocked ? { opacity: 0.45 } : undefined"
@@ -321,10 +349,7 @@ const getCurrentElapsed = () => {
   if (props.timer.isShared) return Number(props.timer.elapsed || 0);
   const accumulated = Number(props.timer.accumulatedTime || 0);
 
-  if (
-    props.timer.status === "running" &&
-    props.timer.startTime
-  ) {
+  if (props.timer.status === "running" && props.timer.startTime) {
     return accumulated + Math.max(0, Date.now() - props.timer.startTime);
   }
 
@@ -368,26 +393,44 @@ const statusLabel = computed(() => {
   if (type === "up") {
     if (reachedTarget && status === "running") return "TIME REACHED";
     if (reachedTarget && status === "paused") return "TIME REACHED";
-    if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Bitiş onayı bekleniyor";
-  if (status === "running") return "RUNNING";
+    if (
+      props.timer.isShared &&
+      props.timer.type === "down" &&
+      status === "running" &&
+      props.timer.remaining === 0
+    )
+      return "Bitiş onayı bekleniyor";
+    if (status === "running") return "RUNNING";
     if (status === "paused") return "PAUSED";
     return "IDLE";
   }
-  if (props.timer.isShared && props.timer.type === "down" && status === "running" && props.timer.remaining === 0) return "Bitiş onayı bekleniyor";
+  if (
+    props.timer.isShared &&
+    props.timer.type === "down" &&
+    status === "running" &&
+    props.timer.remaining === 0
+  )
+    return "Bitiş onayı bekleniyor";
   if (status === "running") return "RUNNING";
   if (status === "paused") return "PAUSED";
   if (status === "expired") return "FINISHED";
   return "IDLE";
 });
 
-const sharedBlocked = computed(() => props.timer.isShared && !store.sharedWritable);
-function canChange() { return !props.timer.isShared || store.requireSharedWrite(); }
-function togglePayment() { if (canChange()) void store.updateIsPay(props.timer.id, !props.timer.isPay); }
+const sharedBlocked = computed(
+  () => props.timer.isShared && !store.sharedWritable,
+);
+function canChange() {
+  return !props.timer.isShared || store.requireSharedWrite();
+}
+function togglePayment() {
+  if (canChange()) void store.updateIsPay(props.timer.id, !props.timer.isPay);
+}
 
 const toggleTimer = async () => {
   if (!canChange()) return;
   if (props.timer.status === "running") {
-    if (!await store.pauseTimer(props.timer.id)) return;
+    if (!(await store.pauseTimer(props.timer.id))) return;
     hapticTap();
   } else {
     await store.startTimer(props.timer.id);
@@ -395,7 +438,7 @@ const toggleTimer = async () => {
 };
 
 async function deleteAndStop(timer, deger) {
-  if (!await store.deleteTimer(timer, deger)) return;
+  if (!(await store.deleteTimer(timer, deger))) return;
 }
 
 const confirmOpen = ref(false);
