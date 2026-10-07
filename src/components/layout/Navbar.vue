@@ -33,12 +33,20 @@ const logout = message.withLoading("Çıkış yapılıyor...", async () => {
         stroke-width="1.5"
         stroke-linecap="round"
         stroke-linejoin="round"
+        aria-hidden="true"
       >
-        <path d="M10 3h4" />
-        <path d="M19 6l1-1" />
-        <circle cx="12" cy="13" r="7" />
-        <line x1="12" y1="10" x2="12" y2="13" />
-        <path />
+        <!-- Kronometre: üst buton, yan buton, kadran -->
+        <path d="M10 2.5h4" />
+        <path d="M19 6.2l1-1" />
+        <circle cx="12" cy="13.5" r="8" />
+
+        <!-- Kadranın içinde iki ayar çubuğu -->
+        <path
+          d="M8 11.5h1.4M12.6 11.5H16M8 15.5h4.4M15.6 15.5H16"
+          stroke-width="1.4"
+        />
+        <circle cx="11" cy="11.5" r="1.1" stroke-width="1.3" />
+        <circle cx="14" cy="15.5" r="1.1" stroke-width="1.3" />
       </svg>
     </button>
 
@@ -120,11 +128,13 @@ const logout = message.withLoading("Çıkış yapılıyor...", async () => {
       }}</span>
     </div>
 
-    <RouterLink v-if="!user" to="/login" class="text-sm text-indigo-500">Giriş</RouterLink>
+    <RouterLink v-if="!user" to="/login" class="text-sm text-indigo-500"
+      >Giriş</RouterLink
+    >
     <!-- Sağ: Logout -->
     <button
       v-if="user"
-    type="button"
+      type="button"
       @click="logout"
       class="w-9 h-9 flex items-center justify-center text-primary-light active:scale-90 transition-transform"
       aria-label="Çıkış"
@@ -135,29 +145,33 @@ const logout = message.withLoading("Çıkış yapılıyor...", async () => {
         height="30"
         viewBox="0 0 24 24"
         fill="none"
+        stroke="#4F46E5"
+        stroke-width="1.75"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
       >
-        <!-- Kapı -->
-        <path
-          d="M10 3H6C5.45 3 5 3.45 5 4V20C5 20.55 5.45 21 6 21H10"
-          stroke="#4F46E5"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
+        <!-- Yumuşak dolgulu kadran -->
+        <circle
+          cx="11"
+          cy="13"
+          r="7.5"
+          fill="#4F46E5"
+          fill-opacity="0"
+          stroke="none"
         />
-        <!-- Çıkış oku -->
-        <path
-          d="M10 12H20"
-          stroke="#4F46E5"
-          stroke-width="2"
-          stroke-linecap="round"
-        />
-        <path
-          d="M16 8L20 12L16 16"
-          stroke="#4F46E5"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
+
+        <!-- Sağda açık bırakılmış kadran halkası -->
+        <path d="M16.02 7.43A7.5 7.5 0 1 0 16.02 18.57" />
+
+        <!-- Üst buton -->
+        <path d="M9 2.5h4M11 2.5v3" />
+
+        <!-- Akrep: dışarı çıkan ok -->
+        <path d="M11 13h10M17.8 9.8L21 13l-3.2 3.2" />
+
+        <!-- Akrebin merkez noktası -->
+        <circle cx="11" cy="13" r="1" fill="#4F46E5" stroke="none" />
       </svg>
     </button>
   </nav>

@@ -17,7 +17,7 @@ onMounted(refreshNotificationStatus);
       <img src="/icons/notification-logo.png" alt="" width="44" height="44" class="rounded-xl" />
       <div>
         <h2 id="alarm-settings-title" class="font-bold">Cihaz Bildirimleri</h2>
-        <p class="text-xs text-[var(--color-text-secondary)]">Her cihazda çalışmaz ve sadece cihaz sahibine zamanlayıcı bitince bildirim gönderilir.</p>
+        <p class="text-xs text-[var(--color-text-secondary)]">Eski cihazlarda çalışmayabilir ve sadece cihaz sahibine zamanlayıcı bitince bildirim gönderilir.</p>
       </div>
     </div>
     <p role="status" class="text-sm font-medium">{{ permissionText }}</p>

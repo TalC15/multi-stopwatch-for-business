@@ -3,7 +3,8 @@
   "appName": "keepTime",
   "webDir": "dist",
   "android": {
-    "minWebViewVersion": 107
+    "minWebViewVersion": 107,
+    "loggingBehavior": "none"
   },
   "plugins": {
     "LocalNotifications": {
