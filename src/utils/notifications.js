@@ -5,6 +5,7 @@ import { reactive } from "vue";
 import { createWebNotificationPresenter } from "./alarms/webNotifications.js";
 import { createAlarmQueue } from "./alarms/queue.js";
 import { createAlarmAudio } from "./alarms/audio.js";
+import { getUser } from '../services/backendSync.js';
 import {
   SOUND_STORAGE_KEY,
   readSoundSettings,
@@ -217,7 +218,7 @@ const queue = createAlarmQueue({
     if (!item.test && alarmOn(soundSettings)) void hapticAlarm(signal);
     return alarmAudio.play(item, signal);
   },
-  canSpeak: () => speechOn(soundSettings) && canUseForegroundAudio(),
+  canSpeak: () => Boolean(getUser()) && speechOn(soundSettings) && canUseForegroundAudio(),
   speak: (item, signal) => {
     const text = `${item.name} bitti ve ${item.paid}`;
     const volume = soundSettings.speechVolume / 100;
