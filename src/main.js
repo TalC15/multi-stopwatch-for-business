@@ -1,4 +1,6 @@
 import { Capacitor } from '@capacitor/core'
+import { bootstrapNativeAuthSession } from './services/backendSync.js'
+import { isAndroidAuthPlatform } from './services/keepTimerAuth.js'
 import { registerSW } from 'virtual:pwa-register'
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -18,6 +20,9 @@ const theme = localStorage.getItem('theme');
 if (theme === 'dark') {
   document.documentElement.classList.add('dark');
 }
+
+// Offline UI can mount immediately; every authenticated network path waits for access.
+if (isAndroidAuthPlatform()) void bootstrapNativeAuthSession()
 
 const app = createApp(App)
 app.use(createPinia())

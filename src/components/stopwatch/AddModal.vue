@@ -171,7 +171,7 @@ onMounted(() => {
       role="dialog"
       aria-modal="true"
       aria-labelledby="add-timer-title"
-      class="relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-3xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-slate-800 dark:bg-slate-900 sm:rounded-3xl sm:p-7"
+      class="custom-scroll-y relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-3xl relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-3xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-slate-800 dark:bg-slate-900 sm:rounded-3xl sm:p-7"
     >
       <!-- Header -->
       <div
@@ -479,4 +479,63 @@ onMounted(() => {
     </div>
   </div>
 </template>
-<style></style>
+<style>
+/* ---------- Renk değişkenleri ---------- */
+.custom-scroll,
+.custom-scroll-y {
+  --sb-size: 6px;
+  --sb-thumb: rgb(165 180 252 / 0.55);        /* indigo-300 */
+  --sb-thumb-hover: rgb(99 102 241 / 0.85);   /* indigo-500 */
+  --sb-thumb-active: rgb(67 56 202);          /* indigo-700 */
+}
+
+:global(.dark) .custom-scroll,
+:global(.dark) .custom-scroll-y {
+  --sb-thumb: rgb(100 116 139 / 0.5);         /* slate-500 */
+  --sb-thumb-hover: rgb(129 140 248 / 0.85);  /* indigo-400 */
+  --sb-thumb-active: rgb(165 180 252);        /* indigo-300 */
+}
+
+/* ---------- Chromium / Safari / Edge ---------- */
+.custom-scroll::-webkit-scrollbar,
+.custom-scroll-y::-webkit-scrollbar {
+  width: var(--sb-size);
+  height: var(--sb-size);
+}
+
+.custom-scroll::-webkit-scrollbar-track,
+.custom-scroll-y::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Dikey scroll, modalın yuvarlak köşelerine yapışmasın */
+.custom-scroll-y::-webkit-scrollbar-track {
+  margin-block: 1.25rem;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb,
+.custom-scroll-y::-webkit-scrollbar-thumb {
+  background-color: var(--sb-thumb);
+  border-radius: 9999px;
+  transition: background-color 0.2s;
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:hover,
+.custom-scroll-y::-webkit-scrollbar-thumb:hover {
+  background-color: var(--sb-thumb-hover);
+}
+
+.custom-scroll::-webkit-scrollbar-thumb:active,
+.custom-scroll-y::-webkit-scrollbar-thumb:active {
+  background-color: var(--sb-thumb-active);
+}
+
+/* ---------- Firefox (webkit scrollbar desteklemeyen tarayıcılar) ---------- */
+@supports not selector(::-webkit-scrollbar) {
+  .custom-scroll,
+  .custom-scroll-y {
+    scrollbar-width: thin;
+    scrollbar-color: var(--sb-thumb) transparent;
+  }
+}
+</style>

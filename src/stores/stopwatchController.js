@@ -392,7 +392,8 @@ export function createStopwatchController({
     let current = null,
       sessionCurrent = null;
     try {
-      sessionCurrent = !suspended && backend.isTabSessionCurrent();
+      sessionCurrent = !suspended && backend.isTabSessionCurrent() &&
+        backend.isLocalAccountScopeReconciled?.() !== false;
       current = sessionCurrent ? backend.getUser() : null;
     } catch {
       /* invalid stored auth */
@@ -1341,6 +1342,9 @@ export function createStopwatchController({
     void tick();
     void loadSharedTimers();
   };
+  listen(events, backend.AUTH_ACCESS_INVALIDATED_EVENT, () => {
+    void initialize(); // Re-capture generation and the separately reconciled local scope.
+  });
   listen(events, backend.AUTH_LOCAL_LOGOUT_EVENT, () => {
     suspended = true;
     clearView();

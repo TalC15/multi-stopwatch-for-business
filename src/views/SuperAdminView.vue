@@ -32,129 +32,152 @@ function authHeader() {
   };
 }
 
-const fetchAll = message.withLoading("Yönetim verileri yükleniyor...", async () => {
-  loading.value = true;
-  const [usersRes, workspacesRes] = await Promise.all([
-    apiFetch(`${BASE_URL}/admin/users`, { headers: authHeader() }),
-    apiFetch(`${BASE_URL}/admin/workspaces`, { headers: authHeader() }),
-  ]);
+const fetchAll = message.withLoading(
+  "Yönetim verileri yükleniyor...",
+  async () => {
+    loading.value = true;
+    const [usersRes, workspacesRes] = await Promise.all([
+      apiFetch(`${BASE_URL}/admin/users`, { headers: authHeader() }),
+      apiFetch(`${BASE_URL}/admin/workspaces`, { headers: authHeader() }),
+    ]);
 
-  if (usersRes) {
-    const data = await usersRes.json();
-    users.value = data.users || [];
-  }
-  if (workspacesRes) {
-    const data = await workspacesRes.json();
-    workspaces.value = data.workspaces || [];
-  }
-  loading.value = false;
-});
-
-const createUser = message.withLoading("Kullanıcı oluşturuluyor...", async () => {
-  if (!newUsername.value || !newPin.value) return;
-  if (newUsername.value.length > 25 || newPin.value.length > 25)
-    return message.error("çok uzun isim veya PIN");
-  createLoading.value = true;
-
-  const response = await apiFetch(`${BASE_URL}/users/create`, {
-    method: "POST",
-    headers: authHeader(),
-    body: JSON.stringify({
-      username: newUsername.value,
-      pin: newPin.value,
-      role: newRole.value,
-      workspace_id: newWorkspaceId.value || null,
-    }),
-  });
-
-  if (response) {
-    const data = await response.json();
-    if (response.ok) {
-      message.success(`${newUsername.value} oluşturuldu`);
-      newUsername.value = "";
-      newPin.value = "";
-      newRole.value = "worker";
-      newWorkspaceId.value = "";
-      await fetchAll();
-    } else {
-      message.error(data.error || "Kullanıcı oluşturulamadı");
+    if (usersRes) {
+      const data = await usersRes.json();
+      users.value = data.users || [];
     }
-  }
-  createLoading.value = false;
-});
+    if (workspacesRes) {
+      const data = await workspacesRes.json();
+      workspaces.value = data.workspaces || [];
+    }
+    loading.value = false;
+  },
+);
 
-const deleteUser = message.withLoading("Kullanıcı siliniyor...", async (userId, username) => {
-  const response = await apiFetch(`${BASE_URL}/admin/users/${userId}`, {
-    method: "DELETE",
-    headers: authHeader(),
-  })
-
-  if (response?.ok) {
-    message.success(`${username} silindi`);
-    await fetchAll();
-  } else {
-    message.error("Kullanıcı silinemedi");
-  }
-});
-
-const forceLogout = message.withLoading("Kullanıcının oturumu kapatılıyor...", async (userId, username) => {
-  const response = await apiFetch(`${BASE_URL}/users/${userId}/force-logout`, {
-    method: "POST",
-    headers: authHeader(),
-  });
-
-  if (response?.ok) {
-    message.success(`${username} kullanıcısının oturumu kapatıldı`);
-  } else {
-    const data = response ? await response.json() : null;
-    message.error(data?.error || "Oturum kapatılamadı");
-  }
-});
-
-const updateUser = message.withLoading("Kullanıcı güncelleniyor...", async () => {
-  if (!editingUser.value) return;
-
-  const response = await apiFetch(
-    `${BASE_URL}/admin/users/${editingUser.value.id}`,
-    {
-      method: "PATCH",
+const createUser = message.withLoading(
+  "Kullanıcı oluşturuluyor...",
+  async () => {
+    if (!newUsername.value || !newPin.value)
+      return message.error("isim ve PIN alanları doldurulmalı")
+    if (newUsername.value.length > 25 || newPin.value.length > 25)
+      return message.error("çok uzun isim veya PIN");
+    createLoading.value = true;
+    newUsername.value = newUsername.value.trim()
+    const response = await apiFetch(`${BASE_URL}/users/create`, {
+      method: "POST",
       headers: authHeader(),
       body: JSON.stringify({
-        username: editingUser.value.username,
-        role: editingUser.value.role,
-        workspace_id: editingUser.value.workspace_id || null,
+        username: newUsername.value,
+        pin: newPin.value,
+        role: newRole.value,
+        workspace_id: newWorkspaceId.value || null,
       }),
-    },
-  );
+    });
 
-  if (response?.ok) {
-    message.success("Kullanıcı güncellendi");
-    editingUser.value = null;
-    await fetchAll();
-  } else {
-    message.error("Kullanıcı güncellenemedi");
-  }
-});
+    if (response) {
+      const data = await response.json();
+      if (response.ok) {
+        message.success(`${newUsername.value} oluşturuldu`);
+        newUsername.value = "";
+        newPin.value = "";
+        newRole.value = "worker";
+        newWorkspaceId.value = "";
+        await fetchAll();
+      } else {
+        message.error(data.error || "Kullanıcı oluşturulamadı");
+      }
+    }
+    createLoading.value = false;
+  },
+);
+
+const deleteUser = message.withLoading(
+  "Kullanıcı siliniyor...",
+  async (userId, username) => {
+    const response = await apiFetch(`${BASE_URL}/admin/users/${userId}`, {
+      method: "DELETE",
+      headers: authHeader(),
+    });
+
+    if (response?.ok) {
+      message.success(`${username} silindi`);
+      await fetchAll();
+    } else {
+      message.error("Kullanıcı silinemedi");
+    }
+  },
+);
+
+const forceLogout = message.withLoading(
+  "Kullanıcının oturumu kapatılıyor...",
+  async (userId, username) => {
+    const response = await apiFetch(
+      `${BASE_URL}/users/${userId}/force-logout`,
+      {
+        method: "POST",
+        headers: authHeader(),
+      },
+    );
+
+    if (response?.ok) {
+      message.success(`${username} kullanıcısının oturumu kapatıldı`);
+    } else {
+      const data = response ? await response.json() : null;
+      message.error(data?.error || "Oturum kapatılamadı");
+    }
+  },
+);
+
+const updateUser = message.withLoading(
+  "Kullanıcı güncelleniyor...",
+  async () => {
+    if (!editingUser.value) return;
+    editingUser.value.username = editingUser.value.username.trim()
+    console.log(editingUser.value.username)
+    const response = await apiFetch(
+      `${BASE_URL}/admin/users/${editingUser.value.id}`,
+      {
+        method: "PATCH",
+        headers: authHeader(),
+        body: JSON.stringify({
+          username: editingUser.value.username,
+          role: editingUser.value.role,
+          workspace_id: editingUser.value.workspace_id || null,
+        }),
+      },
+    );
+
+    if (response?.ok) {
+      message.success("Kullanıcı güncellendi");
+      editingUser.value = null;
+      await fetchAll();
+    } else {
+      message.error("Kullanıcı güncellenemedi");
+    }
+  },
+);
 
 function workspaceName(id) {
   const ws = workspaces.value.find((w) => w.id === id);
   return ws ? ws.name : "-";
 }
 
-const fetchWorkspaceDetail = message.withLoading("Çalışma grubu ayrıntıları yükleniyor...", async (wsId) => {
-  detailLoading.value = true;
-  showModal.value = true;
+const fetchWorkspaceDetail = message.withLoading(
+  "Çalışma grubu ayrıntıları yükleniyor...",
+  async (wsId) => {
+    detailLoading.value = true;
+    showModal.value = true;
 
-  const response = await apiFetch(`${BASE_URL}/admin/workspaces/${wsId}`, {
-    headers: authHeader(),
-  });
+    const response = await apiFetch(`${BASE_URL}/admin/workspaces/${wsId}`, {
+      headers: authHeader(),
+    });
 
-  if (response) {
-    const data = await response.json();
-    workspaceDetail.value = data;
-  }
-  detailLoading.value = false;
-});
+    if (response) {
+      const data = await response.json();
+      workspaceDetail.value = data;
+    }
+    detailLoading.value = false;
+  },
+);
 
 function closeModal() {
   showModal.value = false;
@@ -246,8 +269,9 @@ onMounted(() => fetchAll());
                   ? 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300'
                   : role === 'superadmin'
                     ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                    : role === 'worker' ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
-                    : ''
+                    : role === 'worker'
+                      ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                      : ''
                 : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-indigo-500/20 hover:bg-indigo-500/5',
             ]"
           >
@@ -255,16 +279,55 @@ onMounted(() => fetchAll());
           </button>
         </div>
 
-        <select
-          v-model="newWorkspaceId"
-          aria-label="Yeni kullanıcının çalışma grubu"
-          class="min-w-0 w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 text-sm text-[var(--color-text-primary)] outline-none transition placeholder:text-[var(--color-text-muted)] focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
-        >
-          <option value="">Workspace yok</option>
-          <option v-for="ws in workspaces" :key="ws.id" :value="ws.id">
-            {{ ws.name }}
-          </option>
-        </select>
+        <div class="group relative min-w-0 w-full">
+          <select
+            v-model="newWorkspaceId"
+            aria-label="Yeni kullanıcının çalışma grubu"
+            :class="[
+              'peer block min-h-12 w-full min-w-0 cursor-pointer appearance-none truncate rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] py-3 pl-4 pr-11 text-base font-medium outline-none transition-colors sm:text-sm',
+              'hover:border-indigo-300 dark:hover:border-indigo-500/60',
+              'focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10',
+              'disabled:cursor-not-allowed disabled:opacity-60',
+              '[color-scheme:light] dark:[color-scheme:dark]',
+              newWorkspaceId === '' || newWorkspaceId == null
+                ? 'text-[var(--color-text-muted)]'
+                : 'text-[var(--color-text-primary)]',
+            ]"
+          >
+            <option
+              value=""
+              class="bg-[var(--color-card)] text-[var(--color-text-primary)]"
+            >
+              Workspace yok
+            </option>
+            <option
+              v-for="ws in workspaces"
+              :key="ws.id"
+              :value="ws.id"
+              class="bg-[var(--color-card)] text-[var(--color-text-primary)]"
+            >
+              {{ ws.name }}
+            </option>
+          </select>
+
+          <!-- Özel ok ikonu -->
+          <span
+            class="pointer-events-none absolute inset-y-0 right-2 flex w-8 items-center justify-center text-[var(--color-text-muted)] transition-colors group-hover:text-indigo-500 peer-focus:text-indigo-500 dark:group-hover:text-indigo-300 dark:peer-focus:text-indigo-300"
+            aria-hidden="true"
+          >
+            <svg
+              class="size-4"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.25"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </span>
+        </div>
 
         <button
           @click="createUser"
@@ -305,9 +368,10 @@ onMounted(() => fetchAll());
                   ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
                   : user?.role === 'superadmin'
                     ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                   : user?.role === 'worker'
-                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
-                    : '' "
+                    : user?.role === 'worker'
+                      ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                      : ''
+              "
               aria-hidden="true"
             >
               {{ user.username?.charAt(0)?.toLocaleUpperCase("tr-TR") || "?" }}
@@ -320,8 +384,19 @@ onMounted(() => fetchAll());
               <span
                 class="truncate text-[11px] leading-relaxed text-[var(--color-text-secondary)]"
                 ><span
-                  :class="[store.roleStyles[user?.role]?.text, 'text-[11px] font-semibold']"
-                  >{{ user?.role=='manager' ? 'Yönetici' : user?.role =='superadmin' ? 'Süper Yönetici' : user?.role =='worker' ? 'Çalışan' : '' }}</span
+                  :class="[
+                    store.roleStyles[user?.role]?.text,
+                    'text-[11px] font-semibold',
+                  ]"
+                  >{{
+                    user?.role == "manager"
+                      ? "Yönetici"
+                      : user?.role == "superadmin"
+                        ? "Süper Yönetici"
+                        : user?.role == "worker"
+                          ? "Çalışan"
+                          : ""
+                  }}</span
                 >
                 — {{ workspaceName(user.workspace_id) }}</span
               >
@@ -414,27 +489,71 @@ onMounted(() => fetchAll());
                   'min-w-0 flex-1 rounded-xl border px-1 py-2.5 text-[10px] font-bold capitalize sm:text-[11px] transition active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500',
                   editingUser.role === role
                     ? role === 'manager'
-                  ? 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                  : role === 'superadmin'
-                    ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                    : role === 'worker' ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
-                    : ''
+                      ? 'border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                      : role === 'superadmin'
+                        ? 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                        : role === 'worker'
+                          ? 'border-blue-500/30 bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                          : ''
                     : 'border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-indigo-500/20 hover:bg-indigo-500/5',
                 ]"
               >
                 {{ role }}
               </button>
             </div>
-            <select
-              v-model="editingUser.workspace_id"
-              aria-label="Kullanıcının çalışma grubu"
-              class="min-w-0 w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5 text-sm text-[var(--color-text-primary)] outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15"
-            >
-              <option value="">Workspace yok</option>
-              <option v-for="ws in workspaces" :key="ws.id" :value="ws.id">
-                {{ ws.name }}
-              </option>
-            </select>
+
+            <!-- Çalışma grubu select -->
+            <div class="group relative min-w-0 w-full">
+              <select
+                v-model="editingUser.workspace_id"
+                aria-label="Kullanıcının çalışma grubu"
+                :class="[
+                  'peer block min-h-11 w-full min-w-0 cursor-pointer appearance-none truncate rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] py-2.5 pl-3 pr-10 text-sm font-medium outline-none transition-colors',
+                  'hover:border-indigo-300 dark:hover:border-indigo-500/60',
+                  'focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15',
+                  'disabled:cursor-not-allowed disabled:opacity-60',
+                  '[color-scheme:light] dark:[color-scheme:dark]',
+                  editingUser.workspace_id === '' ||
+                  editingUser.workspace_id == null
+                    ? 'text-[var(--color-text-muted)]'
+                    : 'text-[var(--color-text-primary)]',
+                ]"
+              >
+                <option
+                  value=""
+                  class="bg-[var(--color-card)] text-[var(--color-text-primary)]"
+                >
+                  Workspace yok
+                </option>
+                <option
+                  v-for="ws in workspaces"
+                  :key="ws.id"
+                  :value="ws.id"
+                  class="bg-[var(--color-card)] text-[var(--color-text-primary)]"
+                >
+                  {{ ws.name }}
+                </option>
+              </select>
+
+              <!-- Özel ok ikonu -->
+              <span
+                class="pointer-events-none absolute inset-y-0 right-1.5 flex w-8 items-center justify-center text-[var(--color-text-muted)] transition-colors group-hover:text-indigo-500 peer-focus:text-indigo-500 dark:group-hover:text-indigo-300 dark:peer-focus:text-indigo-300"
+                aria-hidden="true"
+              >
+                <svg
+                  class="size-4"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.25"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </span>
+            </div>
+
             <div class="flex gap-2">
               <button
                 @click="editingUser = null"
@@ -510,7 +629,7 @@ onMounted(() => fetchAll());
           role="dialog"
           aria-modal="true"
           aria-labelledby="superadmin-workspace-title"
-          class="superadmin-dialog relative flex max-h-[80vh] w-full max-w-md flex-col gap-5 overflow-y-auto overscroll-contain rounded-t-[30px] border border-[var(--color-border)] bg-[var(--color-card)] p-6 text-[var(--color-text-primary)] shadow-2xl shadow-slate-950/20 sm:rounded-[28px] sm:p-7"
+          class="custom-scroll-y superadmin-dialog relative flex max-h-[80vh] w-full max-w-md flex-col gap-5 overflow-y-auto overscroll-contain rounded-t-[30px] border border-[var(--color-border)] bg-[var(--color-card)] p-6 text-[var(--color-text-primary)] shadow-2xl shadow-slate-950/20 sm:rounded-[28px] sm:p-7"
         >
           <div
             class="mx-auto -mt-3 h-1 w-10 shrink-0 rounded-full bg-[var(--color-border)] sm:hidden"
@@ -614,13 +733,14 @@ onMounted(() => fetchAll());
                 <div
                   class="grid size-10 shrink-0 place-items-center rounded-2xl text-sm font-black"
                   :class="
-                member?.role === 'manager'
-                  ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
-                  : member?.role === 'superadmin'
-                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
-                   : member?.role === 'worker'
-                    ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
-                    : '' "
+                    member?.role === 'manager'
+                      ? 'bg-violet-500/10 text-violet-600 dark:text-violet-300'
+                      : member?.role === 'superadmin'
+                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-300'
+                        : member?.role === 'worker'
+                          ? 'bg-blue-500/10 text-blue-600 dark:text-blue-300'
+                          : ''
+                  "
                   aria-hidden="true"
                 >
                   {{

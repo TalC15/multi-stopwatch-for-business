@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
-const authSource = readFileSync(new URL('../backendSync.js', import.meta.url), 'utf8');
+const authSource = readFileSync(new URL('../backendSync.js', import.meta.url), 'utf8')
+  .replace('import { KeepTimerAuth, isAndroidAuthPlatform } from "./keepTimerAuth.js";', 'const { KeepTimerAuth, isAndroidAuthPlatform } = globalThis.authTransport;');
 const exportedNames = source => [...source.matchAll(/^export (?:async )?(?:function|const) (\w+)/gm)].map(match => match[1]);
 const evaluate = (source, context, name) => {
   const names = exportedNames(source);
@@ -11,8 +12,10 @@ const evaluate = (source, context, name) => {
 export const user = { id: '00000000-0000-4000-8000-000000000001', workspace_id: '00000000-0000-4000-8000-000000000003', role: 'worker' };
 export const sid = '00000000-0000-4000-8000-000000000010';
 export const sidB = '00000000-0000-4000-8000-000000000011';
+// Stable fixture expiry avoids comparing tokens generated across a second boundary.
+const accessExpiresAt = Math.floor(Date.now() / 1000) + 900;
 export const access = (sessionId = sid, id = user.id, serial = 1) =>
-  `header.${Buffer.from(JSON.stringify({ type: 'access', id, sessionId, serial, exp: Math.floor(Date.now()/1000)+900 })).toString('base64url')}.signature`;
+  `header.${Buffer.from(JSON.stringify({ type: 'access', id, sessionId, serial, exp: accessExpiresAt })).toString('base64url')}.signature`;
 export const response = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
 export const loggedIn = (sessionId = sid, account = user) => response(200, { accessToken: access(sessionId, account.id), sessionId, user: account });
 export const refreshed = (sessionId = sid) => response(200, { accessToken: access(sessionId), sessionId });
@@ -30,7 +33,7 @@ export function serialLocks() {
 export function browser({ locks = true, initial = {} } = {}) {
   const entries = new Map(Object.entries(initial)), tabs = [], writes = [];
   const sharedLocks = locks ? serialLocks() : undefined;
-  function tab({ online = true, tabIdentity = null } = {}) {
+  function tab({ online = true, tabIdentity = null, platform = "web", native = {} } = {}) {
     const window = new EventTarget(), sessionEntries = new Map();
     if (tabIdentity) sessionEntries.set('keeptimer-tab-auth-session', tabIdentity);
     const localStorage = {
@@ -51,7 +54,7 @@ export function browser({ locks = true, initial = {} } = {}) {
     };
     const document = new EventTarget();
     Object.defineProperty(document, 'cookie', { get() { throw Error('Cookie must never be read'); }, set() { throw Error('Cookie must never be written'); } });
-    const context = vm.createContext({ window, document, navigator: { onLine: online, locks: sharedLocks }, localStorage, sessionStorage,
+    const context = vm.createContext({ authTransport: { KeepTimerAuth: native, isAndroidAuthPlatform: () => platform === "android" }, window, document, navigator: { onLine: online, locks: sharedLocks }, localStorage, sessionStorage,
       fetch: () => { throw Error('Unexpected network request'); }, console, Headers, Response, AbortController, Event,
       atob, setTimeout, clearTimeout, setInterval, clearInterval });
     const auth = evaluate(authSource, context, 'auth');

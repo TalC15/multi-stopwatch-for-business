@@ -1,6 +1,7 @@
 import { io } from "socket.io-client";
 import {
   AUTH_SESSION_CHANGED_EVENT,
+  AUTH_ACCESS_INVALIDATED_EVENT,
   AUTH_LOCAL_LOGOUT_EVENT,
   AUTH_ACCESS_TOKEN_REFRESHED_EVENT,
   AUTH_LOGIN_REQUIRED_EVENT,
@@ -680,6 +681,12 @@ if (typeof window !== "undefined") {
     current.disconnect().connect();
   });
 
+  window.addEventListener(AUTH_ACCESS_INVALIDATED_EVENT, () => {
+    const wanted = connectionWanted;
+    disconnectSocket();
+    // Resume only after a verified access refresh, never on native metadata.
+    connectionWanted = wanted;
+  });
   window.addEventListener(AUTH_LOCAL_LOGOUT_EVENT, () => {
     disconnectSocket();
   });

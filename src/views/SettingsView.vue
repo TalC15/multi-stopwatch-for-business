@@ -631,7 +631,7 @@ function removePresetName(bIndex) {
           class="mx-5 mb-5 min-h-28 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-sm leading-relaxed text-[var(--color-text-secondary)] [overflow-wrap:anywhere] sm:mx-6 [&_p+p]:mt-3"
         >
         <p>
-          <b>KeepTimer</b> uygulaması ile zaman yönetiminizi kolaylaştırın, karışan zaman durumlarına son verin ve uçup gider süreleri çıkarım yapabileceğiniz verilere çevirin.
+          <b>KeepTimer</b> uygulaması ile zaman yönetiminizi kolaylaştırın, karışan zaman durumlarına son verin ve uçup giden süreleri çıkarım yapabileceğiniz verilere çevirin.
         </p>    
       </div>
       </div>
