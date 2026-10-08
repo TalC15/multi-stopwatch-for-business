@@ -1,7 +1,7 @@
 <script setup>
 import { RouterView } from "vue-router";
 import { connectSocket } from './services/socket';
-import { isLoggedIn } from './services/backendSync';
+import { isLoggedIn, getUser } from './services/backendSync';
 import { isAndroidAuthPlatform } from './services/keepTimerAuth.js';
 import AppMessage from "./components/ui/AppMessage.vue";
 import { messageState } from "./composables/message.js";
@@ -12,6 +12,7 @@ import { initializeNotifications } from "./utils/notifications.js";
 let cleanupNotifications;
 onUnmounted(() => cleanupNotifications?.());
 onMounted(() => {
+  if (getUser()?.role === 'agent') return;
   cleanupNotifications = initializeNotifications();
   void timers.initialize();
   // Socket bağlantısı

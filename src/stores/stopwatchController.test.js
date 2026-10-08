@@ -1353,3 +1353,16 @@ test('payment edit after a count-up expires while pausing does not cancel its ac
   assert.deepEqual(cancelled, []);
   assert.equal(notifications.length, 1);
 });
+
+test("agent initialization does not load timer workspaces or synchronize personal data", async () => {
+  auth.state.user = { ...auth.state.user, role: "agent", workspace_id: null };
+  online = true;
+  const c = makeController();
+  assert.equal(await c.initialize(), false);
+  assert.equal(c.ready.value, false);
+  assert.equal(c.sharedWritable.value, false);
+  assert.equal(c.user.value.role, "agent");
+  assert.deepEqual(legacy, []);
+  assert.deepEqual(server.requests, []);
+  assert.deepEqual(notifications, []);
+});

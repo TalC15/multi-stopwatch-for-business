@@ -15,6 +15,7 @@ import {
   isTabSessionCurrent,
   ensureAccessToken,
   AUTH_SESSION_KEY,
+  getUser,
 } from "./backendSync.js";
 
 const SOCKET_URL = "https://multi-stopwatch-backend.onrender.com";
@@ -204,6 +205,7 @@ function scheduleTransientSocketRetry(
 }
 
 export async function connectSocket() {
+  if (getUser()?.role === 'agent') { disconnectSocket(); return null; }
   const identity = getTabSessionIdentity();
   if (!isTabSessionCurrent()) { disconnectSocket(); return null; }
   connectionWanted = true;
@@ -215,6 +217,7 @@ export async function connectSocket() {
 }
 
 function connectAuthenticatedSocket() {
+  if (getUser()?.role === 'agent') { disconnectSocket(); return null; }
   const tabSessionIdentity = getTabSessionIdentity();
 
   if (!isTabSessionCurrent() || !tabSessionIdentity) {

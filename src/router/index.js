@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { Capacitor } from "@capacitor/core";
+import { managementRedirect } from "../domain/subscriptionManagement.js";
 import {
   AUTH_LOGIN_REQUIRED_EVENT,
   isLoggedIn,
@@ -6,6 +8,10 @@ import {
 } from "../services/backendSync";
 
 const routes = [
+  { path: "/superadmin/agents", name: "AgentManagement", component: () => import("../views/SubscriptionManagementView.vue"), meta: { requiresAuth: true, salesRole: "superadmin", salesKind: "agents" } },
+  { path: "/agent/customers", name: "IndividualCustomers", component: () => import("../views/SubscriptionManagementView.vue"), meta: { requiresAuth: true, salesRole: "agent", salesKind: "customers" } },
+  { path: "/agent/customers/:customerId", name: "IndividualCustomerHistory", component: () => import("../views/SubscriptionManagementView.vue"), meta: { requiresAuth: true, salesRole: "agent", salesKind: "history" } },
+  { path: "/management-unavailable", name: "ManagementUnavailable", component: () => import("../views/ManagementUnavailableView.vue"), meta: { managementBlocked: true } },
   {
     path: "/login",
     name: "Login",
@@ -50,7 +56,9 @@ const router = createRouter({
 });
 
 // Auth guard
-router.beforeEach((to, from) => {
+router.beforeEach((to) => {
+  const redirect = managementRedirect(to, { loggedIn: isLoggedIn(), user: getUser(), native: Capacitor.getPlatform() !== 'web' || Capacitor.isNativePlatform() });
+  if (redirect) return redirect;
   if (to.meta.requiresAuth && !isLoggedIn()) {
     return "/login";
   } else if (to.meta.guest && isLoggedIn()) {
