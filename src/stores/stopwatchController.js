@@ -532,6 +532,11 @@ export function createStopwatchController({
   async function initialize() {
     if (disposed) return false;
     const next = context();
+    if (next.user?.role === 'agent') {
+      clearView(); active = null; user.value = next.user;
+      sharedAccess.value = 'signed-out';
+      return false;
+    }
     user.value = next.user;
     sharedAccess.value = next.sharedAccess;
     if (active?.key === next.key && initPromise) return initPromise;
