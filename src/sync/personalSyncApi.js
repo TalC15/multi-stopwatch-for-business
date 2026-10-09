@@ -100,6 +100,7 @@ export function createPersonalSyncApi({
               } catch { /* Unknown error bodies remain transport errors. */ }
             }
             session.assertCurrent();
+            if (renewableDenials.has(code)) experience?.rejectAuthority?.();
             throw failure(code, response.status);
           }
           let data;

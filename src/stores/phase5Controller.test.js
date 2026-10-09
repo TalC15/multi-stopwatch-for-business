@@ -17,7 +17,7 @@ function fixture(preferences={}) {
   const auth=fakeAuth(); auth.state.user.role='worker';
   const server=mockServer(), events=new EventTarget(), errors=[], notices=[], io={shared:0,flush:0}, net={online:true,status:'active',code:null};
   const experience=createAccountExperience({auth,events,online:()=>net.online,request:async()=>({ok:true,json:async()=>({
-    account:{kind:'individual',userId:auth.state.user.id,workspaceId:auth.state.user.workspace_id},
+    evaluatedAt:'2026-10-09T09:00:00.000001Z', account:{kind:'individual',userId:auth.state.user.id,workspaceId:auth.state.user.workspace_id},
     subscription:{planCode:'individual',status:net.status,startsAt:'2026-10-01T00:00:00.000001Z',endsAt:'2026-11-01T00:00:00.000002Z',isEntitled:net.code===null},code:net.code,
     features:{tts:net.code===null,telegram:net.code===null,presets:net.code===null},personal:{readable:true,writable:net.code===null},shared:false,loginReady:false})})});
   const backend={...auth,AUTH_LOCAL_LOGOUT_EVENT:'logout',AUTH_SESSION_CHANGED_EVENT:'session',AUTH_USER_CHANGED_EVENT:'user'};

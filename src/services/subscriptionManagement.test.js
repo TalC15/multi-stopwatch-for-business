@@ -40,9 +40,9 @@ test('money formatting keeps integer precision and history labels never grant au
   assert.equal(formatMoney('9007199254740991', 'TRY'), '90.071.992.547.409,91 TRY');
   assert.equal(formatMoney('123', 'JPY'), '123 alt birim (JPY)');
   const row = { startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-11-01T00:00:00Z', cancelledAt: null };
-  assert.equal(historyStatus(row, Date.parse('2026-09-01')), 'pending');
-  assert.equal(historyStatus(row, Date.parse('2026-10-08')), 'active');
-  assert.equal(historyStatus(row, Date.parse('2026-11-01')), 'expired');
+  assert.equal(historyStatus({ ...row, status: 'pending' }), 'pending');
+  assert.equal(historyStatus({ ...row, status: 'active' }), 'active');
+  assert.equal(historyStatus({ ...row, status: 'expired' }), 'expired');
   assert.equal(historyStatus({ ...row, cancelledAt: row.startsAt }), 'cancelled');
 });
 test('actual router enforces role and platform matrix; existing worker/manager routes stay available', async () => {

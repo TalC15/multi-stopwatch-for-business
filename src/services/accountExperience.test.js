@@ -5,7 +5,7 @@ import { createAccountExperience } from './accountExperience.js';
 import { validateExperience } from '../domain/accountExperience.js';
 const id = n => `aaaaaaaa-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const user = { id: id(1), workspace_id: id(2), role: 'worker', plan_code: 'individual' };
-const data = (status = 'active', code = null) => ({ account: { kind: 'individual', userId: user.id, workspaceId: user.workspace_id },
+const data = (status = 'active', code = null) => ({ evaluatedAt: '2026-10-09T09:00:00.000001Z', account: { kind: 'individual', userId: user.id, workspaceId: user.workspace_id },
   subscription: { planCode: 'individual', status, startsAt: '2026-10-01T00:00:00.000001Z', endsAt: '2026-11-01T00:00:00.000002Z', isEntitled: code === null }, code,
   features: { tts: code === null, telegram: code === null, presets: code === null }, personal: { readable: true, writable: code === null }, shared: false, loginReady: false });
 const response = body => ({ ok: true, json: async () => body });

@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { entitlementCodes } from '../../domain/accountExperience.js';
 
 const authSource = readFileSync(new URL('../backendSync.js', import.meta.url), 'utf8')
+  .replace("import { entitlementCodes } from '../domain/accountExperience.js';", 'const { entitlementCodes } = globalThis.authTransport;')
   .replace('import { KeepTimerAuth, isAndroidAuthPlatform } from "./keepTimerAuth.js";', 'const { KeepTimerAuth, isAndroidAuthPlatform } = globalThis.authTransport;');
 const exportedNames = source => [...source.matchAll(/^export (?:async )?(?:function|const) (\w+)/gm)].map(match => match[1]);
 const evaluate = (source, context, name) => {
@@ -54,7 +56,7 @@ export function browser({ locks = true, initial = {} } = {}) {
     };
     const document = new EventTarget();
     Object.defineProperty(document, 'cookie', { get() { throw Error('Cookie must never be read'); }, set() { throw Error('Cookie must never be written'); } });
-    const context = vm.createContext({ authTransport: { KeepTimerAuth: native, isAndroidAuthPlatform: () => platform === "android" }, window, document, navigator: { onLine: online, locks: sharedLocks }, localStorage, sessionStorage,
+    const context = vm.createContext({ authTransport: { entitlementCodes, KeepTimerAuth: native, isAndroidAuthPlatform: () => platform === "android" }, window, document, navigator: { onLine: online, locks: sharedLocks }, localStorage, sessionStorage,
       fetch: () => { throw Error('Unexpected network request'); }, console, Headers, Response, AbortController, Event,
       atob, setTimeout, clearTimeout, setInterval, clearInterval });
     const auth = evaluate(authSource, context, 'auth');
