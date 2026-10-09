@@ -293,6 +293,7 @@ before(async () => {
         'render(){return h("a",{href:this.to},this.$slots.default?.());}' +
         "};",
 
+      experience: `export const accountExperience={ state:{status:'verified',data:{account:{kind:'company'}}}, currentData:{value:{account:{kind:'company'}}}, canShared:()=>true, canFeature:()=>true, refresh:async()=>true, requireFeature:async()=>true };`,
       haptics: "export const hapticTap=()=>{};",
 
       audio: 'export default "";',
@@ -343,6 +344,8 @@ before(async () => {
                     ? "theme"
                     : source.includes("composables/message")
                       ? "message"
+                      : source.includes("services/accountExperience")
+                        ? "experience"
                       : source.includes("backendSync")
                         ? "backend"
                         : source.includes("haptics")

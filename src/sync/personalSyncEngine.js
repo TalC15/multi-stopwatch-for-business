@@ -1,10 +1,12 @@
 import { timerDb } from "../data/timerDb.js";
+import { renewableDenials } from "../domain/accountExperience.js";
 import { createPersonalSyncApi } from "./personalSyncApi.js";
 import { validateAcknowledgement, validateServerTimer, validatePersonalTombstone } from "./personalSyncModel.js";
 import {
   listPersonalOutbox, preparePersonalOperation, acknowledgePersonalOperation,
   markPersonalOperation, importPersonalSnapshot, reconcileAlreadyDeletedPersonalTimer,
   validatePersonalOperation, deferPersonalReconciliation, readPersonalResolution, acceptPersonalServer,
+  retryPersonalSubscriptionOperation,
 } from "./personalOutbox.js";
 
 export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks = globalThis.navigator?.locks, now = Date.now, online = () => globalThis.navigator?.onLine !== false } = {}) {
@@ -41,6 +43,15 @@ export function createPersonalSyncEngine({ api = createPersonalSyncApi(), locks 
       return inSessionLock(async (session) => {
         const queued = await listPersonalOutbox(session);
         session.assertCurrent();
+        const denied = queued.filter(op => op.status === 'forbidden' && renewableDenials.has(op.error?.code));
+        if (denied.length && api.canRetrySubscription && await api.canRetrySubscription(session)) {
+          session.assertCurrent();
+          for (const op of denied) {
+            if (await retryPersonalSubscriptionOperation(op, session, session.assertCurrent)) {
+              op.status = 'retry'; op.retryAt = 0;
+            }
+          }
+        }
         const result = { status: "done", acknowledged: 0, resolvedDeletes: 0, blocked: [], deferred: [] };
         // Old/unknown 403s remain fail-closed until an explicit, scoped review.
         if (queued.some(op => op.status === "forbidden" && op.error?.code !== "PERSONAL_TIMER_FORBIDDEN"))

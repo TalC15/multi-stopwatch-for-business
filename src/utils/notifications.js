@@ -1,11 +1,11 @@
 import { Capacitor } from "@capacitor/core";
 import { TextToSpeech } from "@capacitor-community/text-to-speech";
 import { LocalNotifications } from "@capacitor/local-notifications";
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 import { createWebNotificationPresenter } from "./alarms/webNotifications.js";
 import { createAlarmQueue } from "./alarms/queue.js";
 import { createAlarmAudio } from "./alarms/audio.js";
-import { getUser } from '../services/backendSync.js';
+import { accountExperience } from '../services/accountExperience.js';
 import {
   SOUND_STORAGE_KEY,
   readSoundSettings,
@@ -208,7 +208,7 @@ export async function requestExactAlarmPermission() {
 
 const alarmAudio = createAlarmAudio({
   sources: { up: radarAlarm, down: digitalAlarm },
-  settings: () => soundSettings,
+  settings: () => ({ ...soundSettings, speechEnabled: soundSettings.speechEnabled && accountExperience.canFeature('tts') }),
   onError: report,
 });
 const canUseForegroundAudio = () => !isNativeNotifications() || foreground();
@@ -218,8 +218,9 @@ const queue = createAlarmQueue({
     if (!item.test && alarmOn(soundSettings)) void hapticAlarm(signal);
     return alarmAudio.play(item, signal);
   },
-  canSpeak: () => Boolean(getUser()) && speechOn(soundSettings) && canUseForegroundAudio(),
-  speak: (item, signal) => {
+  canSpeak: () => accountExperience.canFeature('tts') && speechOn(soundSettings) && canUseForegroundAudio(),
+  speak: async (item, signal) => {
+    if (!await accountExperience.requireFeature('tts') || signal.aborted) return;
     const text = `${item.name} bitti ve ${item.paid}`;
     const volume = soundSettings.speechVolume / 100;
     return isNativeNotifications()
@@ -227,6 +228,12 @@ const queue = createAlarmQueue({
       : speakWeb(text, signal, globalThis, 15000, volume);
   },
   onError: report,
+});
+watch(() => [accountExperience.state.status, accountExperience.state.data?.features.tts, accountExperience.canFeature('tts')], ([status, tts, allowed]) => {
+  if ((['offline', 'unavailable', 'standalone'].includes(status) || status === 'loading' && tts === undefined || status === 'verified' && tts === false) && !allowed) {
+    queue.interruptSpeech();
+    alarmAudio.applySettings();
+  }
 });
 
 function saveSoundSettings(settings) {
@@ -265,6 +272,7 @@ export function unlockAlarmAudio() {
 
   if (
     speechOn(soundSettings) &&
+    accountExperience.canFeature('tts') &&
     !isNativeNotifications() &&
     globalThis.speechSynthesis &&
     globalThis.SpeechSynthesisUtterance

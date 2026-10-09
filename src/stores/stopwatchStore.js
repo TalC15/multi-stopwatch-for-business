@@ -9,12 +9,13 @@ import { message } from "../composables/message.js";
 import { notifyTimerEnd, cancelTimerSound, syncNativeTimerNotifications, stopAllAlarmSounds, updateQueuedAlarm } from "../utils/notifications.js";
 import { alarmSnapshot } from "../utils/alarms/snapshot.js";
 import { hapticTap } from "../utils/haptics.js";
+import { accountExperience } from "../services/accountExperience.js";
 
 export const useStopwatchStore = defineStore("stopwatch", () => {
-  const personalApi = createPersonalSyncApi();
+  const personalApi = createPersonalSyncApi({ experience: accountExperience });
   const store = createStopwatchController({ backend, socket, personalApi,
     engine: createPersonalSyncEngine({ api: personalApi }), message,
-    notify: notifyTimerEnd, cancelSound: cancelTimerSound, haptic: hapticTap });
+    notify: notifyTimerEnd, cancelSound: cancelTimerSound, haptic: hapticTap, experience: accountExperience });
   // Observe durable anchors plus server-derived elapsed time, never mutate timer state here.
   const stopAlarmWatch = watch(() => ({ ready: store.ready.value, timers: alarmSnapshot(store.stopwatches.value) }), ({ ready, timers }, previous) => {
     if (!ready) {

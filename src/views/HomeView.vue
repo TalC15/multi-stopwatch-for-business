@@ -1,5 +1,7 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { accountExperience } from '../services/accountExperience.js';
+import AccountStatusCard from '../components/AccountStatusCard.vue';
 import { RouterLink } from "vue-router";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { useThemeStore } from "@/stores/themeStore";
@@ -24,6 +26,12 @@ const isDrawerOpen = ref(false);
 const isModalOpen = ref(false);
 const isPausedAll = ref(false);
 const sortDirection = ref(TIMER_SORT.NEAREST);
+const standaloneCount = computed(() => store.stopwatches.filter(t => t.dataMode === 'standalone').length);
+const individual = computed(() => accountExperience.currentData.value?.account.kind === 'individual');
+watch(individual, value => { if (value && activeTab.value === 'shared') activeTab.value = 'up'; });
+let verificationTimer;
+onUnmounted(() => clearInterval(verificationTimer));
+async function refreshAccount() { await accountExperience.refresh(); await store.retrySync(); }
 function changeSort(value) {
   sortDirection.value = normalizeTimerSort(value);
 }
@@ -132,6 +140,8 @@ const reloadSharedTimers = message.withLoading(
 );
 
 onMounted(() => {
+  void accountExperience.refresh();
+  verificationTimer = setInterval(() => { void accountExperience.refresh(); }, 25000);
   themeStore.applyTheme();
   void message.withLoading("Sayaçlar yükleniyor...", () =>
     store.initialize(),
@@ -153,6 +163,7 @@ onMounted(() => {
 
     <!-- Main Content -->
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
+      <AccountStatusCard :experience="accountExperience" :count="standaloneCount" :ready="store.ready" :pending-count="store.pendingCount" :sync-status="store.syncStatus" @retry="refreshAccount" />
       <!--Bu yorum satırına alınan bölüm aynı hesap arası senkronizasyon hakkında bilgi veriyor ve senkronizasyonu yeniden deneme butonu var, UI açısından şuan yorum satırında-->
       <!--<div
         v-if="activeTab !== 'shared' && personalNotice"
@@ -667,6 +678,7 @@ onMounted(() => {
 
         <!-- Ortak Tab -->
         <button
+          v-if="!individual"
           @click="activeTab = 'shared'"
           :class="[
             'flex-1 py-3 flex flex-col items-center gap-1 transition-colors',

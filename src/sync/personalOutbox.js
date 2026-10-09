@@ -1,5 +1,6 @@
 import { timerDb } from "../data/timerDb.js";
 import { saveTimer } from "../data/timerRepository.js";
+import { renewableDenials } from "../domain/accountExperience.js";
 import {
   requirePersonal, requireScope, requireUuid, isRevision, personalStateFromLocal,
   validateAcknowledgement, validateServerTimer, localFromServer, validatePersonalTombstone, canonicalState,
@@ -13,6 +14,21 @@ const retryDelay = (attempts) => Math.min(300000, 5000 * 2 ** Math.min(6, Math.m
 export async function listPersonalOutbox(scope) {
   requireScope(scope);
   return (await scoped(scope).toArray()).sort((a, b) => a.seq - b.seq);
+}
+
+// Caller holds the existing session lock and has just revalidated server rights.
+// Retry only a typed subscription denial; retain frozen JSON, UUID and revision.
+export async function retryPersonalSubscriptionOperation(op, scope, assertCurrent) {
+  return transaction(async () => {
+    assertCurrent();
+    const stored = await timerDb.personalOutbox.get(op.seq);
+    if (!stored || !sameScope(stored, scope) || stored.mutationId !== op.mutationId ||
+        stored.body !== op.body || stored.status !== 'forbidden' ||
+        !renewableDenials.has(stored.error?.code)) return false;
+    await timerDb.personalOutbox.update(stored.seq, { status: 'retry', retryAt: 0 });
+    assertCurrent();
+    return true;
+  });
 }
 
 // isNew must be explicit: absence from GET is never evidence that an ID is new.

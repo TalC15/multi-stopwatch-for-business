@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { message } from "../../composables/message";
+import { accountExperience } from '../../services/accountExperience.js';
 import {
   apiFetch,
   getAccessToken,
@@ -25,11 +26,13 @@ let sharedModeCheckId = 0;
 
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
-const selectPresetTime = (val) => {
+const selectPresetTime = async (val) => {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   store.duration = val;
 };
 
-const selectPresetName = (val) => {
+const selectPresetName = async (val) => {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   store.name = val;
 };
 
@@ -81,9 +84,9 @@ const save = message.withLoading("zamanlayıcı oluşturuluyor...", async () => 
     emit("close");
     if (started) message.success(`${store.name} oluşturuldu`);
     else message.warning("Sayaç kaydedildi; başlatma tamamlanamadı.");
-    store.name =
-      JSON.parse(localStorage.getItem("defaultName")) || "kronometre";
-    store.duration = JSON.parse(localStorage.getItem("defaultDuration")) || 5;
+    const presetsAllowed = await accountExperience.requireFeature('presets');
+    store.name = presetsAllowed ? JSON.parse(localStorage.getItem("defaultName")) || "kronometre" : "kronometre";
+    store.duration = presetsAllowed ? JSON.parse(localStorage.getItem("defaultDuration")) || 5 : 5;
     isShared.value = false;
   } finally {
     saving.value = false;
@@ -101,6 +104,7 @@ async function checkSharedMode() {
   sharedModeLoading.value = Boolean(selectedUser?.workspace_id);
 
   if (!selectedUser?.workspace_id) return;
+  if (!await accountExperience.refresh() || !accountExperience.canShared()) { sharedModeLoading.value = false; return; }
 
   const isRequestCurrent = () =>
     checkId === sharedModeCheckId &&
@@ -144,6 +148,7 @@ watch(
   () => props.isOpen,
   (newVal) => {
     if (newVal) {
+      if (!accountExperience.canFeature('presets')) { store.name = 'kronometre'; store.duration = 5; }
       void checkSharedMode().catch(() => {});
       isShared.value = props.forceShared || false;
     }
@@ -230,7 +235,7 @@ onMounted(() => {
 
         <!-- Quick presetNames -->
         <div
-          v-if="presetNames.length"
+          v-if="presetNames.length && accountExperience.canFeature('presets')"
           class="custom-scroll flex gap-2 overflow-x-auto pb-1"
         >
           <button
@@ -305,7 +310,7 @@ onMounted(() => {
 
         <!-- Quick presetTimes -->
         <div
-          v-if="presetTimes.length"
+          v-if="presetTimes.length && accountExperience.canFeature('presets')"
           class="custom-scroll flex gap-2 overflow-x-auto pb-1"
         >
           <button

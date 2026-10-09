@@ -1,6 +1,7 @@
 <script setup>
 import { computed, useId } from 'vue';
 import { Capacitor } from '@capacitor/core';
+import { accountExperience } from '../services/accountExperience.js';
 import { soundSettings as settings, notificationState, updateSoundSettings,
   testAlarm, stopAllAlarmSounds } from '../utils/notifications.js';
 const id = useId();
@@ -29,19 +30,21 @@ function volumeChanged(key, event, persist) {
           <div class="flex shrink-0 items-center gap-2">
             <span class="text-xs text-[var(--color-text-secondary)]">{{ settings[control.enabled] ? 'Açık' : 'Kapalı' }}</span>
             <input :id="`${id}-${control.enabled}`" type="checkbox" role="switch"
+              :disabled="control.enabled === 'speechEnabled' && !accountExperience.canFeature('tts')"
               :checked="settings[control.enabled]" :aria-describedby="`${id}-${control.enabled}-hint`"
               class="size-5 cursor-pointer accent-indigo-600"
               @change="updateSoundSettings({ [control.enabled]: $event.target.checked })" />
           </div>
         </div>
         <p :id="`${id}-${control.enabled}-hint`" class="mt-1.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">{{ control.description }}</p>
+        <p v-if="control.enabled === 'speechEnabled' && !accountExperience.canFeature('tts')" class="mt-2 text-xs leading-5 text-text-secondary">Sesli okuma için doğrulanmış kullanım hakkı gerekir. Normal alarm sesiniz kullanılabilir.</p>
         <div class="mt-4" :class="{ 'opacity-50': !settings[control.enabled] }">
           <div class="mb-2 flex items-center justify-between text-xs">
             <label :for="`${id}-${control.volume}`">{{ control.title }} düzeyi</label>
             <output :for="`${id}-${control.volume}`" class="font-semibold tabular-nums">%{{ settings[control.volume] }}</output>
           </div>
           <input :id="`${id}-${control.volume}`" type="range" min="0" max="100" step="5"
-            :value="settings[control.volume]" :disabled="!settings[control.enabled]"
+            :value="settings[control.volume]" :disabled="!settings[control.enabled] || control.enabled === 'speechEnabled' && !accountExperience.canFeature('tts')"
             :aria-valuetext="`Yüzde ${settings[control.volume]}`"
             class="w-full cursor-pointer accent-indigo-600 disabled:cursor-not-allowed"
             @input="volumeChanged(control.volume, $event, false)"

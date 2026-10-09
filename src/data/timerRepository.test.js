@@ -122,3 +122,31 @@ test("shared snapshot is workspace-scoped, preserves creator and rejects failed 
   assert.equal((await listSharedTimerCache({ workspaceId: "Y" })).length, 1);
   assert.equal((await listWorkspacePersonalTimers(context("creator-A", "X"))).length, 1);
 });
+
+
+test("Phase 5 Standalone: ten records, copied/imported new IDs and concurrent last-slot creates use the common limit", async () => {
+  for (let n=0;n<9;n++) await saveTimer(timer(`free-${n}`, getNewTimerContext(null)));
+  const result = await Promise.allSettled([saveTimer(timer('copy-new', getNewTimerContext(null))), saveTimer(timer('import-new', getNewTimerContext(null)))]);
+  assert.equal(result.filter(r=>r.status==='fulfilled').length, 1);
+  assert.equal(result.filter(r=>r.status==='rejected' && r.reason.code==='STANDALONE_LIMIT').length, 1);
+  assert.equal((await listStandaloneTimers()).length, 10);
+  await assert.rejects(saveTimer(timer('eleventh', getNewTimerContext(null))), /Ücretsiz kullanımda en fazla 10 süreölçer oluşturabilirsiniz/);
+  await saveTimer({ ...timer('free-0', getNewTimerContext(null)), status:'completed' });
+  await assert.rejects(saveTimer(timer('completed-still-counts', getNewTimerContext(null))), e=>e.code==='STANDALONE_LIMIT');
+  await removeStandaloneTimer('free-1');
+  await saveTimer(timer('replacement', getNewTimerContext(null)));
+  assert.equal((await listStandaloneTimers()).length, 10);
+});
+
+test("Phase 5 Standalone: old ten-plus records remain visible, editable and independent from workspace data", async () => {
+  const old = Array.from({length:12},(_,n)=>timer(`old-${n}`,getNewTimerContext(null)));
+  await timerDb.timers.bulkPut(old); // Existing installation fixture, never an application import bypass.
+  await timerDb.close(); await timerDb.open();
+  assert.equal((await listStandaloneTimers()).length, 12);
+  await saveTimer({ ...old[0], name:'Updated without deletion', status:'paused' });
+  await assert.rejects(saveTimer(timer('new-after-legacy',getNewTimerContext(null))), e=>e.code==='STANDALONE_LIMIT');
+  await saveTimer(timer('personal-no-free-cap',getNewTimerContext({id:'A',workspace_id:'X'})),context('A','X'));
+  assert.equal((await listStandaloneTimers()).length, 12);
+  assert.equal((await listWorkspacePersonalTimers(context('A','X'))).length, 1);
+  assert.equal((await getStandaloneTimer(old[0].id)).name,'Updated without deletion');
+});

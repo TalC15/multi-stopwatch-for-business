@@ -1,7 +1,11 @@
 <script setup>
+import { isTelegramBindSuccess, isTelegramUnlinkSuccess, isTelegramStatusSuccess, telegramUnverifiedMessage } from '../services/telegramResponses.js';
+import { accountExperience } from '../services/accountExperience.js';
+import { captureWorkspaceSession } from '../services/workspaceSession.js';
+import AccountStatusCard from '../components/AccountStatusCard.vue';
 import SoundSettings from "../components/SoundSettings.vue";
 import NotificationSettings from "../components/NotificationSettings.vue";
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, computed, onMounted, onUnmounted } from "vue";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
@@ -21,14 +25,22 @@ import telegramStep5 from "@/assets/telegram/telegram-step-5.png";
 const store = useStopwatchStore();
 const themeStore = useThemeStore();
 const router = useRouter();
-const user = getUser();
+const canPresets = computed(() => accountExperience.canFeature('presets'));
+const canTelegram = computed(() => accountExperience.canFeature('telegram'));
 const stopwatchStore = useStopwatchStore();
 const presetTime = ref("");
 const presetName = ref("");
 const chatId = ref("");
 const telegramLoadingButton = ref(false);
 const telegramLoadingDiv = ref(false);
-const telegramSaved = ref(!!localStorage.getItem("telegramChatId"));
+const telegramStatus = ref(null);
+const telegramSession = ref(null);
+const canManageTelegram = computed(() => accountExperience.state.status === 'verified' && accountExperience.currentData.value?.personal.readable === true);
+const telegramSaved = computed(() => {
+  const account = accountExperience.currentData.value?.account;
+  return telegramSession.value?.isCurrent() && account?.userId?.toLowerCase() === getUser()?.id?.toLowerCase()
+    ? telegramStatus.value : null;
+});
 
 const showTelegramHelp = ref(false);
 const currentTelegramStep = ref(0);
@@ -65,18 +77,28 @@ const telegramSteps = [
 ];
 
 const telegramSavedControl = message.withLoading("Telegram bağlantısı kontrol ediliyor...", async () => {
+  const session = captureWorkspaceSession();
+  if (!session.isCurrent() || telegramLoadingDiv.value || (!canManageTelegram.value && !canTelegram.value)) return;
   telegramLoadingDiv.value = true;
-  const res = await telegramControl(user?.id);
-  telegramLoadingDiv.value = false;
-  telegramSaved.value = res.connected;
+  try {
+    const res = await telegramControl(getUser()?.id);
+    if (!session.isCurrent()) return;
+    telegramSession.value = session;
+    telegramStatus.value = isTelegramStatusSuccess(res) ? res.connected : null;
+  } catch {
+    if (!session.isCurrent()) return;
+    telegramSession.value = session; telegramStatus.value = null;
+    message.warning(telegramUnverifiedMessage);
+  } finally { telegramLoadingDiv.value = false; }
 });
 
-onMounted(() => {
+onMounted(async () => {
   telegramSteps.forEach((step) => {
     const img = new Image();
     img.src = step.image;
   });
-  telegramSavedControl();
+  await accountExperience.refresh();
+  if (canTelegram.value || canManageTelegram.value) telegramSavedControl();
 });
 
 function openTelegramHelp() {
@@ -101,37 +123,44 @@ function previousTelegramStep() {
 }
 
 const saveTelegram = message.withLoading("Telegram bağlanıyor...", async () => {
-  if (!chatId.value) return;
+  const session = captureWorkspaceSession(), requestedChatId = chatId.value;
+  if (!session.isCurrent() || !requestedChatId || telegramLoadingButton.value) return;
+  if (!await accountExperience.requireFeature('telegram') || !session.isCurrent()) return message.warning('Telegram için kullanım hakkı doğrulanamadı.');
   telegramLoadingButton.value = true;
-
-  const result = await saveTelegramChatId(chatId.value);
-
-  if (result?.success) {
-    localStorage.setItem("telegramChatId", chatId.value);
-    telegramSaved.value = true;
-    message.success("Telegram bağlandı!");
-  } else {
-    message.warning("Geçersiz Chat ID. Lütfen tekrar dene.");
-  }
-
-  telegramLoadingButton.value = false;
+  try {
+    const result = await saveTelegramChatId(requestedChatId);
+    if (!session.isCurrent()) return;
+    if (isTelegramBindSuccess(result)) {
+      localStorage.setItem("telegramChatId", requestedChatId);
+      telegramSession.value = session; telegramStatus.value = true;
+      message.success("Telegram bağlandı!");
+    } else {
+      telegramSession.value = session; telegramStatus.value = null;
+      message.warning(telegramUnverifiedMessage);
+    }
+  } finally { telegramLoadingButton.value = false; }
 });
 
-const removeTelegram = message.withLoading("Telegram bağlantısı kesiliyor...", async (user_id) => {
-  if (!user_id) return;
-  const result = await cancelTelegramChatId(user_id);
-  console.log(result);
-  if (result?.success) {
-    localStorage.removeItem("telegramChatId");
-    telegramSaved.value = false;
-    chatId.value = "";
-    message.success("Telegram bağlantısı kesildi");
-  } else {
-    message.error("Telegram bağlantısı kesilemedi");
-  }
+const removeTelegram = message.withLoading("Telegram bağlantısı kesiliyor...", async () => {
+  const session = captureWorkspaceSession();
+  if (!session.isCurrent() || telegramLoadingButton.value) return;
+  telegramLoadingButton.value = true;
+  try {
+    const result = await cancelTelegramChatId(getUser()?.id);
+    if (!session.isCurrent()) return;
+    if (isTelegramUnlinkSuccess(result)) {
+      localStorage.removeItem("telegramChatId");
+      telegramSession.value = session; telegramStatus.value = false; chatId.value = "";
+      message.success("Telegram bağlantısı kesildi");
+    } else {
+      telegramSession.value = session; telegramStatus.value = null;
+      message.warning(telegramUnverifiedMessage);
+    }
+  } finally { telegramLoadingButton.value = false; }
 });
 
-function defaultSettings(preset) {
+async function defaultSettings(preset) {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   if (typeof preset === "number") {
     stopwatchStore.duration = preset;
     localStorage.setItem(
@@ -146,7 +175,8 @@ function defaultSettings(preset) {
   }
 }
 
-function addPresetTime() {
+async function addPresetTime() {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   if (!presetTime.value || String(presetTime.value).trim() === "")
     return message.warning("bir süre belirtmediniz");
   if (presetTime.value > 1440)
@@ -165,7 +195,8 @@ function addPresetTime() {
   presetTime.value = "";
 }
 
-function addPresetName() {
+async function addPresetName() {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   if (!presetName.value || presetName.value.trim() === "")
     return message.warning("bir isim koymadınız");
   if (presetName.value.length > 35) return message.warning("çok uzun isim");
@@ -181,7 +212,8 @@ function addPresetName() {
   presetName.value = "";
 }
 
-function removePresetTime(bIndex) {
+async function removePresetTime(bIndex) {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   stopwatchStore.presetTimes = stopwatchStore.presetTimes.filter(
     (a, aIndex) => aIndex !== bIndex,
   );
@@ -192,7 +224,8 @@ function removePresetTime(bIndex) {
   message.success("bir zaman etiketi silindi");
 }
 
-function removePresetName(bIndex) {
+async function removePresetName(bIndex) {
+  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
   stopwatchStore.presetNames = stopwatchStore.presetNames.filter(
     (a, aIndex) => aIndex !== bIndex,
   );
@@ -300,6 +333,8 @@ function removePresetName(bIndex) {
         </div>
       </div>
 
+      <AccountStatusCard :experience="accountExperience" :count="store.stopwatches.filter(t => t.dataMode === 'standalone').length" :ready="store.ready" @retry="accountExperience.refresh()" />
+      <template v-if="canPresets">
       <!-- Zaman etiketleri -->
       <div class="mb-3 flex flex-wrap items-start justify-between gap-2 px-1">
         <span class="text-sm font-bold">Zaman etiketleri</span>
@@ -474,8 +509,10 @@ function removePresetName(bIndex) {
         </div>
       </div>
 
+      </template>
+      <p v-else class="mb-5 rounded-card border border-border bg-card p-4 text-sm leading-6 text-text-secondary">Hazır ayarlar doğrulanmış kullanım hakkıyla açılır. Kayıtlı etiketleriniz silinmez.</p>
       <!-- Telegram Bildirimi -->
-      <div v-if="!telegramLoadingDiv">
+      <div v-if="(canTelegram || canManageTelegram) && !telegramLoadingDiv">
         <div
           class="mb-5 overflow-hidden rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-sm"
         >
@@ -535,7 +572,7 @@ function removePresetName(bIndex) {
 
           <!-- Telegram bağlı değilse -->
           <div
-            v-if="!telegramSaved"
+            v-if="telegramSaved === false && canTelegram"
             class="flex flex-col gap-3 px-5 pb-5 sm:px-6"
           >
             <p
@@ -562,8 +599,8 @@ function removePresetName(bIndex) {
 
           <!-- Telegram bağlıysa -->
           <div
-            v-else
-            class="flex items-center justify-between gap-3 px-5 pb-5 sm:px-6"
+            v-else-if="telegramSaved === true"
+            class="flex flex-wrap items-center justify-between gap-3 px-5 pb-5 sm:px-6"
           >
             <span
               class="text-xs font-semibold text-emerald-600 dark:text-emerald-400"
@@ -572,20 +609,27 @@ function removePresetName(bIndex) {
             </span>
 
             <button
-              @click="removeTelegram(user?.id)"
-              class="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-[var(--color-text-secondary)] underline underline-offset-4 transition hover:bg-[var(--color-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+              @click="removeTelegram"
+              :disabled="telegramLoadingButton"
+              class="min-h-11 shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] underline underline-offset-4 transition hover:bg-[var(--color-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
               Bağlantıyı kes
             </button>
           </div>
+          <p v-else-if="telegramSaved === false" class="px-5 pb-5 text-sm leading-6 text-[var(--color-text-secondary)] sm:px-6">Yeni Telegram bağlantısı için aktif, doğrulanmış abonelik gerekir.</p>
+          <div v-else class="flex flex-wrap items-center gap-3 px-5 pb-5 text-sm text-[var(--color-text-secondary)] sm:px-6" role="status">
+            Bağlantı durumu doğrulanamadı.
+            <button type="button" @click="telegramSavedControl" class="min-h-11 rounded-xl border border-[var(--color-border)] px-3 focus-visible:outline-2 focus-visible:outline-indigo-500">Durumu yenile</button>
+          </div>
         </div>
       </div>
       <div
-        v-else
+        v-else-if="telegramLoadingDiv"
         class="mb-5 rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] py-5 text-center text-sm text-[var(--color-text-secondary)]"
       >
         Yükleniyor...
       </div>
+      <p v-if="!canTelegram" class="mb-5 rounded-card border border-border bg-card p-4 text-sm leading-6 text-text-secondary">Yeni Telegram bağlantısı ve bildirim gönderimi için doğrulanmış kullanım hakkı gerekir. Mevcut bağlantınızı kaldırabilirsiniz. Normal cihaz bildirimleriniz kullanılabilir.</p>
       <NotificationSettings />
       <SoundSettings />
 
