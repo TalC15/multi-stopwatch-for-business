@@ -40,6 +40,7 @@ export function createStopwatchController({
   document = globalThis.document,
   now = Date.now,
   sharedApi,
+  experience,
   online = () => globalThis.navigator?.onLine !== false,
   monotonicNow = () => globalThis.performance?.now() ?? now(),
   setInterval: every = globalThis.setInterval,
@@ -232,8 +233,8 @@ export function createStopwatchController({
   }
   const presetTimes = ref(preference("presetTimes", [])),
     presetNames = ref(preference("presetNames", []));
-  const duration = ref(preference("defaultDuration", 5)),
-    name = ref(preference("defaultName", "kronometre"));
+  const duration = ref(experience ? 5 : preference("defaultDuration", 5)),
+    name = ref(experience ? "kronometre" : preference("defaultName", "kronometre"));
   const roleStyles = {
     worker: { text: "text-blue-600 dark:text-blue-300" },
     manager: { text: "text-violet-600 dark:text-violet-300" },
@@ -362,6 +363,10 @@ export function createStopwatchController({
   );
 
   function requireSharedWrite() {
+    if (experience && !experience.canShared()) {
+      message.warning("Ortak sayaçlar yalnız doğrulanmış şirket hesaplarında kullanılabilir.");
+      return false;
+    }
     if (!online()) {
       sharedState.value = "offline-readonly";
     }
@@ -451,6 +456,7 @@ export function createStopwatchController({
       ? await repository.listWorkspacePersonalTimers(ctx.scope)
       : [];
     const shared = ctx.scope
+      && (!experience || experience.currentData.value?.account.kind !== 'individual')
       ? await repository.listSharedTimerCache(ctx.scope)
       : [];
     return [...local, ...personal, ...shared];
@@ -553,6 +559,12 @@ export function createStopwatchController({
       try {
         await reloadLocal(ctx);
         assertCurrent(ctx);
+        if (experience) {
+          await experience.refresh(); assertCurrent(ctx); await reloadLocal(ctx);
+          // Stored paid defaults are preferences, never evidence of a right.
+          duration.value = experience.canFeature('presets') ? preference('defaultDuration', 5) : 5;
+          name.value = experience.canFeature('presets') ? preference('defaultName', 'kronometre') : 'kronometre';
+        }
         subscription = liveQuery(() => readVisible(ctx)).subscribe({
           next: (rows) => applyRows(rows, ctx),
           error: () => {
@@ -704,6 +716,7 @@ export function createStopwatchController({
     sharedCommand,
     deleting = false,
     label = "sayacı",
+    automatic = false,
   ) {
     const selected = stopwatches.value.find((t) => t.id === id);
     if (selected?.dataMode === MODE.SHARED)
@@ -714,6 +727,12 @@ export function createStopwatchController({
         assertCurrent(ctx);
         const old = stopwatches.value.find((t) => t.id === id);
         if (!old || !visible(old, ctx)) throw new Error("Sayaç bulunamadı");
+        // Basic offline changes stay local and queued. Paid features/new private
+        // creation need fresh server proof; the SQL RPC rechecks queued writes.
+        if (!automatic && old.dataMode === MODE.WORKSPACE_PERSONAL && experience && online()) {
+          if (!await experience.requirePersonalWrite(ctx.scope)) throw new Error("Abonelik hakkı doğrulanamadı. Kayıtlarınız korundu; bağlantınızı ve aboneliğinizi kontrol edin.");
+          assertCurrent(ctx);
+        }
         const { record, previous } = await localChange(id, ctx, transform, deleting);
         // Claim the alarm from the state read inside the IndexedDB transaction,
         // not a possibly stale view in another tab.
@@ -753,6 +772,11 @@ export function createStopwatchController({
     const ctx = capture();
     try {
       if (!ready.value) throw new Error("Yerel kayıtların açılmasını bekleyin");
+      if (experience && !ctx.user && backend.isTabSessionCurrent()) throw new Error("Oturum kapsamı doğrulanıyor. Mevcut kayıtlarınız korunuyor; yeni kayıt için doğrulamayı bekleyin.");
+      if (experience && ctx.scope && !await experience.requirePersonalWrite(ctx.scope)) {
+        throw new Error("Yeni kişisel sayaç için hesabınızın ve abonelik hakkınızın sunucuda doğrulanması gerekiyor. Mevcut kayıtlarınız korunuyor.");
+      }
+      assertCurrent(ctx);
       const ownership = getNewTimerContext(ctx.user, input.isShared === true);
       const retryCreate =
         input.isShared === true &&
@@ -921,6 +945,9 @@ export function createStopwatchController({
                   ended_at: next.endedAt,
                   duration_ms: next.durationMs,
                 },
+          false,
+          "sayacı",
+          true,
         );
         if (!success && current(ctx)) failedTransitions.add(timer.id);
       })().finally(() => transitions.delete(timer.id));
@@ -944,7 +971,13 @@ export function createStopwatchController({
         try {
           assertCurrent(ctx);
           syncStatus.value = "syncing";
-          result = await engine.flush();
+          if (experience) {
+            const verified = await experience.refresh();
+            assertCurrent(ctx);
+            if (!verified) { await refreshSyncState(ctx, online() ? 'retry' : 'offline'); return { status: online() ? 'retry' : 'offline' }; }
+          }
+          const readableOnly = experience?.currentData.value?.account.kind === 'individual' && !experience.canWritePersonal();
+          result = readableOnly ? { status: 'done' } : await engine.flush();
           assertCurrent(ctx);
           if (result.status === "done") {
             const pulled = await engine.pull();
@@ -953,7 +986,7 @@ export function createStopwatchController({
           }
           await reloadLocal(ctx);
           await refreshSyncState(ctx, result.status);
-          if (result.status === "done" && personalApi?.syncNotification) {
+          if (result.status === "done" && !readableOnly && personalApi?.syncNotification) {
             const session = personalApi.captureSession();
             const rows = await timerDb.timers
               .where("[userId+workspaceId]")
@@ -1270,6 +1303,7 @@ export function createStopwatchController({
   async function loadSharedTimers() {
     const ctx = active;
     if (!ctx?.scope || !current(ctx)) return false;
+    if (experience && !experience.canShared()) return false;
     if (!online()) {
       sharedState.value = "offline-readonly";
       return false;
@@ -1325,6 +1359,7 @@ export function createStopwatchController({
   }
   const offTimer = socket.onTimerEvent(({ data }) => {
     const ctx = active;
+    if (experience && !experience.canShared()) return;
     if (!ctx?.scope || !current(ctx)) return;
     if (data?.workspaceId && data.workspaceId !== ctx.scope.workspaceId) return;
     sharedEventRevision++;

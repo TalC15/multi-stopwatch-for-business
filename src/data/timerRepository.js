@@ -1,6 +1,9 @@
 import { timerDb } from "./timerDb.js";
 import { getTimerDataMode, TIMER_DATA_MODE } from "../domain/timerDataMode.js";
 
+export const STANDALONE_LIMIT = 10;
+export const STANDALONE_LIMIT_MESSAGE = "Ücretsiz kullanımda en fazla 10 süreölçer oluşturabilirsiniz.";
+
 function requireId(id) {
   if (typeof id !== "string" || !id.trim()) throw new Error("Timer ID is required");
 }
@@ -69,6 +72,14 @@ export async function saveTimer(timer, context) {
       throw new Error("A timer ID cannot change data mode or ownership");
     }
     if (existing?.syncDeleted) throw new Error("A deleted personal timer cannot be restored");
+    // All local creation (including a copied/imported record with a new ID)
+    // goes through this transaction. Concurrent tabs cannot both take slot 10.
+    // Standalone has no archive/tombstone model: completed timers remain usable
+    // records; deletion physically removes them and frees a slot.
+    if (!existing && mode === TIMER_DATA_MODE.STANDALONE &&
+        await timerDb.timers.where("dataMode").equals(TIMER_DATA_MODE.STANDALONE).count() >= STANDALONE_LIMIT) {
+      throw Object.assign(new Error(STANDALONE_LIMIT_MESSAGE), { code: "STANDALONE_LIMIT" });
+    }
     // Server acknowledgements own this metadata; stale UI objects cannot reset it.
     if (existing && mode === TIMER_DATA_MODE.WORKSPACE_PERSONAL) {
       record.syncRevision = existing.syncRevision ?? null;

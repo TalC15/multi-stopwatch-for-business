@@ -1,4 +1,5 @@
 import * as backend from "../services/backendSync.js";
+import { renewableDenials } from "../domain/accountExperience.js";
 import {
   requireScope,
   requireUuid,
@@ -19,6 +20,7 @@ export function createPersonalSyncApi({
   request = backend.apiFetch,
   baseUrl = backend.BASE_URL,
   timeoutMs = 15000,
+  experience,
 } = {}) {
   // Yalnızca bellekte tutulur; sayfa yenilenince sıfırlanır.
   const notificationAttempts = new Map();
@@ -89,11 +91,12 @@ export function createPersonalSyncApi({
             // An HTML/proxy 404 is not proof that a timer does not exist.
             const allowed = { PERSONAL_TIMER_FORBIDDEN: 403, PERSONAL_WORKSPACE_REQUIRED: 403,
               PERSONAL_TIMER_NOT_FOUND: 404 };
+            for (const denial of renewableDenials) allowed[denial] = 403;
             let code = "http-error";
             if (path.startsWith("/timers/personal")) {
               try {
                 const data = await response.json();
-                if (Object.hasOwn(allowed, data?.code) && allowed[data.code] === response.status) code = data.code;
+                if (typeof data?.code === 'string' && Object.hasOwn(allowed, data.code) && allowed[data.code] === response.status) code = data.code;
               } catch { /* Unknown error bodies remain transport errors. */ }
             }
             session.assertCurrent();
@@ -123,6 +126,7 @@ export function createPersonalSyncApi({
   return {
     captureSession,
     ensureReady,
+    canRetrySubscription: experience ? session => experience.requirePersonalWrite(session) : undefined,
     async list(session) {
       const data = await send(session, "/timers/personal", "GET");
       session.assertCurrent();

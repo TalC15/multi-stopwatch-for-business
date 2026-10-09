@@ -51,7 +51,7 @@ const logout = message.withLoading("Çıkış yapılıyor...", async () => {
     </button>
 
     <!-- Orta: Kullanıcı adı + Logo -->
-    <div class="flex flex-col items-center">
+    <div class="flex min-w-0 flex-1 flex-col items-center px-2">
       <h1
         class="flex items-center gap-1 text-lg font-black tracking-tight text-primary-light"
       >
@@ -123,7 +123,7 @@ const logout = message.withLoading("Çıkış yapılıyor...", async () => {
         KeepTimer
       </h1>
 
-      <span v-if="user" class="text-xs text-[var(--color-text-secondary)]">{{
+      <span v-if="user" class="max-w-full truncate text-xs text-[var(--color-text-secondary)]">{{
         user.username
       }}</span>
     </div>
