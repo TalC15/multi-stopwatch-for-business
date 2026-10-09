@@ -10,10 +10,7 @@ const individual = computed(() => data.value?.account.kind === 'individual');
 const status = computed(() => ({ active: 'Aktif', pending: 'Başlaması bekleniyor', expired: 'Süresi doldu', cancelled: 'İptal edilmiş' })[data.value?.subscription.status] || 'Abonelik bulunamadı');
 const verified = computed(() => props.experience.state.status === 'verified');
 const features = ['Sesli okuma', 'Telegram', 'Hazır ayarlar'];
-const endDate = computed(() => {
-  const end = data.value?.subscription.endsAt;
-  return end ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(end)) : '—';
-});
+const formatDate = value => value ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const notice = computed(() => {
   if (standalone.value) return !props.ready ? 'Cihazdaki sayaçlarınız açılıyor…' : props.count >= STANDALONE_LIMIT ? STANDALONE_LIMIT_MESSAGE : 'Sayaçlarınız bu cihazda saklanır. Normal alarm ve bildirimler kullanılabilir.';
   if (props.experience.state.status === 'loading') return 'Hesabınız ve kullanım haklarınız sunucudan doğrulanıyor…';
@@ -50,8 +47,11 @@ const syncNotice = computed(() => {
     </div>
     <p class="mt-3 break-words text-sm leading-6 text-text-secondary" role="status" aria-live="polite">{{ notice }}</p>
     <p v-if="syncNotice" class="mt-3 rounded-lg border border-border bg-surface p-3 text-sm leading-6 text-text-secondary" role="status">{{ syncNotice }}</p>
-    <div v-if="individual && data.subscription.endsAt" class="mt-3 flex flex-wrap justify-between gap-1 border-t border-border pt-3 text-xs text-text-secondary">
-      <span>Abonelik bitişi</span><time :datetime="data.subscription.endsAt" class="font-semibold text-text-primary">{{ endDate }}</time>
+    <div v-if="individual && data.subscription.startsAt" class="mt-3 flex flex-wrap justify-between gap-1 border-t border-border pt-3 text-xs text-text-secondary">
+      <span>{{ verified ? 'Abonelik başlangıcı' : 'Son doğrulanan başlangıç' }}</span><time :datetime="data.subscription.startsAt" class="max-w-full break-words font-semibold text-text-primary">{{ formatDate(data.subscription.startsAt) }}</time>
+    </div>
+    <div v-if="individual && data.subscription.endsAt" class="mt-2 flex flex-wrap justify-between gap-1 text-xs text-text-secondary">
+      <span>{{ verified ? 'Abonelik bitişi' : 'Son doğrulanan bitiş' }}</span><time :datetime="data.subscription.endsAt" class="max-w-full break-words font-semibold text-text-primary">{{ formatDate(data.subscription.endsAt) }}</time>
     </div>
     <ul class="mt-3 flex flex-wrap gap-2" aria-label="Ücretli özellikler">
       <li v-for="(label, i) in features" :key="label" class="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs text-text-secondary">

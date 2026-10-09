@@ -98,7 +98,10 @@ export function createManagementApi({ request, baseUrl, context, uuid = () => cr
       const item = project(row, fields);
       if (!validId(item.id) || (kind === 'history' ? !validId(item.customerId) || id(item.customerId) !== customer || item.planCode !== 'individual' : typeof item.username !== 'string')) throw salesError('SALES_UNAVAILABLE');
       item.id = id(item.id);
-      if (kind === 'history') item.customerId = id(item.customerId);
+      if (kind === 'history') {
+        item.customerId = id(item.customerId);
+        item.status = ['pending', 'active', 'expired', 'cancelled'].includes(row.status) ? row.status : null;
+      }
       return item;
     });
     return { items, nextCursor: data.nextCursor === null ? null : id(data.nextCursor) };

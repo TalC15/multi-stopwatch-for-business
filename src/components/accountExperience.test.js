@@ -56,3 +56,12 @@ test('Phase 5 component layout uses Tailwind 4 theme tokens, wrapping, touch tar
   const source=await readFile(new URL('./AccountStatusCard.vue',import.meta.url),'utf8');
   assert.doesNotMatch(source,/<style|style=|linear-gradient/);assert.match(html,/aria-live="polite"/);assert.match(html,/aria-labelledby="account-status-title"/);
 });
+
+test('Phase 6 card: server start date and stale labels remain accessible without implying current rights', async () => {
+  const current = policy('verified', 'pending'); current.state.data.subscription.startsAt = '2026-10-31T23:59:59.999999Z';
+  const pending = await render(current); assert.match(pending, /Abonelik başlangıcı/);
+  assert.match(pending, /datetime="2026-10-31T23:59:59.999999Z"/);
+  current.state.status = 'stale'; current.canFeature = () => false;
+  const stale = await render(current); assert.match(stale, /Son doğrulanan başlangıç/); assert.match(stale, /Son doğrulanan bitiş/);
+  assert.match(stale, /Haklar doğrulanamadı/); assert.match(stale, /kullanılamıyor/); assert.match(stale, /aria-live="polite"/);
+});

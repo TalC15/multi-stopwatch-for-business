@@ -1,3 +1,4 @@
+import { entitlementCodes } from '../domain/accountExperience.js';
 import { KeepTimerAuth, isAndroidAuthPlatform } from "./keepTimerAuth.js";
 
 export const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
@@ -9,6 +10,7 @@ export const AUTH_SESSION_CHANGED_EVENT = "keeptimer:auth-session-changed";
 export const AUTH_USER_CHANGED_EVENT = "keeptimer:auth-user-changed";
 export const AUTH_LOCAL_LOGOUT_EVENT = "keeptimer:auth-local-logout";
 export const AUTH_ACCESS_INVALIDATED_EVENT = "keeptimer:auth-access-invalidated";
+export const ACCOUNT_AUTHORITY_DENIED_EVENT = "keeptimer:account-authority-denied";
 export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT = "keeptimer:auth-access-token-refreshed";
 
 let accessToken = null; // Never persisted or broadcast to another tab.
@@ -319,7 +321,15 @@ export async function apiFetch(url, options = {}) {
   if (!token || !current()) return null;
   let response = await fetch(url, withAccessToken(options, token));
   if (!current()) return null;
-  if (response.status !== 401) return response;
+  const observeDenial = async response => {
+    if ([403, 409, 503].includes(response.status) && response.clone) {
+      let body;
+      try { body = await response.clone().json(); } catch { /* Not a trusted entitlement reply. */ }
+      if (current() && entitlementCodes.has(body?.code)) emit(ACCOUNT_AUTHORITY_DENIED_EVENT);
+    }
+    return current() ? response : null;
+  };
+  if (response.status !== 401) return observeDenial(response);
   let nextToken = getAccessToken();
   if (nextToken === token || !nextToken) {
     const result = await refreshAccessToken(context.generation, context.marker);
@@ -328,7 +338,7 @@ export async function apiFetch(url, options = {}) {
   }
   if (!nextToken || !current()) return null;
   response = await fetch(url, withAccessToken(options, nextToken));
-  return current() ? response : null; // One retry, same body/mutation identity.
+  return current() ? observeDenial(response) : null; // One retry, same body/mutation identity.
 }
 
 export async function login(username, pin) {

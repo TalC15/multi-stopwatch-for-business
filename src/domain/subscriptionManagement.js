@@ -88,10 +88,8 @@ export function formatDate(value) {
   return Number.isFinite(date.getTime()) ? new Intl.DateTimeFormat('tr-TR', { dateStyle: 'medium', timeStyle: 'short' }).format(date) : 'Tarih okunamadı';
 }
 export const statusNames = Object.freeze({ active: 'Aktif', pending: 'Bekleyen', expired: 'Süresi dolmuş', cancelled: 'İptal edilmiş' });
-// History RPC has no status/serverNow. This label is informational, never write authority.
-export function historyStatus(row, now = Date.now()) {
+// Only server-observed period status; never infer an active period from device time.
+export function historyStatus(row) {
   if (row.cancelledAt !== null) return 'cancelled';
-  const start = Date.parse(row.startsAt), end = Date.parse(row.endsAt);
-  if (!Number.isFinite(start) || !Number.isFinite(end)) return null;
-  return end <= now ? 'expired' : start > now ? 'pending' : 'active';
+  return ['pending', 'active', 'expired'].includes(row.status) ? row.status : null;
 }

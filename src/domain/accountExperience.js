@@ -45,6 +45,20 @@ export function validateExperience(data, user) {
   // Explicit safe projection; neither transport extras nor local plan claims survive.
   return { account: { kind: a.kind, userId: a.userId.toLowerCase(), workspaceId: a.workspaceId?.toLowerCase() ?? null },
     subscription: { planCode: s.planCode, status: s.status, startsAt: s.startsAt, endsAt: s.endsAt, isEntitled: s.isEntitled },
+    evaluatedAt: timestampMicros(data.evaluatedAt) === null ? null : data.evaluatedAt,
     code: data.code, features: { tts: paid, telegram: paid, presets: paid },
     personal: { readable: Boolean(a.workspaceId), writable: Boolean(a.workspaceId) && paid }, shared: data.shared };
+}
+
+// A display lease can only shorten a server decision. Never activates a pending
+// period and never uses the device wall clock. Missing metadata fails closed.
+export function experienceLeaseMs(data) {
+  if (data.account.kind === 'company') return 30000;
+  const observed = timestampMicros(data.evaluatedAt);
+  if (observed === null) return 0;
+  if (!data.subscription.isEntitled) return 30000;
+  const start = timestampMicros(data.subscription.startsAt);
+  const end = timestampMicros(data.subscription.endsAt);
+  if (start === null || end === null || observed < start || observed >= end) return 0;
+  return Number((end - observed) / 1000n > 30000n ? 30000n : (end - observed) / 1000n);
 }

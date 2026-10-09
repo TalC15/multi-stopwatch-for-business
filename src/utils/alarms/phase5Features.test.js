@@ -13,7 +13,7 @@ const events=new EventTarget();
 const policy=createAccountExperience({auth:{getUser:()=>current,isTabSessionCurrent:()=>!!current,getAuthGeneration:()=>1,getTabSessionIdentity:()=>current?userId+':session':null,
   getSessionMarker:()=>current?userId+':session':null,getAccessToken:()=> 'synthetic-only'},events,online:()=>connected,
   request:async()=>{if(result instanceof Error)throw result;if(typeof result==='function')return result();if(result?.httpStatus)return {ok:false,status:result.httpStatus};return {ok:true,json:async()=>result};}});
-const body=(status='active',kind='individual')=>({account:{kind,userId,workspaceId},
+const body=(status='active',kind='individual')=>({evaluatedAt:'2026-10-09T09:00:00.000001Z',account:{kind,userId,workspaceId},
   subscription:kind==='company'?{planCode:null,status:null,startsAt:null,endsAt:null,isEntitled:false}:{planCode:'individual',status,startsAt:'2026-10-01T00:00:00.000001Z',endsAt:'2026-11-01T00:00:00.000002Z',isEntitled:status==='active'},
   code:kind==='company'?'SUBSCRIPTION_REQUIRED':status==='active'?null:status==='expired'?'SUBSCRIPTION_EXPIRED':'SUBSCRIPTION_PENDING',
   features:{tts:kind==='company'||status==='active',telegram:kind==='company'||status==='active',presets:kind==='company'||status==='active'},
