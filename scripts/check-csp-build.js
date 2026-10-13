@@ -154,8 +154,10 @@ const worker = await readFile(path.join(dist, "sw.js"), "utf8");
 
 assert.ok(worker.includes("notification-events.js"));
 
-assert.ok(worker.includes("denylist:[/^\\/api\\/auth(?:\\/|$)/]"));
+assert.ok(worker.includes("denylist:[/^\\/api\\/auth(?:\\/|$)/,"));
 
+assert.ok(worker.includes("/^\\/account\\/(?:activate|reset|security)(?:\\/|$)/"));
+assert.ok(worker.includes("/^\\/password-login(?:\\/|$)/"));
 assert.doesNotMatch(worker, /url:["']\/?api\/auth/);
 
 const manifest = JSON.parse(

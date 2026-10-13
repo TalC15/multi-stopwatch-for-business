@@ -24,14 +24,13 @@ for (const [value, expected] of [['250,00', 25000], ['0.01', 1], ['0', 0], ['90'
 for (const value of ['', '-1', '1e3', '1.000,00', '250,001', ' 250', '250 ', 'NaN', 'Infinity', '90071992547409,92', '999999999999999', 250, ['250']]) test(`reject malformed/unsafe amount ${JSON.stringify(value)}`, () => assert.throws(() => amountMinor(value)));
 test('forms whitelist Individual, 1–12 months and safe account fields; client dates/roles never sent', () => {
   const body = buildBody('createCustomer', { ...form, planCode: 'enterprise', role: 'superadmin', startsAt: 'forged', endsAt: 'forged', status: 'active' });
-  assert.deepEqual(body, { username: form.username, password: secret, planCode: 'individual', termMonths: 3, amountMinor: 25000, currency: 'TRY' });
+  assert.deepEqual(body, { username: form.username, email: 'test@example.invalid', planCode: 'individual', termMonths: 3, amountMinor: 25000, currency: 'TRY' });
   assert.equal(buildBody('createAgent', form).mfaEmail, 'test@example.invalid');
   for (const termMonths of [0, 13, 1.5, '01', [1], '', true]) assert.throws(() => buildBody('renew', { ...form, termMonths }));
   for (const username of ['', 'ab', 'with space', 'a'.repeat(26), ['valid'], 123]) assert.throws(() => buildBody('createAgent', { ...form, username }));
   for (const mfaEmail of ['', 'broken', 'a@b', 'a b@c.d']) assert.throws(() => buildBody('createAgent', { ...form, mfaEmail }));
-  for (const password of ['', 'a'.repeat(15), 'x'.repeat(73), '😀'.repeat(19), `123456789012345\n`]) assert.throws(() => buildBody('reset', { password }));
-  assert.equal(buildBody('reset', { password: '😀'.repeat(16) }).password, '😀'.repeat(16));
-  assert.equal(buildBody('reset', { password: 'x'.repeat(72) }).password.length, 72);
+  assert.deepEqual(buildBody('reset',{password:secret}),{}); // Agent never chooses a password.
+  assert.equal(Object.hasOwn(buildBody('createCustomer',form),'password'),false);
   for (const reason of ['customer_request', 'payment_record_correction', 'administrative']) assert.deepEqual(buildBody('cancel', { reason }), { reason });
   for (const reason of ['', 'delete', ['customer_request']]) assert.throws(() => buildBody('cancel', { reason }));
   assert.deepEqual(buildBody('revoke', { password: secret }), {});
@@ -264,6 +263,6 @@ test('revision: malformed 2xx retains confirmation and exact attempt; valid repl
   const initial = f.calls.at(-1).opts;
   f.handler = (_url, opts) => response(200, opts.method === 'POST' ? { customerId: id(2), subscription: period(), loginReady: false } : { items: [customer], nextCursor: null });
   assert.equal(await c.submit(), true); await settle(); const replay = f.calls.filter(v => v.opts.method === 'POST').at(-1).opts;
-  assert.equal(replay.body, initial.body); assert.deepEqual(replay.headers, initial.headers); assert.equal(JSON.parse(replay.body).password, secret);
+  assert.equal(replay.body, initial.body); assert.deepEqual(replay.headers, initial.headers); assert.equal(JSON.parse(replay.body).email, 'test@example.invalid'); assert.equal(Object.hasOwn(JSON.parse(replay.body),'password'),false);
   assert.equal(c.state.action, null); assert.equal(c.state.confirm, false); assert.equal(c.state.uncertain, false); assert.deepEqual(c.state.rows, [customer]);
 });

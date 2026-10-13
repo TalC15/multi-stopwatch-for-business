@@ -56,14 +56,9 @@ export function buildBody(kind, form) {
     if (typeof form.username !== 'string' || !/^[A-Za-z0-9_.-]{3,25}$/.test(form.username)) throw new Error('Kullanıcı adı 3–25 harf, rakam, nokta, alt çizgi veya tire içermeli.');
     body.username = form.username;
   }
-  if (['createAgent', 'createCustomer', 'reset'].includes(kind)) {
-    // eslint-disable-next-line no-control-regex -- The API explicitly forbids these password control characters.
-    if (typeof form.password !== 'string' || [...form.password].length < 16 || new TextEncoder().encode(form.password).length > 72 || /[\u0000-\u001f\u007f]/.test(form.password)) throw new Error('Parola en az 16 karakter ve en fazla 72 UTF-8 byte olmalı; kontrol karakteri içeremez.');
-    body.password = form.password;
-  }
-  if (kind === 'createAgent') {
+  if (kind === 'createAgent' || kind === 'createCustomer') {
     if (typeof form.mfaEmail !== 'string' || form.mfaEmail.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.mfaEmail)) throw new Error('Geçerli bir MFA e-posta adresi girin.');
-    body.mfaEmail = form.mfaEmail.toLowerCase();
+    body[kind === 'createAgent' ? 'mfaEmail' : 'email'] = form.mfaEmail.trim().toLowerCase();
   }
   if (kind === 'createCustomer' || kind === 'renew') {
     if (!['string', 'number'].includes(typeof form.termMonths) || !/^(?:[1-9]|1[0-2])$/.test(String(form.termMonths))) throw new Error('Abonelik süresi 1–12 ay olmalı.');

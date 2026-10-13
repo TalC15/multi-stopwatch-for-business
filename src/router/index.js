@@ -8,6 +8,10 @@ import {
 } from "../services/backendSync";
 
 const routes = [
+  { path:'/password-login',name:'PasswordLogin',component:()=>import('../views/PasswordAuthView.vue'),meta:{guest:true,authKind:'login'} },
+  { path:'/account/activate',name:'AccountActivate',component:()=>import('../views/PasswordAuthView.vue'),meta:{authKind:'activation'} },
+  { path:'/account/reset',name:'AccountReset',component:()=>import('../views/PasswordAuthView.vue'),meta:{authKind:'reset'} },
+  { path:'/account/security',name:'AccountSecurity',component:()=>import('../views/PasswordAuthView.vue'),meta:{requiresAuth:true,authKind:'change'} },
   { path: "/superadmin/agents", name: "AgentManagement", component: () => import("../views/SubscriptionManagementView.vue"), meta: { requiresAuth: true, salesRole: "superadmin", salesKind: "agents" } },
   { path: "/agent/customers", name: "IndividualCustomers", component: () => import("../views/SubscriptionManagementView.vue"), meta: { requiresAuth: true, salesRole: "agent", salesKind: "customers" } },
   { path: "/agent/customers/:customerId", name: "IndividualCustomerHistory", component: () => import("../views/SubscriptionManagementView.vue"), meta: { requiresAuth: true, salesRole: "agent", salesKind: "history" } },

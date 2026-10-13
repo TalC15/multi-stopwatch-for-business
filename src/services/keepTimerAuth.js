@@ -24,6 +24,17 @@ export const KeepTimerAuth = Object.freeze({
       user: { id: result.user.id, username: result.user.username, role: result.user.role, workspace_id: result.user.workspace_id },
     }
   },
+  // Fixed native method contract: APK must implement HTTPS /auth/native/passwordLogin,
+  // keep refresh in secure store and return only these public fields. No fallback.
+  async passwordLogin({ email, password }) {
+    requireAndroid()
+    const result = await native.passwordLogin({ email, password })
+    if (result.user?.role !== 'worker') throw Object.assign(new Error('Individual login only'), { code: 'AUTH_FORBIDDEN' })
+    return {
+      accessToken: result.accessToken, sessionId: result.sessionId,
+      user: { id: result.user.id, username: result.user.username, role: result.user.role, workspace_id: result.user.workspace_id },
+    }
+  },
   async refresh({ sessionId }) {
     requireAndroid()
     const result = await native.refresh({ sessionId })

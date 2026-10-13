@@ -1,3 +1,4 @@
+import './services/authLink.js' // Capture and clear fragment before router/app/network startup.
 import { Capacitor } from '@capacitor/core'
 import { bootstrapNativeAuthSession } from './services/backendSync.js'
 import { isAndroidAuthPlatform } from './services/keepTimerAuth.js'

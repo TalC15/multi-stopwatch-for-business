@@ -136,3 +136,12 @@ test('Phase 5 mixed timezone offsets compare true instants without millisecond l
   const x = data(); x.subscription.startsAt = '2026-10-01T03:00:00.000001+03:00'; x.subscription.endsAt = '2026-09-30T20:00:00.000002-04:00';
   assert.equal(validateExperience(x, user).subscription.isEntitled, true);
 });
+
+
+test('Phase7 loginReady is independent of expired entitlement and never opens paid features',()=>{
+ const result=validateExperience({...data('expired','SUBSCRIPTION_EXPIRED'),loginReady:true},user);
+ assert.equal(result.loginReady,true);assert.equal(result.subscription.isEntitled,false);
+ assert.equal(result.personal.readable,true);assert.equal(result.personal.writable,false);
+ assert.deepEqual(result.features,{tts:false,telegram:false,presets:false});
+ for(const loginReady of ['true',1,null,undefined])assert.throws(()=>validateExperience({...data(),loginReady},user));
+});

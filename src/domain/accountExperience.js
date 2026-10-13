@@ -24,7 +24,7 @@ export function validateExperience(data, user) {
       !s || typeof s.isEntitled !== 'boolean' ||
       !(data.code === null || typeof data.code === 'string' && entitlementCodes.has(data.code)) ||
       ['ACCOUNT_DISABLED', 'SUBSCRIPTION_CONFLICT', 'SUBSCRIPTION_UNAVAILABLE'].includes(data.code) ||
-      data.loginReady !== false) throw Error('SUBSCRIPTION_UNAVAILABLE');
+      typeof data.loginReady !== 'boolean') throw Error('SUBSCRIPTION_UNAVAILABLE');
   if (a.kind === 'company') {
     if (s.planCode !== null || s.status !== null || s.startsAt !== null || s.endsAt !== null ||
         s.isEntitled || data.code !== 'SUBSCRIPTION_REQUIRED' || user.role === 'agent') throw Error('SUBSCRIPTION_UNAVAILABLE');
@@ -47,7 +47,7 @@ export function validateExperience(data, user) {
     subscription: { planCode: s.planCode, status: s.status, startsAt: s.startsAt, endsAt: s.endsAt, isEntitled: s.isEntitled },
     evaluatedAt: timestampMicros(data.evaluatedAt) === null ? null : data.evaluatedAt,
     code: data.code, features: { tts: paid, telegram: paid, presets: paid },
-    personal: { readable: Boolean(a.workspaceId), writable: Boolean(a.workspaceId) && paid }, shared: data.shared };
+    personal: { readable: Boolean(a.workspaceId), writable: Boolean(a.workspaceId) && paid }, shared: data.shared, loginReady: data.loginReady };
 }
 
 // A display lease can only shorten a server decision. Never activates a pending

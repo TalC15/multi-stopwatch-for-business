@@ -24,24 +24,26 @@ test('native auth wrapper only exposes public fields and sends exact operation i
       'const { Capacitor, registerPlugin } = globalThis.__keepTimerAuthTest')
     const { KeepTimerAuth, isAndroidAuthPlatform } = await import(`data:text/javascript;base64,${Buffer.from(transformed).toString('base64')}`)
     assert.equal(isAndroidAuthPlatform(), true)
-    assert.deepEqual(Object.keys(KeepTimerAuth).sort(), ['getSessionState', 'login', 'logout', 'refresh'])
+    assert.deepEqual(Object.keys(KeepTimerAuth).sort(), ['getSessionState', 'login', 'logout', 'passwordLogin', 'refresh'])
     const results = [await KeepTimerAuth.login({ username: 'worker', pin: 'test-pin', url: 'https://evil.invalid' }),
+      await KeepTimerAuth.passwordLogin({email:'owner@example.test',password:'only-in-request',url:'https://evil.invalid'}),
       await KeepTimerAuth.refresh({ sessionId: 'session', refreshToken: 'injected' }),
       await KeepTimerAuth.logout({ sessionId: 'session' }), await KeepTimerAuth.getSessionState()]
     assert.equal(JSON.stringify(results).includes('secret'), false)
     assert.deepEqual(calls, [
       { method: 'login', body: { username: 'worker', pin: 'test-pin' } },
+      { method: 'passwordLogin',body:{email:'owner@example.test',password:'only-in-request'} },
       { method: 'refresh', body: { sessionId: 'session' } },
       { method: 'logout', body: { sessionId: 'session' } },
       { method: 'getSessionState', body: undefined },
     ])
     globalThis.Capacitor.isLoggingEnabled = true
     await assert.rejects(KeepTimerAuth.login({ username: 'worker', pin: 'must-not-cross' }), { code: 'AUTH_LOGGING_CONFIGURATION' })
-    assert.equal(calls.length, 4)
+    assert.equal(calls.length, 5)
     globalThis.__keepTimerAuthTest.Capacitor.getPlatform = () => 'web'
     assert.equal(isAndroidAuthPlatform(), false)
     await assert.rejects(KeepTimerAuth.getSessionState(), { code: 'UNIMPLEMENTED' })
-    assert.equal(calls.length, 4)
+    assert.equal(calls.length, 5)
   } finally {
     if (previous === undefined) delete globalThis.Capacitor
     else globalThis.Capacitor = previous
