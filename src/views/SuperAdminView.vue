@@ -20,7 +20,6 @@ const newPin = ref("");
 const newRole = ref("worker");
 const newWorkspaceId = ref("");
 
-const selectedWorkspace = ref(null);
 const workspaceDetail = ref(null);
 const detailLoading = ref(false);
 const showModal = ref(false);
@@ -28,6 +27,7 @@ const showModal = ref(false);
 function authHeader() {
   return {
     "Content-Type": "application/json",
+    "X-KeepTimer-CSRF": "1",
     Authorization: `Bearer ${getAccessToken()}`,
   };
 }
@@ -91,7 +91,7 @@ const createUser = message.withLoading(
 );
 
 const deleteUser = message.withLoading(
-  "Kullanıcı siliniyor...",
+  "Kullanıcı devre dışı bırakılıyor...",
   async (userId, username) => {
     const response = await apiFetch(`${BASE_URL}/admin/users/${userId}`, {
       method: "DELETE",
@@ -99,10 +99,10 @@ const deleteUser = message.withLoading(
     });
 
     if (response?.ok) {
-      message.success(`${username} silindi`);
+      message.success(`${username} devre dışı bırakıldı`);
       await fetchAll();
     } else {
-      message.error("Kullanıcı silinemedi");
+      message.error("Kullanıcı devre dışı bırakılamadı");
     }
   },
 );
@@ -132,7 +132,6 @@ const updateUser = message.withLoading(
   async () => {
     if (!editingUser.value) return;
     editingUser.value.username = editingUser.value.username.trim()
-    console.log(editingUser.value.username)
     const response = await apiFetch(
       `${BASE_URL}/admin/users/${editingUser.value.id}`,
       {
@@ -258,7 +257,7 @@ onMounted(() => fetchAll());
 
         <div class="flex gap-2">
           <button
-            v-for="role in ['worker', 'manager', 'superadmin']"
+            v-for="role in ['worker', 'manager']"
             :key="role"
             :aria-pressed="newRole === role"
             @click="newRole = role"

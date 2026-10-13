@@ -46,5 +46,6 @@ test('auth rewrite, SPA fallback and every auth cache header retain the original
       { key: 'x-vercel-enable-rewrite-caching', value: '0' },
     ],
   }]);
-  assert.equal(config.headers.length, 2, 'Only the CSP rule is added');
+  assert.equal(config.headers.length,4);
+  for(const source of ['/account/:path*','/password-login']) assert.ok(config.headers.find(r=>r.source===source).headers.some(h=>h.key==='Referrer-Policy' && h.value==='no-referrer'));
 });

@@ -94,29 +94,29 @@ test('SA form validates and confirms without password exposure; active-agent con
   const f = fixture({ role: 'superadmin', kind: 'agents' });
   try {
     await tick(); await f.click('Yeni Vekil'); await f.review(); assert.match(text(f.tree), /Kullanıcı adı 3–25/); assert.equal(f.dialog().open, false);
-    await f.input('username', 'vekil.test'); await f.input('password', secret); await f.input('email', 'mfa@example.invalid'); await f.review();
-    assert.equal(f.dialog().open, true); assert.ok(!text(f.dialog()).includes(secret)); assert.equal(walk(f.tree).find(n => n.props?.id === 'sales-password').value, '');
+    await f.input('username', 'vekil.test'); await f.input('email', 'mfa@example.invalid'); await f.input('email', 'mfa@example.invalid'); await f.review();
+    assert.equal(f.dialog().open, true); assert.ok(!text(f.dialog()).includes(secret)); assert.equal(walk(f.tree).find(n => n.props?.id === 'sales-password'), undefined);
     f.handler = () => response(409, { code: 'ACTIVE_AGENT_EXISTS', details: secret }); await f.click('Onayla');
     assert.match(text(f.dialog()), /Zaten aktif bir Vekil var/); assert.ok(!text(f.tree).includes(secret));
-    const post = f.calls.find(c => c.opts.method === 'POST'); assert.deepEqual(JSON.parse(post.opts.body), { username: 'vekil.test', password: secret, mfaEmail: 'mfa@example.invalid' });
+    const post = f.calls.find(c => c.opts.method === 'POST'); assert.deepEqual(JSON.parse(post.opts.body), { username: 'vekil.test', mfaEmail: 'mfa@example.invalid' });
     f.dialog().props.onCancel({ preventDefault() {} }); await tick(); assert.equal(f.dialog().open, false);
   } finally { f.app.unmount(); }
 });
 test('customer UI only offers Individual; exact sale body and successful list refresh', async () => {
   const f = fixture(); try {
     await tick(); assert.match(text(f.tree), /Henüz Bireysel müşteri yok/); await f.click('Yeni müşteri');
-    assert.ok(!/Enterprise|Team/.test(text(f.tree))); await f.input('username', 'deniz.test'); await f.input('password', secret); await f.input('amount', '250,00'); await f.input('months', '3');
+    assert.ok(!/Enterprise|Team/.test(text(f.tree))); await f.input('username', 'deniz.test'); await f.input('email', 'mfa@example.invalid'); await f.input('amount', '250,00'); await f.input('months', '3');
     await f.review(); assert.ok(!text(f.tree).includes(secret)); assert.equal(f.dialog().open, true);
     f.handler = (_url, opts) => response(200, opts.method === 'POST' ? { customerId: id(2), subscription: period(3), loginReady: false } : { items: [customer], nextCursor: null });
     await f.click('Onayla'); assert.equal(f.dialog().open, false); assert.match(text(f.tree), /deniz.test/); assert.match(text(f.tree), /giriş henüz kullanıma açık değil/);
     const body = JSON.parse(f.calls.find(c => c.opts.method === 'POST').opts.body);
-    assert.deepEqual(body, { username: 'deniz.test', password: secret, planCode: 'individual', termMonths: 3, amountMinor: 25000, currency: 'TRY' });
+    assert.deepEqual(body, { username: 'deniz.test', email: 'mfa@example.invalid', planCode: 'individual', termMonths: 3, amountMinor: 25000, currency: 'TRY' });
     await f.click('Detay ve geçmiş'); assert.deepEqual(f.navigation, [`/agent/customers/${id(2)}`]);
   } finally { f.app.unmount(); }
 });
 test('pending request blocks buttons/route/escape; ambiguous retry sends same intent', async () => {
   const f = fixture(), gate = deferred(); try {
-    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('password', secret); await f.input('amount', '250,00'); await f.review();
+    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('email', 'mfa@example.invalid'); await f.input('amount', '250,00'); await f.review();
     f.handler = () => gate.promise; await f.click('Onayla'); assert.equal(f.mayLeave(), false); assert.equal(f.mayUpdate(), false); assert.ok(f.button('İşlem bekleniyor…').props.disabled);
     f.dialog().props.onCancel({ preventDefault() {} }); await tick(); assert.equal(f.dialog().open, true);
     gate.reject(Error(secret)); await tick(); assert.ok(walk(f.dialog()).find(n => n.tag === 'button' && text(n) === 'Vazgeç').props.disabled); assert.match(text(f.dialog()), /Sonuç belirsiz/);
@@ -143,7 +143,7 @@ test('customer and history UI pagination uses real returned cursors', async () =
 });
 test('auth identity change clears form/confirmation and revalidates list; same-identity role revocation hides screen', async () => {
   const f = fixture(); try {
-    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('password', secret); await f.input('amount', '250'); await f.review(); assert.equal(f.dialog().open, true);
+    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('email', 'mfa@example.invalid'); await f.input('amount', '250'); await f.review(); assert.equal(f.dialog().open, true);
     f.identity = 'B'; window.dispatchEvent(new Event('sales-test-session')); await tick(); assert.equal(f.dialog().open, false); assert.equal(walk(f.tree).find(n => n.tag === 'form'), undefined); assert.equal(f.calls.filter(c => c.opts.method === 'GET').length, 2);
     f.user = { ...f.user, role: 'worker' }; window.dispatchEvent(new Event('sales-test-user')); await tick(); assert.match(text(f.tree), /Yönetim erişimi yok/); assert.deepEqual(f.navigation, ['/']); assert.ok(!text(f.tree).includes(secret));
   } finally { f.app.unmount(); }
@@ -158,8 +158,8 @@ test('SA active/passive rows permit reset/revoke only on the selected active age
     await f.click('Yetkiyi kaldır'); await f.review(); assert.match(text(f.dialog()), /active.agent/); assert.match(text(f.dialog()), /Hesap ve geçmiş kayıtları silinmez/);
     f.handler = (_url, opts) => response(200, opts.method === 'POST' ? { agentId: id(2), disabled: true } : { items: [agent], nextCursor: null }); await f.click('Onayla');
     const revokePost = f.calls.find(c => c.opts.method === 'POST'); assert.ok(revokePost.url.endsWith(`/admin/agents/${id(2)}/revoke`)); assert.deepEqual(JSON.parse(revokePost.opts.body), {});
-    await f.click('Parola sıfırla'); await f.input('password', secret); await f.review(); assert.ok(!text(f.dialog()).includes(secret));
-    f.handler = (_url, opts) => response(200, opts.method === 'POST' ? { userId: id(2), mustChangePassword: true, loginReady: false } : { items: [], nextCursor: null }); await f.click('Onayla');
+    await f.click('Parola sıfırla'); await f.review(); assert.ok(!text(f.dialog()).includes(secret));
+    f.handler = () => response(403, {code:'SALES_FORBIDDEN'}); await f.click('Onayla'); assert.match(text(f.dialog()), /yetki|izin|erişim/i);
     assert.ok(f.calls.filter(c => c.opts.method === 'POST').at(-1).url.endsWith(`/admin/agents/${id(2)}/password-reset`));
   } finally { f.app.unmount(); }
 });
@@ -174,7 +174,7 @@ test('history renewal validates amount without inventing dates; pending-period r
 });
 
 async function uncertainFixture() {
-  const f = fixture(); await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('password', secret); await f.input('amount', '250,00'); await f.review();
+  const f = fixture(); await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('email', 'mfa@example.invalid'); await f.input('amount', '250,00'); await f.review();
   f.handler = () => response(200, { customerId: id(2), loginReady: false }); await f.click('Onayla'); return f;
 }
 test('revision: malformed 2xx keeps form/confirmation and disables normal logout until replay succeeds', async () => {
@@ -190,7 +190,7 @@ test('revision: malformed 2xx keeps form/confirmation and disables normal logout
 });
 test('revision: signOut itself refuses ambiguous network intent, even if the handler is called directly', async () => {
   const f = fixture(); try {
-    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('password', secret); await f.input('amount', '250,00'); await f.review();
+    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('email', 'mfa@example.invalid'); await f.input('amount', '250,00'); await f.review();
     f.handler = () => { throw Error(secret); }; await f.click('Onayla'); assert.match(text(f.dialog()), /Sonuç belirsiz/);
     await f.button('Çıkış yap').props.onClick(); await tick(); assert.equal(f.logouts, 0);
     assert.match(text(f.tree), /aynı isteği yeniden deneyerek veya güvenilir satış geçmişinden kontrol ederek/i); assert.equal(f.dialog().open, true);
@@ -198,7 +198,7 @@ test('revision: signOut itself refuses ambiguous network intent, even if the han
 });
 test('revision: signOut refuses pending intent; logout works once a valid response resolves it', async () => {
   const f = fixture(), gate = deferred(); try {
-    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('password', secret); await f.input('amount', '250,00'); await f.review();
+    await tick(); await f.click('Yeni müşteri'); await f.input('username', 'deniz.test'); await f.input('email', 'mfa@example.invalid'); await f.input('amount', '250,00'); await f.review();
     f.handler = (_url, opts) => opts.method === 'POST' ? gate.promise : response(200, { items: [], nextCursor: null }); await f.click('Onayla');
     await f.button('Çıkış yap').props.onClick(); await tick(); assert.equal(f.logouts, 0); assert.ok(f.button('Çıkış yap').props.disabled);
     gate.resolve(response(200, { customerId: id(2), subscription: period(3), loginReady: false })); await tick(); await f.click('Çıkış yap'); assert.equal(f.logouts, 1);

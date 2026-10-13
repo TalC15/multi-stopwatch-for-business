@@ -189,6 +189,7 @@ onMounted(async () => {
 </script>
 
 <template>
+  <RouterLink to="/account/security" class="block rounded-xl border border-[var(--color-border)] p-3 text-center text-indigo-600 dark:text-indigo-300">Parola güvenliği</RouterLink>
   <div
     class="min-h-screen bg-[var(--color-surface)] text-[var(--color-text-primary)]"
   >

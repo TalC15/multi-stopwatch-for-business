@@ -1,4 +1,4 @@
-import { entitlementCodes } from '../domain/accountExperience.js';
+import { entitlementCodes } from "../domain/accountExperience.js";
 import { KeepTimerAuth, isAndroidAuthPlatform } from "./keepTimerAuth.js";
 
 export const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
@@ -9,9 +9,12 @@ export const AUTH_LOGIN_REQUIRED_EVENT = "keeptimer:auth-login-required";
 export const AUTH_SESSION_CHANGED_EVENT = "keeptimer:auth-session-changed";
 export const AUTH_USER_CHANGED_EVENT = "keeptimer:auth-user-changed";
 export const AUTH_LOCAL_LOGOUT_EVENT = "keeptimer:auth-local-logout";
-export const AUTH_ACCESS_INVALIDATED_EVENT = "keeptimer:auth-access-invalidated";
-export const ACCOUNT_AUTHORITY_DENIED_EVENT = "keeptimer:account-authority-denied";
-export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT = "keeptimer:auth-access-token-refreshed";
+export const AUTH_ACCESS_INVALIDATED_EVENT =
+  "keeptimer:auth-access-invalidated";
+export const ACCOUNT_AUTHORITY_DENIED_EVENT =
+  "keeptimer:account-authority-denied";
+export const AUTH_ACCESS_TOKEN_REFRESHED_EVENT =
+  "keeptimer:auth-access-token-refreshed";
 
 let accessToken = null; // Never persisted or broadcast to another tab.
 let authGeneration = 0;
@@ -20,11 +23,12 @@ let localAuthQueue = Promise.resolve();
 let nativeNeedsReconciliation = true;
 let nativeRequiresLogin = false;
 let nativeLocalScopeIdentity = null; // Display scope only; never network authority.
-const emit = name => globalThis.window?.dispatchEvent(new Event(name));
+const emit = (name) => globalThis.window?.dispatchEvent(new Event(name));
 export const getAuthGeneration = () => authGeneration;
 
 function withAuthMutationLock(callback) {
-  if (globalThis.navigator?.locks?.request) return navigator.locks.request(AUTH_LOCK_NAME, callback);
+  if (globalThis.navigator?.locks?.request)
+    return navigator.locks.request(AUTH_LOCK_NAME, callback);
   // Serializes this JS runtime only. No cross-tab guarantee without Web Locks.
   const work = localAuthQueue.then(callback, callback);
   localAuthQueue = work.catch(() => {});
@@ -37,14 +41,19 @@ function decodeJwtPayload(token) {
     const parts = token.split(".");
     if (parts.length !== 3) return null;
     const base64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
-    return JSON.parse(atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")));
-  } catch { return null; }
+    return JSON.parse(
+      atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, "=")),
+    );
+  } catch {
+    return null;
+  }
 }
 // Used only for the access JWT's local session consistency, not authorization.
 export function getTokenSessionIdentity(token, expectedType) {
   const payload = decodeJwtPayload(token);
   return payload?.type === expectedType && payload.id && payload.sessionId
-    ? `${payload.id}:${payload.sessionId}` : null;
+    ? `${payload.id}:${payload.sessionId}`
+    : null;
 }
 export function getSessionMarker() {
   return globalThis.localStorage?.getItem(AUTH_SESSION_KEY) || null;
@@ -60,11 +69,19 @@ function getCachedUser() {
   if (!isTabSessionCurrent()) return null;
   try {
     const user = JSON.parse(localStorage.getItem("user"));
-    return user?.id && getSessionMarker()?.startsWith(`${user.id}:`) ? user : null;
-  } catch { return null; }
+    return user?.id && getSessionMarker()?.startsWith(`${user.id}:`)
+      ? user
+      : null;
+  } catch {
+    return null;
+  }
 }
 export function isLocalAccountScopeReconciled() {
-  return isTabSessionCurrent() && (!isAndroidAuthPlatform() || nativeLocalScopeIdentity === getSessionMarker());
+  return (
+    isTabSessionCurrent() &&
+    (!isAndroidAuthPlatform() ||
+      nativeLocalScopeIdentity === getSessionMarker())
+  );
 }
 export function getUser() {
   return isLocalAccountScopeReconciled() ? getCachedUser() : null;
@@ -76,12 +93,18 @@ export function saveUser(user) {
 // Local UI/scope availability is independent of network/access-token readiness.
 export function isLoggedIn() {
   const user = getUser();
-  return Boolean(user && !user.disabled_at && !(isAndroidAuthPlatform() && nativeRequiresLogin));
+  return Boolean(
+    user &&
+    !user.disabled_at &&
+    !(isAndroidAuthPlatform() && nativeRequiresLogin),
+  );
 }
 export function getAccessToken() {
   if (isAndroidAuthPlatform() && nativeNeedsReconciliation) return null;
-  return isLoggedIn() && getTokenSessionIdentity(accessToken, "access") === getTabSessionIdentity()
-    ? accessToken : null;
+  return isLoggedIn() &&
+    getTokenSessionIdentity(accessToken, "access") === getTabSessionIdentity()
+    ? accessToken
+    : null;
 }
 export function hasUsableAccessToken() {
   const token = getAccessToken();
@@ -100,26 +123,39 @@ export function initializeAuthSession() {
     storage?.removeItem("refreshToken");
   }
   const marker = getSessionMarker();
-  if (marker && !getTabSessionIdentity()) sessionStorage.setItem(TAB_AUTH_SESSION_KEY, marker);
+  if (marker && !getTabSessionIdentity())
+    sessionStorage.setItem(TAB_AUTH_SESSION_KEY, marker);
 }
 if (typeof window !== "undefined") {
   initializeAuthSession();
-  window.addEventListener("storage", event => {
+  window.addEventListener("storage", (event) => {
     if (event.key === AUTH_SESSION_KEY || event.key === null) {
-      if (isAndroidAuthPlatform()) invalidateNativeAccess({ dropScope: true, force: true });
-      else if (!isTabSessionCurrent()) { accessToken = null; authGeneration++; }
+      if (isAndroidAuthPlatform())
+        invalidateNativeAccess({ dropScope: true, force: true });
+      else if (!isTabSessionCurrent()) {
+        accessToken = null;
+        authGeneration++;
+      }
       emit(AUTH_SESSION_CHANGED_EVENT);
     }
   });
 }
-function isSameAuthSession(generation, marker) {
+export function isSameAuthSession(generation, marker) {
   return generation === authGeneration && marker === getSessionMarker();
 }
 function clearCurrentSession(generation, marker) {
-  if (!marker || !isSameAuthSession(generation, marker) || !isTabSessionCurrent()) return false;
+  if (
+    !marker ||
+    !isSameAuthSession(generation, marker) ||
+    !isTabSessionCurrent()
+  )
+    return false;
   authGeneration++;
   accessToken = null;
-  if (isAndroidAuthPlatform()) { nativeLocalScopeIdentity = null; nativeNeedsReconciliation = true; }
+  if (isAndroidAuthPlatform()) {
+    nativeLocalScopeIdentity = null;
+    nativeNeedsReconciliation = true;
+  }
   emit(AUTH_LOCAL_LOGOUT_EVENT);
   localStorage.removeItem(AUTH_SESSION_KEY);
   localStorage.removeItem("user");
@@ -131,15 +167,28 @@ function clearCurrentSession(generation, marker) {
 export function clearAuthSessionIfCurrent(generation, marker) {
   return withAuthMutationLock(() => clearCurrentSession(generation, marker));
 }
-const sessionIdFrom = marker => marker?.slice(marker.indexOf(":") + 1);
-const staleResult = generation => ({ ok: false, hardFail: false, stale: true, generation });
+const sessionIdFrom = (marker) => marker?.slice(marker.indexOf(":") + 1);
+const staleResult = (generation) => ({
+  ok: false,
+  hardFail: false,
+  stale: true,
+  generation,
+});
 
 // Network readiness and reconciled local display scope are independent. Stored
 // cache/markers survive failures, but unknown account switches hide that scope.
-function invalidateNativeAccess({ dropScope = false, requiresLogin = false, force = false } = {}) {
+function invalidateNativeAccess({
+  dropScope = false,
+  requiresLogin = false,
+  force = false,
+} = {}) {
   const scopeChanged = dropScope && nativeLocalScopeIdentity !== null;
-  const changed = force || accessToken !== null || !nativeNeedsReconciliation ||
-    nativeRequiresLogin !== requiresLogin || scopeChanged;
+  const changed =
+    force ||
+    accessToken !== null ||
+    !nativeNeedsReconciliation ||
+    nativeRequiresLogin !== requiresLogin ||
+    scopeChanged;
   accessToken = null;
   nativeNeedsReconciliation = true;
   nativeRequiresLogin = requiresLogin;
@@ -151,34 +200,71 @@ function invalidateNativeAccess({ dropScope = false, requiresLogin = false, forc
   }
 }
 function nativeFailure(error) {
-  const nestedUncertainty = error?.data?.indeterminate, uncertainty = error?.indeterminate;
+  const nestedUncertainty = error?.data?.indeterminate,
+    uncertainty = error?.indeterminate;
   const indeterminate = nestedUncertainty === true || uncertainty === true;
   const candidate = Number(error?.data?.status ?? error?.status);
-  const status = !indeterminate && [400, 401, 403, 409, 415, 429, 503].includes(candidate) ? candidate : 503;
+  const status =
+    !indeterminate && [400, 401, 403, 409, 415, 429, 503].includes(candidate)
+      ? candidate
+      : 503;
   // A missing uncertainty flag is not proof of definitive expiry. All failures
   // require reconciliation; only explicit, non-indeterminate 401 can end auth.
-  const definitive = status === 401 && !indeterminate && (nestedUncertainty === false || uncertainty === false);
-  return { response: { ok: false, status }, definitive, indeterminate, data: {
-    error: ["UNIMPLEMENTED", "UNAVAILABLE", "AUTH_LOGGING_CONFIGURATION"].includes(error?.code)
-      ? "Android güvenli giriş eklentisi kullanılamıyor. Uygulama yapılandırmasını kontrol edin."
-      : "Android oturum işlemi doğrulanamadı. Yeniden deneyin.",
-  } }; // Never return/log raw native message/body/header/cause.
+  const definitive =
+    status === 401 &&
+    !indeterminate &&
+    (nestedUncertainty === false || uncertainty === false);
+  return {
+    response: { ok: false, status },
+    definitive,
+    indeterminate,
+    data: {
+      error: [
+        "UNIMPLEMENTED",
+        "UNAVAILABLE",
+        "AUTH_LOGGING_CONFIGURATION",
+      ].includes(error?.code)
+        ? "Android güvenli giriş eklentisi kullanılamıyor. Uygulama yapılandırmasını kontrol edin."
+        : "Android oturum işlemi doğrulanamadı. Yeniden deneyin.",
+    },
+  }; // Never return/log raw native message/body/header/cause.
 }
 async function reconcileNativeSession(generation, marker) {
   let state;
-  try { state = await KeepTimerAuth.getSessionState(); }
-  catch (error) {
+  try {
+    state = await KeepTimerAuth.getSessionState();
+  } catch (error) {
     if (!isSameAuthSession(generation, marker)) return staleResult(generation);
     const failure = nativeFailure(error);
     invalidateNativeAccess({ dropScope: true });
-    return { ok: false, hardFail: false, status: failure.response.status, indeterminate: failure.indeterminate, generation };
+    return {
+      ok: false,
+      hardFail: false,
+      status: failure.response.status,
+      indeterminate: failure.indeterminate,
+      generation,
+    };
   }
   if (!isSameAuthSession(generation, marker)) return staleResult(generation);
   const cached = getCachedUser();
-  if (state?.hasCredential !== true || state.requiresLogin !== false || !marker ||
-      !isTabSessionCurrent() || state.sessionId !== sessionIdFrom(marker) || !cached || cached.disabled_at) {
+  if (
+    state?.hasCredential !== true ||
+    state.requiresLogin !== false ||
+    !marker ||
+    !isTabSessionCurrent() ||
+    state.sessionId !== sessionIdFrom(marker) ||
+    !cached ||
+    cached.disabled_at
+  ) {
     invalidateNativeAccess({ dropScope: true, requiresLogin: true });
-    return { ok: false, hardFail: false, stale: true, status: 409, requiresLogin: true, generation };
+    return {
+      ok: false,
+      hardFail: false,
+      stale: true,
+      status: 409,
+      requiresLogin: true,
+      generation,
+    };
   }
   const changed = nativeLocalScopeIdentity !== marker || nativeRequiresLogin;
   nativeLocalScopeIdentity = marker;
@@ -189,7 +275,9 @@ async function reconcileNativeSession(generation, marker) {
   return { ok: true, generation };
 }
 export async function bootstrapNativeAuthSession() {
-  return isAndroidAuthPlatform() ? refreshAccessToken() : { ok: false, native: false };
+  return isAndroidAuthPlatform()
+    ? refreshAccessToken()
+    : { ok: false, native: false };
 }
 function installNativeSession(data, identity, previousMarker) {
   try {
@@ -200,11 +288,17 @@ function installNativeSession(data, identity, previousMarker) {
   } catch {
     // Best effort removes only this installation's old/partial JS markers.
     // Never restore a guessed native credential or delete timer/outbox data.
-    for (const [storage, key] of [[localStorage, AUTH_SESSION_KEY], [sessionStorage, TAB_AUTH_SESSION_KEY]]) {
+    for (const [storage, key] of [
+      [localStorage, AUTH_SESSION_KEY],
+      [sessionStorage, TAB_AUTH_SESSION_KEY],
+    ]) {
       try {
         const value = storage.getItem(key);
-        if (value === identity || value === previousMarker) storage.removeItem(key);
-      } catch { /* Keep access/scope closed even if JS storage is unavailable. */ }
+        if (value === identity || value === previousMarker)
+          storage.removeItem(key);
+      } catch {
+        /* Keep access/scope closed even if JS storage is unavailable. */
+      }
     }
     throw new Error("Native session installation failed");
   }
@@ -216,43 +310,77 @@ function installNativeSession(data, identity, previousMarker) {
   emit(AUTH_USER_CHANGED_EVENT);
   emit(AUTH_SESSION_CHANGED_EVENT);
 }
-const nativeUuid = value => typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+const nativeUuid = (value) =>
+  typeof value === "string" &&
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 function validNativeLogin(data) {
-  return nativeUuid(data?.sessionId) && nativeUuid(data?.user?.id) &&
-    typeof data.user.username === "string" && Boolean(data.user.username.trim()) &&
+  return (
+    nativeUuid(data?.sessionId) &&
+    nativeUuid(data?.user?.id) &&
+    typeof data.user.username === "string" &&
+    Boolean(data.user.username.trim()) &&
     ["worker", "manager", "superadmin"].includes(data.user.role) &&
-    (data.user.workspace_id === null || nativeUuid(data.user.workspace_id));
+    (data.user.workspace_id === null || nativeUuid(data.user.workspace_id))
+  );
 }
 async function authRequest(path, body, timeoutMs = 0) {
   if (isAndroidAuthPlatform()) {
     try {
-      const data = await KeepTimerAuth[path](body);
+      const data =
+        await KeepTimerAuth[path === "password-login" ? "passwordLogin" : path](
+          body,
+        );
       return { response: { ok: true, status: 200 }, data };
-    } catch (error) { return nativeFailure(error); }
+    } catch (error) {
+      return nativeFailure(error);
+    }
   }
   const controller = new AbortController();
   // Refresh has no cookie mutation. Login/logout keep the lock until fetch and
   // body settle; do not release it early via a timeout Promise.race.
-  const timeout = timeoutMs ? setTimeout(() => controller.abort(), timeoutMs) : null;
+  const timeout = timeoutMs
+    ? setTimeout(() => controller.abort(), timeoutMs)
+    : null;
   try {
     const response = await fetch(`/api/auth/${path}`, {
-      method: "POST", credentials: "same-origin", cache: "no-store",
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
       headers: { "Content-Type": "application/json", "X-KeepTimer-CSRF": "1" },
-      body: JSON.stringify(body), signal: controller.signal,
+      body: JSON.stringify(body),
+      signal: controller.signal,
     });
     let data = null;
-    try { data = await response.json(); } catch { /* HTTP status remains authoritative. */ }
+    try {
+      data = await response.json();
+    } catch {
+      /* HTTP status remains authoritative. */
+    }
     return { response, data };
-  } finally { if (timeout) clearTimeout(timeout); }
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
-export async function refreshAccessToken(generation = authGeneration, marker = getSessionMarker()) {
+export async function refreshAccessToken(
+  generation = authGeneration,
+  marker = getSessionMarker(),
+) {
   const android = isAndroidAuthPlatform();
-  if (!isSameAuthSession(generation, marker) || (!android && (!marker || !isLoggedIn()))) return staleResult(generation);
-  if (!isAndroidAuthPlatform() && globalThis.navigator?.onLine === false) return { ok: false, hardFail: false, status: 0, generation };
-  if (refreshState?.generation === generation && refreshState.marker === marker) return refreshState.promise;
+  if (
+    !isSameAuthSession(generation, marker) ||
+    (!android && (!marker || !isLoggedIn()))
+  )
+    return staleResult(generation);
+  if (!isAndroidAuthPlatform() && globalThis.navigator?.onLine === false)
+    return { ok: false, hardFail: false, status: 0, generation };
+  if (refreshState?.generation === generation && refreshState.marker === marker)
+    return refreshState.promise;
   const promise = withAuthMutationLock(async () => {
-    if (!isSameAuthSession(generation, marker) || (!android && !isLoggedIn())) return staleResult(generation);
+    if (!isSameAuthSession(generation, marker) || (!android && !isLoggedIn()))
+      return staleResult(generation);
     try {
       if (isAndroidAuthPlatform()) {
         const reconciled = await reconcileNativeSession(generation, marker);
@@ -262,36 +390,62 @@ export async function refreshAccessToken(generation = authGeneration, marker = g
           return { ok: false, hardFail: false, status: 0, generation };
         }
       }
-      const { response, data, indeterminate, definitive } = await authRequest("refresh", { sessionId: sessionIdFrom(marker) }, 15000);
-      if (!isSameAuthSession(generation, marker)) return staleResult(generation);
+      const { response, data, indeterminate, definitive } = await authRequest(
+        "refresh",
+        { sessionId: sessionIdFrom(marker) },
+        15000,
+      );
+      if (!isSameAuthSession(generation, marker))
+        return staleResult(generation);
       if (!isLoggedIn()) {
-        if (android) invalidateNativeAccess({ dropScope: true, requiresLogin: true });
+        if (android)
+          invalidateNativeAccess({ dropScope: true, requiresLogin: true });
         return staleResult(generation);
       }
       if (response.status === 401 && (!android || definitive)) {
         clearCurrentSession(generation, marker);
-        return { ok: false, hardFail: true, stale: false, status: 401, generation };
+        return {
+          ok: false,
+          hardFail: true,
+          stale: false,
+          status: 401,
+          generation,
+        };
       }
-      if (response.ok && data?.sessionId === sessionIdFrom(marker) &&
-          getTokenSessionIdentity(data.accessToken, "access") === marker) {
+      if (
+        response.ok &&
+        data?.sessionId === sessionIdFrom(marker) &&
+        getTokenSessionIdentity(data.accessToken, "access") === marker
+      ) {
         nativeNeedsReconciliation = false;
         accessToken = data.accessToken;
         emit(AUTH_ACCESS_TOKEN_REFRESHED_EVENT);
         return { ok: true, hardFail: false, stale: false, generation };
       }
       if (android) invalidateNativeAccess();
-      return { ok: false, hardFail: false, stale: response.status === 409, status: response.status, ...(indeterminate ? { indeterminate: true } : {}), generation };
+      return {
+        ok: false,
+        hardFail: false,
+        stale: response.status === 409,
+        status: response.status,
+        ...(indeterminate ? { indeterminate: true } : {}),
+        generation,
+      };
     } catch {
-      if (!isSameAuthSession(generation, marker)) return staleResult(generation);
+      if (!isSameAuthSession(generation, marker))
+        return staleResult(generation);
       if (android) invalidateNativeAccess();
       return { ok: false, hardFail: false, status: 0, generation };
     }
-  }).finally(() => { if (refreshState?.promise === promise) refreshState = null; });
+  }).finally(() => {
+    if (refreshState?.promise === promise) refreshState = null;
+  });
   refreshState = { generation, marker, promise };
   return promise;
 }
 export async function ensureAccessToken() {
-  if (!isAndroidAuthPlatform() && !isLoggedIn()) return staleResult(authGeneration);
+  if (!isAndroidAuthPlatform() && !isLoggedIn())
+    return staleResult(authGeneration);
   if (hasUsableAccessToken()) return { ok: true, generation: authGeneration };
   return refreshAccessToken();
 }
@@ -302,30 +456,58 @@ function withAccessToken(options, token) {
   return { ...options, headers };
 }
 function authHeader() {
-  return { "Content-Type": "application/json", Authorization: `Bearer ${getAccessToken()}` };
+  return {
+    "Content-Type": "application/json",
+    "X-KeepTimer-CSRF": "1",
+    Authorization: `Bearer ${getAccessToken()}`,
+  };
 }
 function apiContextCurrent(context) {
-  return isSameAuthSession(context.generation, context.marker) &&
-    getTabSessionIdentity() === context.identity && isLoggedIn();
+  return (
+    isSameAuthSession(context.generation, context.marker) &&
+    getTabSessionIdentity() === context.identity &&
+    isLoggedIn()
+  );
 }
 export async function apiFetch(url, options = {}) {
-  const context = { generation: authGeneration, marker: getSessionMarker(), identity: getTabSessionIdentity() };
-  const current = () => apiContextCurrent(context) && !options.signal?.aborted &&
+  const context = {
+    generation: authGeneration,
+    marker: getSessionMarker(),
+    identity: getTabSessionIdentity(),
+  };
+  const current = () =>
+    apiContextCurrent(context) &&
+    !options.signal?.aborted &&
     (!options.isRequestCurrent || options.isRequestCurrent());
-  const supplied = new Headers(options.headers || {}).get("Authorization")?.replace(/^Bearer /, "");
-  if (!current() || (supplied && supplied !== "null" && getTokenSessionIdentity(supplied, "access") !== context.identity)) return null;
+  const supplied = new Headers(options.headers || {})
+    .get("Authorization")
+    ?.replace(/^Bearer /, "");
+  if (
+    !current() ||
+    (supplied &&
+      supplied !== "null" &&
+      getTokenSessionIdentity(supplied, "access") !== context.identity)
+  )
+    return null;
   const ready = await ensureAccessToken();
   if (!ready.ok || !current()) return null;
   // Retain the existing auth-lock checkpoint before sending a scoped request.
-  const token = await withAuthMutationLock(() => current() ? getAccessToken() : null);
+  const token = await withAuthMutationLock(() =>
+    current() ? getAccessToken() : null,
+  );
   if (!token || !current()) return null;
   let response = await fetch(url, withAccessToken(options, token));
   if (!current()) return null;
-  const observeDenial = async response => {
+  const observeDenial = async (response) => {
     if ([403, 409, 503].includes(response.status) && response.clone) {
       let body;
-      try { body = await response.clone().json(); } catch { /* Not a trusted entitlement reply. */ }
-      if (current() && entitlementCodes.has(body?.code)) emit(ACCOUNT_AUTHORITY_DENIED_EVENT);
+      try {
+        body = await response.clone().json();
+      } catch {
+        /* Not a trusted entitlement reply. */
+      }
+      if (current() && entitlementCodes.has(body?.code))
+        emit(ACCOUNT_AUTHORITY_DENIED_EVENT);
     }
     return current() ? response : null;
   };
@@ -341,23 +523,157 @@ export async function apiFetch(url, options = {}) {
   return current() ? observeDenial(response) : null; // One retry, same body/mutation identity.
 }
 
-export async function login(username, pin) {
+let pendingPasswordAuth = null;
+export const login = (username, pin) =>
+  installLogin("login", { username, pin });
+export const passwordLogin = (email, password) =>
+  installLogin("password-login", { email, password });
+export function isPendingPasswordMfa(challengeId, context) {
+  const p = pendingPasswordAuth;
+  return (
+    !!p &&
+    p.challengeId === challengeId &&
+    p.context === context &&
+    isSameAuthSession(p.generation, p.marker)
+  );
+}
+export async function resendPasswordMfa(challengeId, context) {
+  const pending = pendingPasswordAuth;
+  const current = () =>
+    pendingPasswordAuth === pending &&
+    isPendingPasswordMfa(challengeId, context);
+  const stale = () => ({
+    ok: false,
+    stale: true,
+    error: "Oturum değişti. Yeniden giriş başlatın.",
+  });
+  if (!current() || isAndroidAuthPlatform()) return stale();
+  return withAuthMutationLock(async () => {
+    if (!current()) return stale();
+    try {
+      const { response, data } = await authRequest("mfa/resend", {
+        challengeId,
+        context,
+      });
+      if (!current()) return stale();
+      if (!response.ok)
+        return {
+          ok: false,
+          status: response.status,
+          error: data?.error || "Kod yeniden gönderilemedi.",
+        };
+      if (data?.accepted !== true || data.retryAfter !== 60)
+        return { ok: false, error: "Gönderim sonucu doğrulanamadı." };
+      return { ok: true, data: { accepted: true, retryAfter: 60 } };
+    } catch {
+      return current()
+        ? { ok: false, error: "Kod yeniden gönderilemedi." }
+        : stale();
+    }
+  });
+}
+export async function completePasswordMfa(challengeId, context, code) {
+  const pending = pendingPasswordAuth;
+  if (
+    !pending ||
+    pending.challengeId !== challengeId ||
+    pending.context !== context ||
+    !isSameAuthSession(pending.generation, pending.marker)
+  ) {
+    pendingPasswordAuth = null;
+    return {
+      success: false,
+      stale: true,
+      error: "Oturum değişti. Yeniden giriş başlatın.",
+    };
+  }
+  return installLogin("mfa/verify", { challengeId, context, code }, pending);
+}
+async function installLogin(path, body, pending = null) {
   if (globalThis.navigator?.onLine === false) {
     if (isAndroidAuthPlatform()) invalidateNativeAccess();
     return { success: false, error: "Giriş için internet bağlantısı gerekli." };
   }
   return withAuthMutationLock(async () => {
-    if (isAndroidAuthPlatform()) invalidateNativeAccess({ dropScope: true, force: true });
-    const generation = authGeneration, marker = getSessionMarker();
+    if (isAndroidAuthPlatform())
+      invalidateNativeAccess({ dropScope: true, force: true });
+    if (
+      pending &&
+      (!isSameAuthSession(pending.generation, pending.marker) ||
+        pendingPasswordAuth !== pending)
+    ) {
+      return {
+        success: false,
+        stale: true,
+        error: "Oturum değişti. Yeniden giriş başlatın.",
+      };
+    }
+    if (!pending) pendingPasswordAuth = null;
+    const generation = authGeneration,
+      marker = getSessionMarker();
     let installingSession = false;
     try {
-      const { response, data, indeterminate } = await authRequest("login", { username, pin });
-      if (!isSameAuthSession(generation, marker)) return { success: false, stale: true, error: "Oturum değişti; giriş sonucu uygulanmadı." };
-      if (!response.ok) return { success: false, status: response.status, ...(indeterminate ? { indeterminate: true } : {}), error: data?.error || "Giriş yapılamadı." };
-      const identity = data?.user?.id && data?.sessionId ? `${data.user.id}:${data.sessionId}` : null;
-      if (!identity || (isAndroidAuthPlatform() && !validNativeLogin(data)) || getTokenSessionIdentity(data.accessToken, "access") !== identity) {
-        return { success: false, error: "Sunucudan geçersiz oturum bilgisi alındı." };
+      const { response, data, indeterminate } = await authRequest(path, body);
+      if (!isSameAuthSession(generation, marker))
+        return {
+          success: false,
+          stale: true,
+          error: "Oturum değişti; giriş sonucu uygulanmadı.",
+        };
+      if (!response.ok)
+        return {
+          success: false,
+          status: response.status,
+          ...(indeterminate ? { indeterminate: true } : {}),
+          error: data?.error || "Giriş yapılamadı.",
+        };
+      if (
+        path === "password-login" &&
+        !isAndroidAuthPlatform() &&
+        data?.mfaRequired === true &&
+        nativeUuid(data.challengeId) &&
+        /^[A-Za-z0-9_-]{43}$/.test(data.context || "") &&
+        data.retryAfter === 60 &&
+        data.expiresIn === 600 &&
+        !data.accessToken &&
+        !data.refreshToken &&
+        !data.sessionId &&
+        !data.user
+      ) {
+        pendingPasswordAuth = {
+          generation,
+          marker,
+          challengeId: data.challengeId,
+          context: data.context,
+        };
+        return {
+          success: false,
+          mfaRequired: true,
+          challengeId: data.challengeId,
+          context: data.context,
+          retryAfter: 60,
+        };
       }
+      if (data?.mfaRequired !== undefined)
+        return {
+          success: false,
+          error: "Sunucudan geçersiz doğrulama sonucu alındı.",
+        };
+      const identity =
+        data?.user?.id && data?.sessionId
+          ? `${data.user.id}:${data.sessionId}`
+          : null;
+      if (
+        !identity ||
+        (isAndroidAuthPlatform() && !validNativeLogin(data)) ||
+        getTokenSessionIdentity(data.accessToken, "access") !== identity
+      ) {
+        return {
+          success: false,
+          error: "Sunucudan geçersiz oturum bilgisi alındı.",
+        };
+      }
+      pendingPasswordAuth = null;
       installingSession = true;
       if (isAndroidAuthPlatform()) {
         installNativeSession(data, identity, marker);
@@ -373,50 +689,93 @@ export async function login(username, pin) {
       emit(AUTH_SESSION_CHANGED_EVENT);
       return { success: true, user: data.user };
     } catch {
-      if (isAndroidAuthPlatform() && (installingSession || isSameAuthSession(generation, marker))) invalidateNativeAccess({ dropScope: true, requiresLogin: true });
-      return { success: false, error: "Giriş sonucu doğrulanamadı. İnternet bağlantınızı kontrol edin." };
+      if (
+        isAndroidAuthPlatform() &&
+        (installingSession || isSameAuthSession(generation, marker))
+      )
+        invalidateNativeAccess({ dropScope: true, requiresLogin: true });
+      return {
+        success: false,
+        error:
+          "Giriş sonucu doğrulanamadı. İnternet bağlantınızı kontrol edin.",
+      };
     }
   });
 }
 export async function logout() {
-  const generation = authGeneration, marker = getSessionMarker();
+  pendingPasswordAuth = null;
+  const generation = authGeneration,
+    marker = getSessionMarker();
   const android = isAndroidAuthPlatform();
-  const hasContext = () => android ? Boolean(getCachedUser() && !getCachedUser().disabled_at) : isLoggedIn();
+  const hasContext = () =>
+    android
+      ? Boolean(getCachedUser() && !getCachedUser().disabled_at)
+      : isLoggedIn();
   if (!hasContext()) {
     if (android) invalidateNativeAccess({ dropScope: true });
-    return { success: false, stale: true, error: "Bu sekmenin oturumu geçerli değil." };
+    return {
+      success: false,
+      stale: true,
+      error: "Bu sekmenin oturumu geçerli değil.",
+    };
   }
   if (globalThis.navigator?.onLine === false) {
     if (android) invalidateNativeAccess();
     return { success: false, error: "Çıkış için internet bağlantısı gerekli." };
   }
   return withAuthMutationLock(async () => {
-    if (!isSameAuthSession(generation, marker)) return { success: false, stale: true, error: "Oturum değişti." };
+    if (!isSameAuthSession(generation, marker))
+      return { success: false, stale: true, error: "Oturum değişti." };
     if (!hasContext()) {
-      if (android) invalidateNativeAccess({ dropScope: true, requiresLogin: true });
+      if (android)
+        invalidateNativeAccess({ dropScope: true, requiresLogin: true });
       return { success: false, stale: true, error: "Oturum değişti." };
     }
     try {
-      const { response, data, indeterminate, definitive } = await authRequest("logout", { sessionId: sessionIdFrom(marker) });
-      if (!isSameAuthSession(generation, marker)) return { success: false, stale: true, error: "Oturum değişti." };
+      const { response, data, indeterminate, definitive } = await authRequest(
+        "logout",
+        { sessionId: sessionIdFrom(marker) },
+      );
+      if (!isSameAuthSession(generation, marker))
+        return { success: false, stale: true, error: "Oturum değişti." };
       if (!hasContext()) {
-        if (android) invalidateNativeAccess({ dropScope: true, requiresLogin: true });
+        if (android)
+          invalidateNativeAccess({ dropScope: true, requiresLogin: true });
         return { success: false, stale: true, error: "Oturum değişti." };
       }
       if (response.status === 401 && (!android || definitive)) {
         clearCurrentSession(generation, marker);
-        return { success: false, expired: true, error: "Oturum artık geçerli değil. Yeniden giriş yapın." };
+        return {
+          success: false,
+          expired: true,
+          error: "Oturum artık geçerli değil. Yeniden giriş yapın.",
+        };
       }
-      if (response.status === 200 && data?.success === true && data.sessionId === sessionIdFrom(marker)) {
+      if (
+        response.status === 200 &&
+        data?.success === true &&
+        data.sessionId === sessionIdFrom(marker)
+      ) {
         clearCurrentSession(generation, marker);
         return { success: true };
       }
       if (android) invalidateNativeAccess();
-      return { success: false, status: response.status, stale: response.status === 409, ...(indeterminate ? { indeterminate: true } : {}), error: data?.error || "Çıkış doğrulanamadı; oturumunuz açık tutuldu." };
+      return {
+        success: false,
+        status: response.status,
+        stale: response.status === 409,
+        ...(indeterminate ? { indeterminate: true } : {}),
+        error: data?.error || "Çıkış doğrulanamadı; oturumunuz açık tutuldu.",
+      };
     } catch {
-      if (android && !isSameAuthSession(generation, marker)) return { success: false, stale: true, error: "Oturum değişti." };
+      if (android && !isSameAuthSession(generation, marker))
+        return { success: false, stale: true, error: "Oturum değişti." };
       if (android) invalidateNativeAccess();
-      return { success: false, error: "Çıkış doğrulanamadı; oturumunuz açık tutuldu. İnternet bağlantınızı kontrol edin." };
+      return {
+        success: false,
+        error:
+          "Çıkış doğrulanamadı; oturumunuz açık tutuldu. İnternet bağlantınızı kontrol edin.",
+      };
     }
   });
 }

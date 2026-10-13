@@ -27,7 +27,7 @@ const customerName = computed(() => selectedCustomer.value?.id === state.custome
 const actionTitles = { createAgent: 'Yeni Vekil', createCustomer: 'Yeni Bireysel müşteri', renew: 'Abonelik yenileme', cancel: 'Dönemi iptal et', reset: 'Parola sıfırlama', revoke: 'Vekil yetkisini kaldır' };
 const saleForm = computed(() => ['createCustomer', 'renew'].includes(state.action));
 const accountForm = computed(() => ['createAgent', 'createCustomer'].includes(state.action));
-const passwordForm = computed(() => accountForm.value || state.action === 'reset');
+
 function open(action, target) { if (controller.open(action, target)) Object.assign(form, emptyForm()); }
 function cancelAction() { if (controller.clearAction()) Object.assign(form, emptyForm()); }
 function confirmForm() {
@@ -37,8 +37,8 @@ function confirmForm() {
   if (saleForm.value) details.value.push(`${form.termMonths} ay · ${form.amount} ${form.currency}`, 'Ödeme sistem dışında alınır; bu işlem yalnız satış kaydı oluşturur. Başlangıç ve bitişi sunucu belirler.');
   if (state.action === 'cancel') details.value.push(`Dönem #${state.target.sequenceNo} · ${state.target.id}`, `${formatDate(state.target.startsAt)} — ${formatDate(state.target.endsAt)}`, cancellationReasons[form.reason], 'Yalnız bu dönem iptal edilir. Diğer dönemler, müşteri ve süreölçerler korunur.');
   if (state.action === 'revoke') details.value.push('Vekil’in oturumları iptal edilir. Hesap ve geçmiş kayıtları silinmez.');
-  if (passwordForm.value) details.value.push('Yeni parola onay ekranında gösterilmez. Yeni hesapların parola ile girişi henüz kullanıma açık değildir.');
-  if (state.action === 'reset') details.value.push('Mevcut oturumlar iptal edilir ve ilk girişte parola değişikliği gerekir.');
+  if (accountForm.value) details.value.push('Hesap girişi kapalı oluşturulur. İlk parolayı yalnız hesap sahibi belirler; davet otomatik gönderilmez.');
+  if (state.action === 'reset') details.value.push('Parolayı hesap sahibi e-posta kurtarma sayfasından sıfırlar. Yönetim üzerinden parola belirleme kapalıdır.');
   form.password = '';
 }
 function openCustomer(row) { selectedCustomer.value = { id: row.id, username: row.username }; void router.push(`/agent/customers/${row.id}`); }
@@ -114,8 +114,7 @@ async function signOut() {
           <fieldset :disabled="state.confirm || state.busy || !state.ready">
             <div class="form-grid">
               <div v-if="accountForm"><label for="sales-username">Kullanıcı adı</label><input id="sales-username" v-model="form.username" required maxlength="25" autocomplete="off" /><p class="help">3–25 karakter; harf, rakam, nokta, alt çizgi veya tire.</p></div>
-              <div v-if="passwordForm"><label for="sales-password">{{ state.action === 'reset' ? 'Yeni güçlü parola' : 'Güçlü başlangıç parolası' }}</label><input id="sales-password" v-model="form.password" type="password" :required="!state.confirm" autocomplete="new-password" aria-describedby="password-help" /><p id="password-help" class="help">En az 16 karakter; en fazla 72 UTF-8 byte. Parola bu cihazda kalıcı saklanmaz ve onayda gösterilmez.</p></div>
-              <div v-if="state.action === 'createAgent'"><label for="sales-email">MFA e-posta adresi</label><input id="sales-email" v-model="form.mfaEmail" type="email" required maxlength="254" autocomplete="off" /></div>
+              <div v-if="accountForm"><label for="sales-email">Hesap e-posta adresi</label><input id="sales-email" v-model="form.mfaEmail" type="email" required maxlength="254" autocomplete="off" /></div>
               <template v-if="saleForm">
                 <div><label for="sales-months">Abonelik süresi</label><select id="sales-months" v-model="form.termMonths"><option v-for="month in 12" :key="month" :value="String(month)">{{ month }} ay</option></select></div>
                 <div><label for="sales-amount">Kaydedilecek satış tutarı</label><input id="sales-amount" v-model="form.amount" inputmode="decimal" required maxlength="18" placeholder="0,00" aria-describedby="amount-help" /><p id="amount-help" class="help">Binlik ayırıcı kullanmayın. Ödeme burada alınmaz.</p></div>

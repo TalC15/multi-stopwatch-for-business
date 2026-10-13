@@ -61,7 +61,7 @@ export function createManagementApi({ request, baseUrl, context, uuid = () => cr
     if (!validId(result[field])) throw salesError('SALES_UNAVAILABLE');
     const identifier = id(result[field]);
     if ((target && identifier !== target) ||
-        (action === 'revoke' ? result.disabled !== true : action !== 'cancel' && result.loginReady !== false) ||
+        (action === 'revoke' ? result.disabled !== true : action === 'renew' ? typeof result.loginReady !== 'boolean' : action !== 'cancel' && result.loginReady !== false) ||
         (!sale && action !== 'revoke' && result.mustChangePassword !== true)) throw salesError('SALES_UNAVAILABLE');
     if (sale) {
       const subscription = subscriptionResult(result.subscription);

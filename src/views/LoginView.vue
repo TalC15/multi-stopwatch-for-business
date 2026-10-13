@@ -101,6 +101,7 @@
       </div>
 
       <RouterLink to="/" class="inline-flex items-center justify-center rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2.5 text-center text-xs font-semibold text-indigo-600 transition hover:border-indigo-500/25 hover:bg-indigo-500/5 active:scale-[0.99] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 dark:text-indigo-300">Giriş yapmadan kullan</RouterLink>
+      <RouterLink to="/password-login" class="min-h-11 text-center text-sm font-semibold text-indigo-600 dark:text-indigo-300 focus-visible:outline-2 focus-visible:outline-indigo-500">Bireysel / yönetim e-posta ile giriş</RouterLink>
       <!-- Form -->
       <div class="flex flex-col gap-4">
         <div class="flex flex-col gap-1.5">

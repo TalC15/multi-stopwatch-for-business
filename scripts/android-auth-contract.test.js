@@ -17,6 +17,26 @@ test('native credential directory is excluded from both Android backup formats a
   }
 })
 
+test('real Kotlin password bridge matches JS fields, fixed endpoint and worker-only secure-store installation',async()=>{
+ const plugin=await read('android/app/src/main/java/com/keeptime/app/auth/KeepTimerAuthPlugin.kt');
+ const http=await read('android/app/src/main/java/com/keeptime/app/auth/NativeAuthHttp.kt');
+ const engine=await read('android/app/src/main/java/com/keeptime/app/auth/AuthEngine.kt');
+ const store=await read('android/app/src/main/java/com/keeptime/app/auth/KeystoreCredentialStore.kt');
+ const js=await read('src/services/keepTimerAuth.js');
+ assert.match(plugin,/@PluginMethod fun passwordLogin\(call: PluginCall\)/);
+ assert.match(plugin,/setOf\("email", "password"\)/);assert.match(plugin,/call.data.remove\("password"\)/);
+ assert.match(plugin,/engine.passwordLogin\(email!!, password!!\)/);
+ assert.match(js,/native.passwordLogin\(\{ email, password \}\)/);
+ assert.match(http,/post\("passwordLogin", JSONObject\(\).put\("email", email\).put\("password", password\)\)/);
+ assert.match(engine,/@Synchronized fun passwordLogin/);assert.match(engine,/install\(setOf\("worker"\)\) \{ api.passwordLogin/);
+ assert.ok(engine.indexOf('reply.user.role !in allowedRoles')<engine.indexOf('store.replace(previous, reply.credential)'));
+ assert.match(engine,/failure.status == 401 && !failure.indeterminate\) store.clear/);
+ assert.match(store,/AndroidKeyStore/);assert.match(store,/AES\/GCM\/NoPadding/);assert.match(store,/AtomicFile/);
+ assert.doesNotMatch(store,/password|pin/);
+ const publicReply=plugin.slice(plugin.indexOf('internal object PublicAuthReply'),plugin.indexOf('// Survives Activity'));
+ assert.doesNotMatch(publicReply,/refreshToken|password|pin/);
+})
+
 test('native registration keeps fixed transport, no global HTTP/cookies, and disables bridge argument logs', async () => {
   for (const path of ['capacitor.config.json', 'android/app/src/main/assets/capacitor.config.json']) {
     const config = JSON.parse(await read(path))
@@ -30,7 +50,7 @@ test('native registration keeps fixed transport, no global HTTP/cookies, and dis
   assert.ok(activity.indexOf('registerPlugin(KeepTimerAuthPlugin.class)') < activity.indexOf('super.onCreate'))
   const plugin = await read('android/app/src/main/java/com/keeptime/app/auth/KeepTimerAuthPlugin.kt')
   assert.deepEqual([...plugin.matchAll(/@PluginMethod fun (\w+)/g)].map(match => match[1]).sort(),
-    ['getSessionState', 'login', 'logout', 'refresh'])
+    ['getSessionState', 'login', 'logout', 'passwordLogin', 'refresh'])
   assert.match(plugin, /ThreadPoolExecutor\(1, 1/)
   const http = await read('android/app/src/main/java/com/keeptime/app/auth/NativeAuthHttp.kt')
   assert.match(http, /private const val BACKEND = "https:\/\/[^"/]+"/)

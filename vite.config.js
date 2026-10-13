@@ -13,7 +13,7 @@ export default defineConfig({
       workbox: {
         // App navigation must reopen offline; asset/API requests are unaffected.
         navigateFallback: "/index.html",
-        navigateFallbackDenylist: [/^\/api\/auth(?:\/|$)/],
+        navigateFallbackDenylist: [/^\/api\/auth(?:\/|$)/, /^\/account\/(?:activate|reset|security)(?:\/|$)/, /^\/password-login(?:\/|$)/],
         importScripts: ['/notification-events.js'],
         globPatterns: ['**/*.{js,css,html,ico,png,svg,mp3,woff2}'],
         // Alarm sounds are precached too, so the first offline alarm can play.

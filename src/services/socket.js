@@ -205,7 +205,7 @@ function scheduleTransientSocketRetry(
 }
 
 export async function connectSocket() {
-  if (getUser()?.role === 'agent') { disconnectSocket(); return null; }
+  if (['agent','superadmin'].includes(getUser()?.role)) { disconnectSocket(); return null; }
   const identity = getTabSessionIdentity();
   if (!isTabSessionCurrent()) { disconnectSocket(); return null; }
   connectionWanted = true;
@@ -217,7 +217,7 @@ export async function connectSocket() {
 }
 
 function connectAuthenticatedSocket() {
-  if (getUser()?.role === 'agent') { disconnectSocket(); return null; }
+  if (['agent','superadmin'].includes(getUser()?.role)) { disconnectSocket(); return null; }
   const tabSessionIdentity = getTabSessionIdentity();
 
   if (!isTabSessionCurrent() || !tabSessionIdentity) {
