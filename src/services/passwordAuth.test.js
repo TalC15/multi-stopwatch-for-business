@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import {captureAuthLink} from './authLink.js';
 import {browser,user,sid,sidB,access,response,loggedIn,deferred,settle} from './testSupport/authHarness.js';
 const challengeId='00000000-0000-4000-8000-000000000099',context='a'.repeat(43);
-const pending=()=>response(200,{mfaRequired:true,challengeId,context,retryAfter:60,expiresIn:600});
+const mfaState=()=>({phase:'challenge',serverNow:new Date().toISOString(),expiresAt:new Date(Date.now()+120000).toISOString(),resendAvailableAt:new Date(Date.now()+60000).toISOString(),sendLimitAvailableAt:null,lockedUntil:null,riskUntil:null,attemptsRemaining:6,delivery:'accepted',challengeId,context});
+const pending=()=>response(200,{mfaRequired:true,...mfaState()});
 test('activation fragment immediately cleared, duplicate/invalid tokens fail and wrong route never accepts',()=>{
  let path;const history={state:{},replaceState:(_s,_title,value)=>{path=value;}};
  const location={pathname:'/account/activate',hash:`#id=${challengeId}&token=${context}`,search:''};
@@ -40,7 +41,7 @@ test('delayed MFA response after remote account switch is rejected; no identity 
  assert.equal((await checking).stale,true);assert.equal(other.auth.getAccessToken(),access(sidB));
 });
 test('MFA malformed first-factor token-bearing response is never treated as pending/success',async()=>{
- const b=browser(),tab=b.tab();tab.setFetch(()=>response(200,{mfaRequired:true,challengeId,context,retryAfter:60,expiresIn:600,accessToken:'forged'}));
+ const b=browser(),tab=b.tab();tab.setFetch(()=>response(200,{mfaRequired:true,...mfaState(),accessToken:'forged'}));
  const first=await tab.auth.passwordLogin('admin@example.test','test-only-password');assert.equal(first.success,false);assert.equal(first.mfaRequired,undefined);assert.equal(b.writes.length,0);
 });
 test('Android password uses fixed native bridge and never HTTP/JS refresh persistence or privileged MFA fallback',async()=>{
@@ -70,4 +71,42 @@ test('delayed resend after remote account switch cannot update B; current resend
  const sending=a.auth.resendPasswordMfa(challengeId,context);await settle();other.setFetch(()=>loggedIn(sidB));await other.auth.login('b','fixture-pin');
  gate.resolve(response(200,{accepted:true,retryAfter:60}));assert.equal((await sending).stale,true);
  assert.equal(other.auth.getAccessToken(),access(sidB));assert.equal(a.auth.getAccessToken(),null);
+});
+test('reload resumes server MFA without storage secrets; unknown resend retry retains operation through status sync',async()=>{
+ const b=browser(),tab=b.tab();let state=mfaState();
+ tab.setFetch(()=>response(200,{state}));
+ assert.equal((await tab.auth.syncPasswordMfa()).state.challengeId,challengeId);
+ const operations=[];let lose=true;
+ tab.setFetch((url,options)=>{
+  if(url.endsWith('/status'))return response(200,{state});
+  operations.push(JSON.parse(options.body).operationId);
+  if(lose){lose=false;throw Error('response lost');}
+  return response(200,{accepted:true,...state});
+ });
+ assert.equal((await tab.auth.resendPasswordMfa(challengeId,context)).ok,false);
+ await tab.auth.syncPasswordMfa();
+ assert.equal((await tab.auth.resendPasswordMfa(challengeId,context)).ok,true);
+ assert.equal(operations[0],operations[1]);assert.equal(b.writes.length,0);
+ state={...state,phase:'locked',attemptsRemaining:0,lockedUntil:new Date(Date.now()+600000).toISOString()};
+ await tab.auth.syncPasswordMfa();assert.equal(tab.auth.isPendingPasswordMfa(challengeId,context),false);
+});
+test('late status JSON and network failure after account switch cannot import A MFA state',async()=>{
+ for(const reject of [false,true]){
+  const b=browser(),a=b.tab(),other=b.tab(),gate=deferred(),entered=deferred();
+  a.context.navigator.locks=undefined;other.context.navigator.locks=undefined;
+  a.setFetch(()=>({ok:true,status:200,json:()=>{entered.resolve();return gate.promise;}}));
+  const syncing=a.auth.syncPasswordMfa();await entered.promise;
+  other.setFetch(()=>loggedIn(sidB));await other.auth.login('B','fixture-pin');
+  if(reject)gate.reject(Error('lost'));else gate.resolve({state:mfaState()});
+  const result=await syncing;assert.equal(result.stale,true);assert.equal(result.state,undefined);
+  assert.equal(a.auth.isPendingPasswordMfa(challengeId,context),false);
+ }
+});
+test('truncated verify JSON remains indeterminate and retry retains its operation UUID',async()=>{
+ const tab=browser().tab(),operations=[];tab.setFetch(()=>pending());
+ await tab.auth.passwordLogin('admin@example.test','synthetic-password-only');
+ tab.setFetch((_url,options)=>{operations.push(JSON.parse(options.body).operationId);return {ok:false,status:401,json:async()=>{throw Error('body lost');}};});
+ const first=await tab.auth.completePasswordMfa(challengeId,context,'11111111');
+ assert.equal(first.indeterminate,true);assert.equal(first.success,false);
+ await tab.auth.completePasswordMfa(challengeId,context,'11111111');assert.equal(operations[0],operations[1]);
 });

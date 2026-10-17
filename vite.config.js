@@ -20,9 +20,9 @@ export default defineConfig({
         runtimeCaching: [],
       },
       manifest: {
-        name: 'KeepTime',
-        short_name: 'KeepTime',
-        description: 'Ticari zamanlayıcı uygulaması',
+        name: 'KeepTimer',
+        short_name: 'KeepTimer',
+        description: 'Zaman yönetim uygulaması',
         theme_color: '#ffffff',
         start_url: '/',
         scope: '/',

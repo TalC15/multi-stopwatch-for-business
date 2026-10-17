@@ -15,6 +15,7 @@ import {
 } from "../services/testSupport/authHarness.js";
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   compiled = new URL("../../.phase7-password-ui.mjs", import.meta.url);
+const mfaFixture=(extra={})=>({phase:'challenge',serverNow:new Date().toISOString(),expiresAt:new Date(Date.now()+120000).toISOString(),resendAvailableAt:new Date(Date.now()).toISOString(),sendLimitAvailableAt:null,lockedUntil:null,riskUntil:null,attemptsRemaining:6,delivery:'accepted',challengeId:'fixture',context:'fixture-context',...extra});
 let View;
 const walk = (n) => [n, ...(n.children || []).flatMap(walk)],
   text = (n) => (n.text || "") + (n.children || []).map(text).join("");
@@ -85,6 +86,7 @@ function fixture(kind = "login", initialLink = null, tab = null) {
     login: async () => ({ success: false, error: "Bilgiler doğrulanamadı." }),
     verify: async () => ({ success: false, error: "Kod doğrulanamadı." }),
     request: async () => ({ ok: false, error: "İşlem kapalı." }),
+    sync: async () => ({ok:true,state:null}),
     link: initialLink,
     sockets: 0,
     generation: 0,
@@ -136,6 +138,7 @@ before(async () => {
     auth: `const f=()=>globalThis.__passwordUi;export const passwordLogin=async(...args)=>{f().calls.push(args);return f().login(...args)};
     export const completePasswordMfa=async(...args)=>{f().calls.push(args);return f().verify(...args)};
     export const isPendingPasswordMfa=()=>f().pendingValid!==false;
+    export const syncPasswordMfa=()=>f().sync();export const abandonPasswordMfa=()=>{};
     export const resendPasswordMfa=async(...args)=>{f().calls.push(['mfa/resend',...args]);return f().request('mfa/resend',...args)};
     export const getUser=()=>({role:'worker'});
     export const getAuthGeneration=()=>f().auth?.getAuthGeneration() ?? f().generation;
@@ -239,7 +242,7 @@ test("real OTP UI never navigates before verification, resend disabled and chall
       mfaRequired: true,
       challengeId: "private-challenge",
       context: "private-context",
-      retryAfter: 60,
+      state:mfaFixture({resendAvailableAt:new Date(Date.now()+60000).toISOString()}),
     });
     await f.input("auth-email", "admin@example.test");
     await f.input("auth-password", "test-only-password");
@@ -252,7 +255,7 @@ test("real OTP UI never navigates before verification, resend disabled and chall
     assert.equal(otp.props.inputmode, "numeric");
     assert.ok(otp.focused);
     const resend = walk(f.tree).find(
-      (n) => n.tag === "button" && text(n).includes("saniye sonra yeniden"),
+      (n) => n.tag === "button" && text(n).includes("sonra yeniden iste"),
     );
     assert.ok(resend.props.disabled);
     await f.input("auth-code", "12345678");
@@ -302,7 +305,7 @@ test("SOL4 UI: account/session change removes A pending form before resend", asy
       mfaRequired: true,
       challengeId: "A",
       context: "A-context",
-      retryAfter: 0,
+      state:mfaFixture(),
     });
     await f.input("auth-email", "a@example.test");
     await f.input("auth-password", "synthetic-password");
@@ -332,7 +335,7 @@ test("SOL4 UI: late resend A cannot write notice into a newer reset screen", asy
       mfaRequired: true,
       challengeId: "A",
       context: "A-context",
-      retryAfter: 0,
+      state:mfaFixture(),
     });
     await f.input("auth-email", "a@example.test");
     await f.input("auth-password", "synthetic-password");
@@ -368,7 +371,7 @@ test("SOL4 UI: late MFA completion cannot navigate a newer screen", async () => 
       mfaRequired: true,
       challengeId: "A",
       context: "A-context",
-      retryAfter: 0,
+      state:mfaFixture(),
     });
     await f.input("auth-email", "a@example.test");
     await f.input("auth-password", "synthetic-password");
@@ -453,7 +456,7 @@ test("activation form focuses new password, rejects mismatch and renders safe re
             mfaRequired: true,
             challengeId: "fixture",
             context: "not-in-html",
-            retryAfter: 60,
+            state:mfaFixture({resendAvailableAt:new Date(Date.now()+60000).toISOString()}),
           });
           await view.input(
             "auth-email",
@@ -474,6 +477,34 @@ const sessionButton = (f) =>
   walk(f.tree).find(
     (n) => n.tag === "button" && text(n) === "Oturumları görüntüle",
   );
+test('MFA UI resumes on online, preserves device lock when returning, and unlocks only from server status',async()=>{
+ const f=fixture();try{
+  await tick();let state=mfaFixture();f.sync=async()=>({ok:true,state});
+  f.events.dispatchEvent(new Event('online'));await tick();assert.ok(text(f.tree).includes('Kalan deneme hakkı: 6'));
+  f.verify=async()=>({success:false,state:mfaFixture({attemptsRemaining:5}),error:'Kod hatalı.'});
+  await f.input('auth-code','11111111');await f.submit();assert.ok(text(f.tree).includes('Kalan deneme hakkı: 5'));
+  state=mfaFixture({phase:'locked',attemptsRemaining:0,lockedUntil:new Date(Date.now()+600000).toISOString()});
+  f.verify=async()=>({success:false,state,error:'Bu cihazdaki giriş durduruldu.'});
+  await f.input('auth-code','22222222');await f.submit();
+  assert.ok(text(f.tree).includes('Doğrulama kodu 6 kez hatalı girildi'));assert.ok(text(f.tree).includes('10:00'));
+  walk(f.tree).find(n=>n.tag==='button'&&text(n)==='Giriş ekranına dön').props.onClick();await tick();
+  assert.ok(text(f.tree).includes('kalan bekleme'));assert.equal(walk(f.tree).find(n=>n.props?.id==='auth-password').props.disabled,true);
+  state=mfaFixture({phase:'consumed',lockedUntil:null,attemptsRemaining:6});f.events.dispatchEvent(new Event('pageshow'));await tick();
+  assert.equal(walk(f.tree).find(n=>n.props?.id==='auth-password').props.disabled,false);
+ }finally{f.app.unmount();}
+});
+test('MFA UI quota preserves OTP verification, unknown delivery disables it, expiry offers fresh login',async()=>{
+ const f=fixture();try{
+  await tick();let state=mfaFixture({sendLimitAvailableAt:new Date(Date.now()+800000).toISOString()});f.sync=async()=>({ok:true,state});
+  const sync=async()=>{f.events.dispatchEvent(new Event('online'));await tick();};await sync();
+  assert.equal(walk(f.tree).find(n=>n.tag==='button'&&text(n)==='Kodu doğrula').props.disabled,false);
+  assert.ok(text(f.tree).includes('Üç gönderim hakkı kullanıldı'));
+  state={...state,delivery:'unknown'};await sync();assert.equal(walk(f.tree).find(n=>n.tag==='button'&&text(n)==='Kodu doğrula').props.disabled,true);
+  assert.ok(text(f.tree).includes('Giriş yetkisi verilmedi'));
+  state={...state,phase:'expired',expiresAt:new Date(Date.now()-1000).toISOString(),sendLimitAvailableAt:null};await sync();
+  assert.ok(text(f.tree).includes('Kodun süresi doldu'));assert.ok(walk(f.tree).find(n=>n.props?.id==='auth-password'));
+ }finally{f.app.unmount();}
+});
 test("P2 JSON: actual service and view reject A session metadata when B arrives during body parsing", async () => {
   const b = browser(),
     tab = b.tab();
@@ -561,4 +592,71 @@ test("P2 view: account change suppresses an old revoke success on the same scree
   } finally {
     f.app.unmount();
   }
+});
+
+for (const entry of ['login', 'resend']) {
+  for (const delivery of ['accepted', 'pending', 'unknown', 'rejected']) {
+    test(`R3 delivery notice: ${entry} distinguishes ${delivery} using server state`, async () => {
+      const f = fixture();
+      try {
+        await tick();
+        const state = mfaFixture({ delivery, resendAvailableAt: new Date(Date.now() + 60000).toISOString() });
+        f.login = async () => ({ mfaRequired: true, state: entry === 'login' ? state : mfaFixture() });
+        await f.input('auth-email', 'admin@example.test');
+        await f.input('auth-password', 'synthetic-password');
+        await f.submit();
+        if (entry === 'resend') {
+          f.request = async () => ({ ok: true, data: { accepted: delivery === 'accepted' }, state });
+          await walk(f.tree).find(n => n.tag === 'button' && text(n) === 'Kodu yeniden iste').props.onClick();
+          await tick();
+        }
+        const notice = text(walk(f.tree).find(n => n.props?.role === 'status'));
+        if (delivery === 'accepted') {
+          assert.match(notice, /kabul edildi/);
+          assert.doesNotMatch(notice, /reddetti|bilinmiyor|henüz doğrulanmadı/);
+        } else if (delivery === 'rejected') {
+          assert.match(notice, /reddetti/);
+          assert.match(notice, /Sunucu izin verdiğinde/);
+          assert.match(notice, /Kodu yeniden iste/);
+          assert.doesNotMatch(notice, /bilinmiyor|henüz doğrulanmadı|istemeniz gerekmez/);
+        } else {
+          assert.match(notice, /kontrol edin/);
+          assert.doesNotMatch(notice, /kabul edildi|reddetti/);
+        }
+        assert.equal(walk(f.tree).find(n => n.tag === 'button' && text(n) === 'Kodu doğrula').props.disabled, delivery !== 'accepted');
+        assert.equal(walk(f.tree).find(n => n.tag === 'button' && text(n).includes('sonra yeniden iste')).props.disabled, true);
+        assert.equal(f.navigation.length, 0);
+        assert.equal(f.sockets, 0);
+        if (delivery === 'rejected') {
+          // Only a later server state permits a new send; the notice does not bypass cooldown.
+          f.sync = async () => ({ ok: true, state: mfaFixture({ delivery }) });
+          f.events.dispatchEvent(new Event('online'));
+          await tick();
+          assert.equal(walk(f.tree).find(n => n.tag === 'button' && text(n) === 'Kodu yeniden iste').props.disabled, false);
+          assert.equal(f.calls.filter(c => c[0] === 'mfa/resend').length, entry === 'resend' ? 1 : 0);
+        }
+      } finally { f.app.unmount(); }
+    });
+  }
+}
+test('R3 status replaces an unknown delivery notice with definitive rejection guidance without resending', async () => {
+  const f = fixture();
+  try {
+    await tick();
+    f.login = async () => ({ mfaRequired: true, state: mfaFixture({ delivery: 'unknown' }) });
+    await f.input('auth-email', 'admin@example.test');
+    await f.input('auth-password', 'synthetic-password');
+    await f.submit();
+    f.sync = async () => ({ ok: true, state: mfaFixture({ delivery: 'rejected' }) });
+    for (let i = 0; i < 2; i++) {
+      await walk(f.tree).find(n => n.tag === 'button' && text(n) === 'Durumu tekrar kontrol et').props.onClick();
+      await tick();
+      const notice = text(walk(f.tree).find(n => n.props?.role === 'status'));
+      assert.match(notice, /reddetti/);
+      assert.match(notice, /Kodu yeniden iste/);
+      assert.doesNotMatch(notice, /bilinmiyor|henüz doğrulanmadı|istemeniz gerekmez/);
+    }
+    assert.equal(f.calls.filter(c => c[0] === 'mfa/resend').length, 0);
+    assert.equal(f.navigation.length, 0);
+  } finally { f.app.unmount(); }
 });
