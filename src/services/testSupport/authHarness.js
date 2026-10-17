@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
+import {webcrypto} from "node:crypto";
+import {readMfaState} from "../mfaState.js";
 import { entitlementCodes } from "../../domain/accountExperience.js";
 
 const authSource = readFileSync(
   new URL("../backendSync.js", import.meta.url),
   "utf8",
 )
+  .replace("import {readMfaState} from './mfaState.js';", "const {readMfaState}=globalThis.authTransport;")
   .replace(
     /^import\s*\{\s*entitlementCodes\s*\}\s*from\s*["']\.\.\/domain\/accountExperience\.js["'];?\s*$/m,
     "const { entitlementCodes } = globalThis.authTransport;",
@@ -129,7 +132,7 @@ export function browser({ locks = true, initial = {} } = {}) {
     });
     const context = vm.createContext({
       authTransport: {
-        entitlementCodes,
+        entitlementCodes,readMfaState,
         KeepTimerAuth: native,
         isAndroidAuthPlatform: () => platform === "android",
       },
@@ -141,7 +144,7 @@ export function browser({ locks = true, initial = {} } = {}) {
       fetch: () => {
         throw Error("Unexpected network request");
       },
-      console,
+      console,crypto:webcrypto,
       Headers,
       Response,
       AbortController,

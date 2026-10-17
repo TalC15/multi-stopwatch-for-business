@@ -1,3 +1,4 @@
+import {readMfaState} from './mfaState.js';
 import { entitlementCodes } from "../domain/accountExperience.js";
 import { KeepTimerAuth, isAndroidAuthPlatform } from "./keepTimerAuth.js";
 
@@ -352,13 +353,15 @@ async function authRequest(path, body, timeoutMs = 0) {
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    let data = null;
+    let data = null, indeterminate = false;
     try {
       data = await response.json();
     } catch {
-      /* HTTP status remains authoritative. */
+      // MFA may already have changed persistent state. A truncated/aborted
+      // JSON body is not a confirmed result; preserve its operation identity.
+      indeterminate = path === 'password-login' || path.startsWith('mfa/');
     }
-    return { response, data };
+    return { response, data, ...(indeterminate ? {indeterminate:true} : {}) };
   } finally {
     if (timeout) clearTimeout(timeout);
   }
@@ -527,7 +530,7 @@ let pendingPasswordAuth = null;
 export const login = (username, pin) =>
   installLogin("login", { username, pin });
 export const passwordLogin = (email, password) =>
-  installLogin("password-login", { email, password });
+  installLogin("password-login", { email, password, ...(isAndroidAuthPlatform()?{}:{operationId:crypto.randomUUID()}) });
 export function isPendingPasswordMfa(challengeId, context) {
   const p = pendingPasswordAuth;
   return (
@@ -537,6 +540,28 @@ export function isPendingPasswordMfa(challengeId, context) {
     isSameAuthSession(p.generation, p.marker)
   );
 }
+export async function syncPasswordMfa(){
+ if(isAndroidAuthPlatform())return {ok:false};
+ if(globalThis.navigator?.onLine===false)return {ok:false,code:'NETWORK_OR_SERVER_ERROR',error:'İnternet bağlantınızı kontrol edin.'};
+ const generation=authGeneration,marker=getSessionMarker();
+ return withAuthMutationLock(async()=>{
+  if(!isSameAuthSession(generation,marker))return {ok:false,stale:true};
+  try{
+   const {response,data}=await authRequest('mfa/status',{},15000);
+   if(!isSameAuthSession(generation,marker))return {ok:false,stale:true};
+   if(response.ok && data?.phase==='idle'){pendingPasswordAuth=null;return {ok:true,state:null};}
+   const state=readMfaState(data?.state);
+   if(state){
+    pendingPasswordAuth=state.phase==='challenge'?
+      (isPendingPasswordMfa(state.challengeId,state.context)?pendingPasswordAuth:{generation,marker,challengeId:state.challengeId,context:state.context}):null;
+    return {ok:response.ok,state,code:data?.code,error:data?.error};
+   }
+   if(data?.code==='MFA_CHALLENGE_INVALID'){pendingPasswordAuth=null;return {ok:false,state:null,code:data.code,error:data.error};}
+   return {ok:false,code:data?.code || 'NETWORK_OR_SERVER_ERROR',error:data?.error || 'Doğrulama durumu alınamadı. Yeniden deneyin.'};
+  }catch{return isSameAuthSession(generation,marker)?{ok:false,code:'NETWORK_OR_SERVER_ERROR',error:'Sonuç bilinmiyor. İnternet bağlantınızı kontrol edip durumu tekrar sorgulayın.'}:{ok:false,stale:true};}
+ });
+}
+export function abandonPasswordMfa(){pendingPasswordAuth=null;}
 export async function resendPasswordMfa(challengeId, context) {
   const pending = pendingPasswordAuth;
   const current = () =>
@@ -551,23 +576,19 @@ export async function resendPasswordMfa(challengeId, context) {
   return withAuthMutationLock(async () => {
     if (!current()) return stale();
     try {
+      pending.resendOperation ??= crypto.randomUUID();
       const { response, data } = await authRequest("mfa/resend", {
-        challengeId,
-        context,
-      });
+        challengeId, context, operationId:pending.resendOperation,
+      },15000);
       if (!current()) return stale();
-      if (!response.ok)
-        return {
-          ok: false,
-          status: response.status,
-          error: data?.error || "Kod yeniden gönderilemedi.",
-        };
-      if (data?.accepted !== true || data.retryAfter !== 60)
-        return { ok: false, error: "Gönderim sonucu doğrulanamadı." };
-      return { ok: true, data: { accepted: true, retryAfter: 60 } };
+      const state=readMfaState(data);
+      if (!response.ok)return {ok:false,status:response.status,code:data?.code,state:readMfaState(data?.state),error:data?.error || 'Kod yeniden gönderilemedi.'};
+      if(!state)return {ok:false,code:'NETWORK_OR_SERVER_ERROR',error:'Gönderim sonucu bilinmiyor. Durumu tekrar kontrol edin.'};
+      delete pending.resendOperation;
+      return {ok:true,data:{...state,accepted:state.delivery==='accepted'},state};
     } catch {
       return current()
-        ? { ok: false, error: "Kod yeniden gönderilemedi." }
+        ? { ok: false, code:'NETWORK_OR_SERVER_ERROR', error: "Sonuç bilinmiyor. İnternet bağlantınızı kontrol edip durumu tekrar sorgulayın." }
         : stale();
     }
   });
@@ -587,7 +608,9 @@ export async function completePasswordMfa(challengeId, context, code) {
       error: "Oturum değişti. Yeniden giriş başlatın.",
     };
   }
-  return installLogin("mfa/verify", { challengeId, context, code }, pending);
+  if(pending.verifyCode!==code){pending.verifyOperation=crypto.randomUUID();pending.verifyCode=code;}
+  pending.verifyOperation ??= crypto.randomUUID();
+  return installLogin("mfa/verify", { challengeId, context, code,operationId:pending.verifyOperation }, pending);
 }
 async function installLogin(path, body, pending = null) {
   if (globalThis.navigator?.onLine === false) {
@@ -613,46 +636,25 @@ async function installLogin(path, body, pending = null) {
       marker = getSessionMarker();
     let installingSession = false;
     try {
-      const { response, data, indeterminate } = await authRequest(path, body);
+      const { response, data, indeterminate } = await authRequest(path, body, path==='password-login' || path==='mfa/verify'?15000:0);
       if (!isSameAuthSession(generation, marker))
         return {
           success: false,
           stale: true,
           error: "Oturum değişti; giriş sonucu uygulanmadı.",
         };
-      if (!response.ok)
-        return {
-          success: false,
-          status: response.status,
-          ...(indeterminate ? { indeterminate: true } : {}),
-          error: data?.error || "Giriş yapılamadı.",
-        };
-      if (
-        path === "password-login" &&
-        !isAndroidAuthPlatform() &&
-        data?.mfaRequired === true &&
-        nativeUuid(data.challengeId) &&
-        /^[A-Za-z0-9_-]{43}$/.test(data.context || "") &&
-        data.retryAfter === 60 &&
-        data.expiresIn === 600 &&
-        !data.accessToken &&
-        !data.refreshToken &&
-        !data.sessionId &&
-        !data.user
-      ) {
-        pendingPasswordAuth = {
-          generation,
-          marker,
-          challengeId: data.challengeId,
-          context: data.context,
-        };
-        return {
-          success: false,
-          mfaRequired: true,
-          challengeId: data.challengeId,
-          context: data.context,
-          retryAfter: 60,
-        };
+      if(indeterminate && !isAndroidAuthPlatform())return {success:false,indeterminate:true,code:'NETWORK_OR_SERVER_ERROR',
+        error:'İşlem sonucu bilinmiyor. İnternet bağlantınızı kontrol edip durumu tekrar sorgulayın.'};
+      if (!response.ok){
+        if(pending && !indeterminate){delete pending.verifyOperation;delete pending.verifyCode;}
+        return {success:false,status:response.status,code:data?.code,state:readMfaState(data?.state),
+          ...(indeterminate?{indeterminate:true}:{}),error:data?.error || 'Giriş yapılamadı.'};
+      }
+      const mfaState=readMfaState(data);
+      if(path==='password-login' && !isAndroidAuthPlatform() && data?.mfaRequired===true && mfaState &&
+          !data.accessToken && !data.refreshToken && !data.sessionId && !data.user){
+        pendingPasswordAuth=mfaState.phase==='challenge'?{generation,marker,challengeId:mfaState.challengeId,context:mfaState.context}:null;
+        return {success:false,mfaRequired:true,...mfaState,state:mfaState};
       }
       if (data?.mfaRequired !== undefined)
         return {
@@ -689,6 +691,7 @@ async function installLogin(path, body, pending = null) {
       emit(AUTH_SESSION_CHANGED_EVENT);
       return { success: true, user: data.user };
     } catch {
+      if(!installingSession && !isSameAuthSession(generation,marker))return {success:false,stale:true};
       if (
         isAndroidAuthPlatform() &&
         (installingSession || isSameAuthSession(generation, marker))
