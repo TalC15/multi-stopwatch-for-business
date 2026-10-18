@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, watch } from "vue";
+import { ref, computed, onMounted, watch } from "vue";
 import { accountExperience } from '../services/accountExperience.js';
 import AccountStatusCard from '../components/AccountStatusCard.vue';
 import { RouterLink } from "vue-router";
@@ -29,9 +29,7 @@ const sortDirection = ref(TIMER_SORT.NEAREST);
 const standaloneCount = computed(() => store.stopwatches.filter(t => t.dataMode === 'standalone').length);
 const individual = computed(() => accountExperience.currentData.value?.account.kind === 'individual');
 watch(individual, value => { if (value && activeTab.value === 'shared') activeTab.value = 'up'; });
-let verificationTimer;
-onUnmounted(() => clearInterval(verificationTimer));
-async function refreshAccount() { await accountExperience.refresh(); await store.retrySync(); }
+async function refreshAccount() { await store.retrySync(); }
 function changeSort(value) {
   sortDirection.value = normalizeTimerSort(value);
 }
@@ -67,47 +65,6 @@ const noticeStyles = {
     "border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200",
 };
 
-//bu fonksiyonun çağrıldığı yerler yorum satırında.İleride yorum satırı açılırsa sharedControls.test.js dosyasındaki 'test("Home hides personal notice and...' bölümünün güncellenmesi gerekir ki test edilebilsin.
-const personalNotice = computed(() => {
-  if (!store.ready)
-    return { tone: "neutral", message: "Sayaçlarınız açılıyor…" };
-  if (store.syncStatus === "unsupported-locks")
-    return {
-      tone: "warning",
-      message:
-        "Kişisel sayaçlarınız bu cihazda kayıtlı. Diğer cihazlarla güncellemek için tarayıcı veya Android System WebView güncellemesi gerekiyor.",
-    };
-  if (store.syncStatus === "backend-update-required")
-    return {
-      tone: "warning",
-      message:
-        "Kişisel sayaçlarınız bu cihazda kayıtlı. Diğer cihazlarla güncelleme şu anda kullanılamıyor.",
-    };
-  if (["auth-required", "forbidden"].includes(store.syncStatus))
-    return {
-      tone: "error",
-      message:
-        "Kişisel sayaçlar için hesabınızı ve şirket erişiminizi kontrol edin. Cihazdaki değişiklikleriniz korunuyor.",
-    };
-  if (store.syncStatus === "conflict")
-    return {
-      tone: "warning",
-      message:
-        "Bazı kişisel sayaçlar güncellenemedi. Cihazdaki değişiklikleriniz korunuyor.",
-    };
-  if (store.syncStatus === "retry")
-    return {
-      tone: "warning",
-      message:
-        "Kişisel sayaçlar için bağlantı bekleniyor. Cihazdaki kayıtlarınız korunuyor.",
-    };
-  if (store.pendingCount)
-    return {
-      tone: "neutral",
-      message: `${store.pendingCount} kişisel değişiklik bu cihazda kayıtlı; diğer cihazlara aktarılmayı bekliyor.`,
-    };
-  return null;
-});
 async function allTimersPause() {
   const results = await Promise.all(
     filteredTimers.value.map((timer) =>
@@ -118,11 +75,6 @@ async function allTimersPause() {
   );
   if (results.every(Boolean)) isPausedAll.value = !isPausedAll.value;
 }
-
-const retryPersonalSync = message.withLoading(
-  "Kişisel sayaçlar eşitleniyor...",
-  () => store.retrySync(),
-);
 
 const reviewPersonalSync = message.withLoading(
   "Sunucu kaydı inceleniyor...",
@@ -140,12 +92,8 @@ const reloadSharedTimers = message.withLoading(
 );
 
 onMounted(() => {
-  void accountExperience.refresh();
-  verificationTimer = setInterval(() => { void accountExperience.refresh(); }, 25000);
   themeStore.applyTheme();
-  void message.withLoading("Sayaçlar yükleniyor...", () =>
-    store.initialize(),
-  )();
+  void store.initialize();
 });
 </script>
 
@@ -163,55 +111,7 @@ onMounted(() => {
 
     <!-- Main Content -->
     <main class="max-w-md mx-auto px-4 pt-6 pb-32">
-      <AccountStatusCard :experience="accountExperience" :count="standaloneCount" :ready="store.ready" :pending-count="store.pendingCount" :sync-status="store.syncStatus" @retry="refreshAccount" />
-      <!--Bu yorum satırına alınan bölüm aynı hesap arası senkronizasyon hakkında bilgi veriyor ve senkronizasyonu yeniden deneme butonu var, UI açısından şuan yorum satırında-->
-      <!--<div
-        v-if="activeTab !== 'shared' && personalNotice"
-        role="status"
-        aria-live="polite"
-        :class="[
-          'mb-3 flex items-start gap-3 rounded-xl border p-3 text-sm leading-5',
-          noticeStyles[personalNotice.tone],
-        ]"
-      >
-      
-        <svg
-          class="h-5 w-5 shrink-0 mt-0.5"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.75"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="9" />
-          <path d="M12 7v6m0 3v1" stroke-linecap="round" />
-        </svg>
-        <p class="min-w-0 break-words">{{ personalNotice.message }}</p>
-      </div>-->
-      <!-- <button
-        v-if="
-          activeTab !== 'shared' &&
-          (store.pendingCount || store.syncStatus === 'retry')
-        "
-        @click="store.retryPersonalSync()"
-        class="mb-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm transition-colors hover:border-slate-300 hover:bg-slate-50 hover:text-slate-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 active:bg-slate-100"
-      >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          class="size-4"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          stroke-width="1.75"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M20 4v6h-6" />
-          <path d="M20 10a8 8 0 1 0-1.5 7" />
-        </svg>
-        Senkronizasyonu yeniden dene
-      </button>-->
+      <AccountStatusCard v-if="activeTab !== 'shared'" :experience="accountExperience" :count="standaloneCount" :ready="store.ready" :pending-count="store.pendingCount" :sync-status="store.syncStatus" @retry="refreshAccount" />
       <ul
         v-if="activeTab !== 'shared' && store.syncIssues?.length"
         class="space-y-3 mb-4 text-sm"

@@ -8,12 +8,15 @@ import { messageState } from "./composables/message.js";
 import { onMounted, onUnmounted } from "vue";
 import { useStopwatchStore } from "./stores/stopwatchStore.js";
 const timers = useStopwatchStore();
+import { accountExperience } from './services/accountExperience.js';
+let stopAccountRenewal;
 import { initializeNotifications } from "./utils/notifications.js";
 let cleanupNotifications;
-onUnmounted(() => cleanupNotifications?.());
+onUnmounted(() => { cleanupNotifications?.(); stopAccountRenewal?.(); accountExperience.dispose(); });
 onMounted(() => {
-  if (getUser()?.role === 'agent') return;
+  stopAccountRenewal = accountExperience.start();
   cleanupNotifications = initializeNotifications();
+  if (['agent', 'superadmin'].includes(getUser()?.role)) return;
   void timers.initialize();
   // Socket bağlantısı
   // Native cold start expresses connection intent; connectSocket still awaits access.

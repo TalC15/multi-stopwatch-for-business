@@ -83,3 +83,23 @@ test('Phase 6: late previous-session denial is ignored by real apiFetch',async()
   tab.setFetch(async()=>loggedIn(sidB));await tab.auth.login('fixture','1234');gate.resolve(response(403,{code:'SUBSCRIPTION_EXPIRED'}));
   assert.equal(await request,null);assert.equal(rejected,0);
 });
+
+test('UX one renewal owner loop coalesces resume events, preserves expiry callback and disposes timers',async()=>{
+ const f=fixture();let requests=0;
+ f.set(()=>{requests++;return response(200,{...active(),subscription:{...active().subscription,endsAt:'2026-10-10T00:00:00Z'}});});
+ await f.policy.refresh();const firstStop=f.policy.start(),secondStop=f.policy.start();
+ assert.equal([...f.tasks.values()].filter(x=>x.ms===25000).length,1);assert.equal(requests,1);
+ const gate=deferred();f.set(()=>{requests++;return gate.promise;});
+ f.events.dispatchEvent(new Event('focus'));f.events.dispatchEvent(new Event('pageshow'));
+ assert.equal(requests,2);assert.equal(f.policy.canFeature('tts'),false);
+ gate.resolve(response(200,active()));await f.policy.ensureFresh();
+ firstStop();assert.equal([...f.tasks.values()].filter(x=>x.ms===25000).length,1);
+ secondStop();assert.equal([...f.tasks.values()].filter(x=>x.ms===25000).length,0);
+ f.policy.dispose();assert.equal(f.tasks.size,0);
+});
+test('UX existing expiry callback still closes authority during a newer pending refresh',async()=>{
+ const f=fixture();await f.policy.refresh();const expire=[...f.tasks.values()][0].fn;
+ const gate=deferred();f.set(()=>gate.promise);const p=f.policy.refresh();f.clock(10);expire();
+ assert.equal(f.policy.canFeature('presets'),false);assert.equal(f.policy.state.status,'stale');
+ gate.resolve(response(200,active()));assert.equal(await p,false);f.policy.dispose();
+});

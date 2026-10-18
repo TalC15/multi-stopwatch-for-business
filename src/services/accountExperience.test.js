@@ -145,3 +145,50 @@ test('Phase7 loginReady is independent of expired entitlement and never opens pa
  assert.deepEqual(result.features,{tts:false,telegram:false,presets:false});
  for(const loginReady of ['true',1,null,undefined])assert.throws(()=>validateExperience({...data(),loginReady},user));
 });
+
+test('UX refresh retains the unexpired decision and display while a response is pending', async () => {
+ const f=fixture();await f.policy.refresh();const before=f.policy.state.data;let finish;
+ f.set(()=>new Promise(resolve=>{finish=resolve;}));const refresh=f.policy.refresh();
+ try {assert.equal(f.policy.canFeature('presets'),true);assert.equal(f.policy.state.data,before);assert.equal(f.policy.state.refreshing,true);}
+ finally {finish(response(data()));await refresh;f.policy.dispose();}
+});
+test('UX repeated valid preset actions reuse proof without another request', async () => {
+ const f=fixture();let requests=0;f.set(()=>{requests++;return response(data());});await f.policy.refresh();
+ for(let i=0;i<5;i++)assert.equal(await f.policy.requireFeature('presets'),true);
+ assert.equal(requests,1);f.policy.dispose();
+});
+test('UX expiry during background refresh closes rights without dropping display', async () => {
+ const f=fixture();await f.policy.refresh();let finish;f.set(()=>new Promise(resolve=>{finish=resolve;}));const p=f.policy.refresh();
+ f.advance(30001);assert.equal(f.policy.canFeature('presets'),false);assert.equal(f.policy.state.data.account.userId,user.id);
+ finish(response(data()));assert.equal(await p,false);f.policy.dispose();
+});
+test('UX explicit denial invalidates a still-live proof, display remains session scoped', async () => {
+ const f=fixture();await f.policy.refresh();f.policy.rejectAuthority();assert.equal(f.policy.canFeature('presets'),false);
+ assert.equal(f.policy.state.data.account.userId,user.id);f.switch({...user,id:id(3),workspace_id:id(4)});
+ assert.equal(f.policy.state.data,null);f.policy.dispose();
+});
+test('UX simultaneous refresh and JSON timeout are bounded without allowing late data', async () => {
+ const f=fixture();let requests=0,finish;f.set(()=>{requests++;return {ok:true,json:()=>new Promise(resolve=>{finish=resolve;})};});
+ const a=f.policy.refresh(),b=f.policy.refresh();
+ const result=await Promise.race([Promise.all([a,b]),new Promise(resolve=>setTimeout(()=>resolve('unbounded'),70))]);
+ finish(data());await Promise.all([a,b]);
+ assert.notEqual(result,'unbounded');assert.equal(requests,1);assert.equal(f.policy.canFeature('presets'),false);f.policy.dispose();
+});
+
+test('UX JSON response for A cannot replace B display after a scope switch', async()=>{
+ const f=fixture();await f.policy.refresh();let finish,entered;
+ const reading=new Promise(r=>entered=r);
+ f.set(()=>({ok:true,json:()=>{entered();return new Promise(r=>finish=r);}}));const p=f.policy.refresh();await reading;
+ f.switch({...user,id:id(3),workspace_id:id(4)});finish(data());assert.equal(await p,false);assert.equal(f.policy.state.data,null);f.policy.dispose();
+});
+test('UX privileged roles do not request timer account resources',async()=>{
+ for(const role of ['agent','superadmin']){
+  const f=fixture();let requests=0;f.set(()=>{requests++;return response(data());});f.switch({...user,role});
+  assert.equal(await f.policy.refresh(),false);assert.equal(requests,0);assert.equal(f.policy.canFeature('presets'),false);f.policy.dispose();
+ }
+});
+test('UX failed action checks back off instead of retrying on each click',async()=>{
+ const f=fixture();let count=0;f.set(()=>{count++;throw Error('offline');});
+ for(let i=0;i<5;i++)assert.equal(await f.policy.requireFeature('presets'),false);
+ assert.equal(count,1);f.advance(5001);await f.policy.requireFeature('presets');assert.equal(count,2);f.policy.dispose();
+});

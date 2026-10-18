@@ -25,7 +25,7 @@ before(async()=>{
       export const telegramControl=id=>f().read(id);`,
     policy:`const p=()=>globalThis.__telegramViewFixture.policy;
       export const accountExperience={get state(){return p().state;},get currentData(){return p().currentData;},
-        canFeature:(...args)=>p().canFeature(...args),canShared:()=>p().canShared(),refresh:()=>p().refresh(),requireFeature:(...args)=>p().requireFeature(...args)};`,
+        canFeature:(...args)=>p().canFeature(...args),canShared:()=>p().canShared(),refresh:()=>p().refresh(),ensureFresh:()=>p().refresh(),requireFeature:(...args)=>p().requireFeature(...args)};`,
     store:'export const useStopwatchStore=()=>({ready:true,stopwatches:[],roleStyles:{worker:{}},presetTimes:[],presetNames:[]});',
     theme:'export const useThemeStore=()=>({theme:"light",toggleTheme(){}});',
     router:'export const useRouter=()=>({push(){}});',
@@ -42,7 +42,7 @@ before(async()=>{
         return key?'\0telegram-fixture:'+key:null;
       },
       load(id){if(id.startsWith('\0telegram-fixture:'))return mocks[id.split(':').at(-1)];},
-      transform(source,id){if(id.endsWith('/'+name+'.vue'))return source.replace('</script>',`globalThis.__telegramViewFixture.capture({saveTelegram,removeTelegram,telegramSavedControl,telegramSaved,chatId});\n</script>`);},
+      transform(source,id){if(id.endsWith('/'+name+'.vue'))return source.replace('</script>',`globalThis.__telegramViewFixture.capture({saveTelegram,removeTelegram,telegramSavedControl,telegramSaved,chatId,telegramError,telegramNotice,telegramConfirmed});\n</script>`);},
     },vue()],build:{write:false,minify:false,lib:{entry:root+'src/views/'+name+'.vue',formats:['es']},rollupOptions:{external:['vue']}}});
     await writeFile(artifact,(Array.isArray(built)?built[0]:built).output.find(x=>x.type==='chunk').code);
     views[name]=(await import(artifact.href)).default;
@@ -51,7 +51,7 @@ before(async()=>{
 after(async()=>{await Promise.all(compiled.map(p=>unlink(p).catch(()=>{})));delete globalThis.__telegramViewFixture;delete globalThis.localStorage;});
 
 async function fixture(name,mode='active'){
-  const state=reactive({status:'verified',mode,userId:own});
+  const state=reactive({status:'verified',scopeVersion:0,mode,userId:own});
   const f={user:{id:own,workspace_id:other,role:'worker',username:'Synthetic'},generation:1,authenticated:true,calls:[],removed:0,messages:[],storage:new Map(),writes:[],
     policy:{state,currentData:computed(()=>({account:{kind:state.mode==='company'?'company':'individual',userId:state.userId},personal:{readable:true}})),
       canFeature:()=>state.status==='verified'&&['active','company'].includes(state.mode),
@@ -67,7 +67,7 @@ async function fixture(name,mode='active'){
   const component={setup(){render??=views[name].setup({}, {expose(){}});return render;}};
   f.html=()=>renderToString(createSSRApp(component));
   await f.html();
-  f.switch=()=>{f.generation++;f.user={...f.user,id:other};state.userId=other;};
+  f.switch=()=>{f.generation++;f.user={...f.user,id:other};state.userId=other;state.scopeVersion++;};
   return f;
 }
 
@@ -84,12 +84,12 @@ for(const name of ['ProfileView','SettingsView']){
     assert.match(html,/Bağlantıyı kes/);assert.doesNotMatch(html,/Chat ID \(örn:/);
     await f.bindings.removeTelegram();assert.equal(f.bindings.telegramSaved.value,false);
     f.bindings.chatId.value='5678';await f.bindings.saveTelegram();assert.equal(f.policy.canFeature('telegram'),false);
-    assert.deepEqual(f.calls,[['read',own],['remove',own]]);assert.doesNotMatch(await f.html(),/Chat ID \(örn:|Bağlantıyı kes/);
+    assert.deepEqual(f.calls,[['read',own],['remove',own]]);assert.doesNotMatch(await f.html(),/Bağlantıyı kes/);assert.match(await f.html(),/disabled/);
   });
-  test(name+': malformed connection state cannot masquerade as linked or open the bind form',async()=>{
+  test(name+': malformed connection state cannot masquerade as linked; stable form stays disabled',async()=>{
     const f=await fixture(name);f.read=async()=>({success:true,connected:'true',telegram_chat_id:'must-not-display'});
     await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,null);
-    const html=await f.html();assert.match(html,/Bağlantı durumu doğrulanamadı/);assert.doesNotMatch(html,/Bağlantıyı kes|Chat ID \(örn:|must-not-display/);
+    const html=await f.html();assert.match(html,/Telegram işlemi tamamlanamadı/);assert.match(html,/disabled/);assert.doesNotMatch(html,/Bağlantıyı kes|must-not-display/);
   });
   test(name+': unauthenticated session cannot query, bind or unlink',async()=>{
     const f=await fixture(name);f.authenticated=false;
@@ -105,7 +105,7 @@ for(const name of ['ProfileView','SettingsView']){
   });
 }
 
-const unverifiable='Telegram işleminin sonucu doğrulanamadı. Bağlantı durumunu yeniden kontrol edin.';
+const unverifiable='Telegram işlemi tamamlanamadı. Bağlantı durumunu yeniden kontrol edin.';
 const invalidReplies=[
   ['string false',{success:'false'}],['object',{success:{}}],['array value',{success:[]}],
   ['missing',{}],['null success',{success:null}],['unknown string',{success:'unknown'}],
@@ -124,25 +124,25 @@ for(const name of ['ProfileView','SettingsView']){
         f[operation]=async()=>{mutations++;return response;};
         await f.bindings[operation==='save'?'saveTelegram':'removeTelegram']();
         assert.deepEqual(f.writes,[]);assert.equal(f.storage.get('telegramChatId'),'existing');
-        assert.equal(f.bindings.telegramSaved.value,null);assert.equal(mutations,1);
-        assert.deepEqual(f.messages,[['warning',unverifiable]]);
+        assert.equal(f.bindings.telegramSaved.value,true);assert.equal(f.bindings.telegramConfirmed.value,false);assert.equal(mutations,1);
+        assert.deepEqual(f.messages,[]);assert.equal(f.bindings.telegramNotice.value,'');assert.equal(f.bindings.telegramError.value,unverifiable);
         assert.match(await f.html(),/Durumu yenile/);
       });
     }
   }
-  test(name+': exact valid mutation replies update storage, state and success notices',async()=>{
+  test(name+': exact valid mutation replies update scoped state and local success notices',async()=>{
     const f=await fixture(name);f.bindings.chatId.value='1234';await f.bindings.saveTelegram();
-    assert.equal(f.storage.get('telegramChatId'),'1234');assert.equal(f.bindings.telegramSaved.value,true);
+    assert.equal(f.bindings.telegramNotice.value,'Telegram bağlandı.');assert.equal(f.bindings.telegramSaved.value,true);
     await f.bindings.removeTelegram();assert.equal(f.storage.has('telegramChatId'),false);
     assert.equal(f.bindings.telegramSaved.value,false);
-    assert.deepEqual(f.messages,[['success','Telegram bağlandı!'],['success','Telegram bağlantısı kesildi']]);
+    assert.equal(f.bindings.telegramNotice.value,'Telegram bağlantısı kaldırıldı.');assert.deepEqual(f.messages,[]);
   });
-  test(name+': rejected refresh clears stale status without changing storage',async()=>{
+  test(name+': rejected refresh retains last-known status, marks it unconfirmed and preserves storage',async()=>{
     const f=await fixture(name);f.storage.set('telegramChatId','existing');
     await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,true);
     f.read=async()=>{throw new Error('synthetic rejected request');};
-    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,null);
-    assert.deepEqual(f.writes,[]);assert.deepEqual(f.messages,[['warning',unverifiable]]);
+    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,true);assert.equal(f.bindings.telegramConfirmed.value,false);
+    assert.deepEqual(f.writes,[]);assert.deepEqual(f.messages,[]);assert.equal(f.bindings.telegramNotice.value,'');assert.equal(f.bindings.telegramError.value,unverifiable);
     assert.match(await f.html(),/Durumu yenile/);
   });
   test(name+': late bind reply and rejected refresh do not affect the next session',async()=>{

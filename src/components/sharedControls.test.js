@@ -91,7 +91,7 @@ const renderer = createRenderer({
 
   createText: (text) => ({ text }),
 
-  createComment: (text) => ({
+  createComment: (_text) => ({
     text: "",
   }),
 
@@ -1016,8 +1016,9 @@ test("Home hides personal notice and shows shared notice only in its own tab", a
     const statusPanels = () =>
       walk(tree).filter((node) => node.props?.role === "status");
 
-    // Kişisel bildirim yorumda
-    assert.equal(statusPanels().length, 0);
+    // Critical pending changes remain visible in the personal tab.
+    assert.equal(statusPanels().length, 1);
+    assert.match(text(statusPanels()[0]), /2 kişisel değişiklik/);
 
     assert.equal(text(tree).includes("Kişisel sayaçlar"), false);
 
@@ -1041,7 +1042,8 @@ test("Home hides personal notice and shows shared notice only in its own tab", a
 
     await nextTick();
 
-    assert.equal(statusPanels().length, 0);
+    assert.equal(statusPanels().length, 1);
+    assert.match(text(statusPanels()[0]), /2 kişisel değişiklik/);
 
     assert.equal(text(tree).includes(store.sharedNotice.message), false);
   } finally {
