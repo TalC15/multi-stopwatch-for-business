@@ -229,7 +229,7 @@ export function createStopwatchController({
   function retrySync() {
     retryBudget = 3;
     cancelRetry();
-    return requestSync();
+    return requestSync(true);
   }
   const presetTimes = ref(preference("presetTimes", [])),
     presetNames = ref(preference("presetNames", []));
@@ -248,6 +248,7 @@ export function createStopwatchController({
   let initPromise = null,
     syncPromise = null,
     syncRequested = false,
+    syncRevalidate = false,
     sharedPromise = null,
     sharedRequested = false,
     tickInterval = null;
@@ -522,7 +523,7 @@ export function createStopwatchController({
     );
     ready.value = false;
     pendingCount.value = 0;
-    user.value = null;
+    user.value = null; name.value = 'kronometre'; duration.value = 5;
     sharedState.value = online() ? "reconciling" : "offline-readonly";
     sharedPending.value = false;
     sharedGeneration = -1n;
@@ -538,7 +539,7 @@ export function createStopwatchController({
   async function initialize() {
     if (disposed) return false;
     const next = context();
-    if (next.user?.role === 'agent') {
+    if (['agent', 'superadmin'].includes(next.user?.role)) {
       clearView(); active = null; user.value = next.user;
       sharedAccess.value = 'signed-out';
       return false;
@@ -555,15 +556,16 @@ export function createStopwatchController({
     active = ctx;
     user.value = ctx.user;
     sharedAccess.value = ctx.sharedAccess;
+    const initialDraft = { name: name.value, duration: duration.value };
     const task = (async () => {
       try {
         await reloadLocal(ctx);
         assertCurrent(ctx);
         if (experience) {
-          await experience.refresh(); assertCurrent(ctx); await reloadLocal(ctx);
+          await (experience.ensureFresh ? experience.ensureFresh() : experience.refresh()); assertCurrent(ctx); await reloadLocal(ctx);
           // Stored paid defaults are preferences, never evidence of a right.
-          duration.value = experience.canFeature('presets') ? preference('defaultDuration', 5) : 5;
-          name.value = experience.canFeature('presets') ? preference('defaultName', 'kronometre') : 'kronometre';
+          if (duration.value === initialDraft.duration) duration.value = experience.canFeature('presets') ? preference('defaultDuration', 5) : 5;
+          if (name.value === initialDraft.name) name.value = experience.canFeature('presets') ? preference('defaultName', 'kronometre') : 'kronometre';
         }
         subscription = liveQuery(() => readVisible(ctx)).subscribe({
           next: (rows) => applyRows(rows, ctx),
@@ -957,22 +959,23 @@ export function createStopwatchController({
     if (!stopwatches.value.some((t) => t.status === "running")) stopTick();
   }
 
-  async function requestSync() {
+  async function requestSync(force = false) {
     if (disposed || !ready.value || !active?.scope)
       return { status: "local-only" };
-    syncRequested = true;
+    syncRequested = true; syncRevalidate ||= force;
     if (syncPromise) return syncPromise;
     cancelRetry();
     const work = (async () => {
       let result = { status: "idle" };
       while (syncRequested && !disposed) {
         syncRequested = false;
+        const revalidate = syncRevalidate; syncRevalidate = false;
         const ctx = active;
         try {
           assertCurrent(ctx);
           syncStatus.value = "syncing";
           if (experience) {
-            const verified = await experience.refresh();
+            const verified = await (revalidate || !experience.ensureFresh ? experience.refresh() : experience.ensureFresh());
             assertCurrent(ctx);
             if (!verified) { await refreshSyncState(ctx, online() ? 'retry' : 'offline'); return { status: online() ? 'retry' : 'offline' }; }
           }

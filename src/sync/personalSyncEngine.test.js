@@ -356,8 +356,9 @@ test("editing a conflicted timer retains conflict metadata and never rebases que
 });
 
 for (const code of ['SUBSCRIPTION_EXPIRED', 'SUBSCRIPTION_CANCELLED']) test('Phase 6 '+code+' preserves outbox until reverified and acknowledged in the same workspace', async () => {
-  await create(); let authorized = false, rejected = 0;
-  const experience = { requirePersonalWrite: async session => authorized && session.userId === scope.userId && session.workspaceId === scope.workspaceId,
+  await create(); let authorized = false, rejected = 0, refreshes = 0;
+  const experience = { refresh: async () => { refreshes++; return authorized; },
+    requirePersonalWrite: async session => authorized && session.userId === scope.userId && session.workspaceId === scope.workspaceId,
     rejectAuthority: () => rejected++ };
   const deniedApi = createPersonalSyncApi({ auth, experience, request: async () => response(403, { code }), baseUrl: 'https://mock.invalid' });
   assert.equal((await engine(deniedApi).flush()).status, 'forbidden'); assert.equal(rejected, 1);
@@ -367,6 +368,7 @@ for (const code of ['SUBSCRIPTION_EXPIRED', 'SUBSCRIPTION_CANCELLED']) test('Pha
   assert.equal((await engine(retryApi).flush()).status, 'forbidden'); assert.equal(server.requests.length, 0);
   assert.deepEqual(await listPersonalOutbox(scope), [op]); assert.deepEqual(await timerDb.timers.get(ids.timer), local);
   authorized = true; assert.equal((await engine(retryApi).flush()).acknowledged, 1);
+  assert.equal(refreshes, 2, 'each denied-work retry obtains a fresh server decision');
   assert.equal(server.requests[0].body, op.body); assert.equal((await listPersonalOutbox(scope)).length, 0);
   const resumed = await timerDb.timers.get(ids.timer);
   assert.equal(resumed.userId, scope.userId); assert.equal(resumed.workspaceId, scope.workspaceId); assert.equal(resumed.syncRevision, 1);

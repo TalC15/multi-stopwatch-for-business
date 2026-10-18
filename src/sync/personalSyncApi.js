@@ -127,7 +127,7 @@ export function createPersonalSyncApi({
   return {
     captureSession,
     ensureReady,
-    canRetrySubscription: experience ? session => experience.requirePersonalWrite(session) : undefined,
+    canRetrySubscription: experience ? async session => await experience.refresh() && experience.requirePersonalWrite(session) : undefined,
     async list(session) {
       const data = await send(session, "/timers/personal", "GET");
       session.assertCurrent();

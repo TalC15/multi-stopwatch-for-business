@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { message } from "../../composables/message";
 import { accountExperience } from '../../services/accountExperience.js';
@@ -14,7 +14,10 @@ const props = defineProps(["isOpen", "defaultType", "forceShared"]);
 const emit = defineEmits(["close"]);
 const store = useStopwatchStore();
 const user = computed(() => store.user);
-const saving = ref(false);
+const saving = ref(false), presetError = ref('');
+const showPresets = computed(() => !!accountExperience.currentData.value);
+let alive = true;
+onBeforeUnmount(() => { alive = false; sharedModeCheckId++; });
 
 const presetTimes = store.presetTimes;
 const presetNames = store.presetNames;
@@ -27,12 +30,14 @@ let sharedModeCheckId = 0;
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 
 const selectPresetTime = async (val) => {
-  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
+  presetError.value = '';
+  if (!accountExperience.canFeature('presets')) { presetError.value = 'Hazır etiketler için aktif abonelik ve internet bağlantısı gerekiyor.'; return; }
   store.duration = val;
 };
 
 const selectPresetName = async (val) => {
-  if (!await accountExperience.requireFeature('presets')) return message.warning('Hazır ayarlar için kullanım hakkı doğrulanamadı.');
+  presetError.value = '';
+  if (!accountExperience.canFeature('presets')) { presetError.value = 'Hazır etiketler için aktif abonelik ve internet bağlantısı gerekiyor.'; return; }
   store.name = val;
 };
 
@@ -84,7 +89,7 @@ const save = message.withLoading("zamanlayıcı oluşturuluyor...", async () => 
     emit("close");
     if (started) message.success(`${store.name} oluşturuldu`);
     else message.warning("Sayaç kaydedildi; başlatma tamamlanamadı.");
-    const presetsAllowed = await accountExperience.requireFeature('presets');
+    const presetsAllowed = accountExperience.canFeature('presets');
     store.name = presetsAllowed ? JSON.parse(localStorage.getItem("defaultName")) || "kronometre" : "kronometre";
     store.duration = presetsAllowed ? JSON.parse(localStorage.getItem("defaultDuration")) || 5 : 5;
     isShared.value = false;
@@ -96,23 +101,22 @@ const save = message.withLoading("zamanlayıcı oluşturuluyor...", async () => 
 async function checkSharedMode() {
   const checkId = ++sharedModeCheckId;
 
-  sharedModeAvailable.value = false;
-
   const selectedUser = user.value;
   const generation = getAuthGeneration();
 
   sharedModeLoading.value = Boolean(selectedUser?.workspace_id);
 
-  if (!selectedUser?.workspace_id) return;
-  if (!await accountExperience.refresh() || !accountExperience.canShared()) { sharedModeLoading.value = false; return; }
+  if (!selectedUser?.workspace_id) { sharedModeLoading.value = false; return; }
 
   const isRequestCurrent = () =>
-    checkId === sharedModeCheckId &&
+    alive && checkId === sharedModeCheckId &&
     getAuthGeneration() === generation &&
     getUser()?.id === selectedUser.id &&
     getUser()?.workspace_id === selectedUser.workspace_id;
 
   try {
+    if (!accountExperience.canShared()) await accountExperience.ensureFresh();
+    if (!isRequestCurrent() || !accountExperience.canShared()) return;
     const response = await apiFetch(`${BASE_URL}/workspace`, {
       isRequestCurrent,
       headers: {
@@ -139,7 +143,7 @@ async function checkSharedMode() {
 watch(
   () => [user.value?.id, user.value?.workspace_id],
   () => {
-    isShared.value = false;
+    isShared.value = false; sharedModeAvailable.value = false;
     void checkSharedMode().catch(() => {});
   },
 );
@@ -148,15 +152,16 @@ watch(
   () => props.isOpen,
   (newVal) => {
     if (newVal) {
-      if (!accountExperience.canFeature('presets')) { store.name = 'kronometre'; store.duration = 5; }
       void checkSharedMode().catch(() => {});
       isShared.value = props.forceShared || false;
     }
   },
 );
 
-onMounted(() => {
-  void checkSharedMode().catch(() => {});
+onMounted(() => { if (props.isOpen) void checkSharedMode().catch(() => {}); });
+watch(() => accountExperience.state.scopeVersion, () => {
+  sharedModeCheckId++; sharedModeAvailable.value = false; sharedModeLoading.value = false; isShared.value = false;
+  presetError.value = ''; store.name = 'kronometre'; store.duration = 5; emit('close');
 });
 </script>
 
@@ -235,7 +240,7 @@ onMounted(() => {
 
         <!-- Quick presetNames -->
         <div
-          v-if="presetNames.length && accountExperience.canFeature('presets')"
+          v-if="presetNames.length && showPresets"
           class="custom-scroll flex gap-2 overflow-x-auto pb-1"
         >
           <button
@@ -310,7 +315,7 @@ onMounted(() => {
 
         <!-- Quick presetTimes -->
         <div
-          v-if="presetTimes.length && accountExperience.canFeature('presets')"
+          v-if="presetTimes.length && showPresets"
           class="custom-scroll flex gap-2 overflow-x-auto pb-1"
         >
           <button
@@ -431,6 +436,7 @@ onMounted(() => {
         </div>
       </div>
 
+      <p v-if="presetError" role="status" class="mt-3 text-sm text-amber-700 dark:text-amber-300">{{ presetError }}</p>
       <!-- Create Button -->
       <button
         type="button"

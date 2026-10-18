@@ -1,19 +1,15 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useRouter } from "vue-router";
 import { message } from "@/composables/message";
 import { disconnectSocket, connectSocket } from "@/services/socket";
 import {
   apiFetch,
   getAccessToken,
-  saveTelegramChatId,
-  getUser,
-  cancelTelegramChatId,
-  telegramControl,
 } from "@/services/backendSync";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 
-import { isTelegramBindSuccess, isTelegramUnlinkSuccess, isTelegramStatusSuccess, telegramUnverifiedMessage } from '../services/telegramResponses.js';
+import { useTelegramConnection } from '../composables/useTelegramConnection.js';
 import { accountExperience } from '../services/accountExperience.js';
 import AccountStatusCard from '../components/AccountStatusCard.vue';
 import { captureWorkspaceSession } from "../services/workspaceSession.js";
@@ -21,7 +17,7 @@ import { captureWorkspaceSession } from "../services/workspaceSession.js";
 const store = useStopwatchStore();
 const canTelegram = computed(() => accountExperience.canFeature('telegram'));
 const individual = computed(() => accountExperience.currentData.value?.account.kind === 'individual');
-const user = getUser();
+const user = computed(() => store.user);
 const router = useRouter();
 const BASE_URL = "https://multi-stopwatch-backend.onrender.com";
 const workspace = ref(null);
@@ -29,18 +25,7 @@ const loading = ref(false);
 const joinLoading = ref(false);
 const leaveLoading = ref(false);
 const inviteCode = ref("");
-const chatId = ref("");
-const telegramStatus = ref(null);
-const telegramSession = ref(null);
-const canManageTelegram = computed(() => accountExperience.state.status === 'verified' && accountExperience.currentData.value?.personal.readable === true);
-const telegramSaved = computed(() => {
-  const account = accountExperience.currentData.value?.account;
-  return telegramSession.value?.isCurrent() && account?.userId?.toLowerCase() === getUser()?.id?.toLowerCase()
-    ? telegramStatus.value : null;
-});
-const telegramLoadingButton = ref(false);
-const telegramLoadingDiv = ref(false);
-
+const { chatId, telegramSaved, telegramBusy, telegramError, telegramNotice, telegramConfirmed, canManageTelegram, telegramSavedControl, saveTelegram, removeTelegram } = useTelegramConnection();
 function authHeader() {
   return {
     "Content-Type": "application/json",
@@ -48,143 +33,58 @@ function authHeader() {
   };
 }
 
-const fetchWorkspace = message.withLoading(
-  "Çalışma grubu yükleniyor...",
-  async () => {
-    if (!await accountExperience.refresh() || !accountExperience.canShared()) return;
-    loading.value = true;
-    const response = await apiFetch(`${BASE_URL}/workspace`, {
-      headers: authHeader(),
+let alive = true, workspaceRequest = 0;
+onBeforeUnmount(() => { alive = false; workspaceRequest++; });
+watch(() => accountExperience.state.scopeVersion, () => {
+  workspaceRequest++; workspace.value = null; inviteCode.value = ''; loading.value = false;
+  joinLoading.value = false; leaveLoading.value = false;
+});
+async function fetchWorkspace() {
+  if (joinLoading.value || leaveLoading.value) return;
+  const session = captureWorkspaceSession(), request = ++workspaceRequest;
+  const current = () => alive && request === workspaceRequest && session.isCurrent();
+  if (!await accountExperience.ensureFresh() || !current() || !accountExperience.canShared()) return;
+  loading.value = true;
+  try {
+    const response = await apiFetch(`${BASE_URL}/workspace`, { headers: authHeader(), isRequestCurrent: current });
+    if (!response?.ok) return;
+    const data = await response.json();
+    if (current()) workspace.value = data.workspace;
+  } finally { if (current()) loading.value = false; }
+}
+
+async function changeWorkspace(action) {
+  if (joinLoading.value || leaveLoading.value || action === 'join' && !inviteCode.value) return;
+  const session = captureWorkspaceSession(), input = inviteCode.value;
+  const busy = action === 'join' ? joinLoading : leaveLoading;
+  const operation = ++workspaceRequest;
+  const current = () => alive && operation === workspaceRequest && session.isCurrent();
+  busy.value = true; loading.value = false;
+  try {
+    if (!await accountExperience.ensureFresh() || !current() || !accountExperience.canShared()) return;
+    const response = await apiFetch(`${BASE_URL}/workspace/${action}`, {
+      method: 'POST', headers: authHeader(), isRequestCurrent: current,
+      ...(action === 'join' ? { body: JSON.stringify({ inviteCode: input }) } : {}),
     });
-    if (response) {
-      const data = await response.json();
-      workspace.value = data.workspace;
-    }
-    loading.value = false;
-  },
-);
-
-const joinWorkspace = message.withLoading(
-  "Çalışma grubuna katılınıyor...",
-  async () => {
-    if (!inviteCode.value || joinLoading.value) return;
-    if (!await accountExperience.refresh() || !accountExperience.canShared()) return;
-    const session = captureWorkspaceSession();
-    joinLoading.value = true;
-    try {
-      const response = await apiFetch(`${BASE_URL}/workspace/join`, {
-        method: "POST",
-        headers: authHeader(),
-        isRequestCurrent: session.isCurrent,
-        body: JSON.stringify({ inviteCode: inviteCode.value }),
-      });
-      if (!response) return;
-      const data = await response.json();
-      if (!session.isCurrent()) return;
-      if (response.ok) {
-        if (!session.saveWorkspace(data.workspace?.id)) return;
-        message.success(`${data.workspace.name} çalışma gurubuna katıldınız`);
-        inviteCode.value = "";
-        workspace.value = data.workspace;
-        disconnectSocket();
-        connectSocket();
-      } else message.warning(data.error || "Geçersiz davet kodu");
-    } catch {
-      if (session.isCurrent()) message.error("Çalışma grubuna katılınamadı");
-    } finally {
-      joinLoading.value = false;
-    }
-  },
-);
-
-const leaveWorkspace = message.withLoading(
-  "Çalışma grubundan ayrılınıyor...",
-  async () => {
-    if (leaveLoading.value) return;
-    if (!await accountExperience.refresh() || !accountExperience.canShared()) return;
-    const session = captureWorkspaceSession();
-    leaveLoading.value = true;
-    try {
-      const response = await apiFetch(`${BASE_URL}/workspace/leave`, {
-        method: "POST",
-        headers: authHeader(),
-        isRequestCurrent: session.isCurrent,
-      });
-      if (!response) return;
-      const data = await response.json();
-      if (!session.isCurrent()) return;
-      if (response.ok) {
-        if (!session.saveWorkspace(null)) return;
-        message.success("Çalışma gurubundan ayrıldınız");
-        workspace.value = null;
-        disconnectSocket();
-        connectSocket();
-      } else message.error(data.error || "Ayrılma başarısız");
-    } catch {
-      if (session.isCurrent()) message.error("Çalışma grubundan ayrılınamadı");
-    } finally {
-      leaveLoading.value = false;
-    }
-  },
-);
-
-const saveTelegram = message.withLoading("Telegram bağlanıyor...", async () => {
-  const session = captureWorkspaceSession(), requestedChatId = chatId.value;
-  if (!session.isCurrent() || !requestedChatId || telegramLoadingButton.value) return;
-  if (!await accountExperience.requireFeature('telegram') || !session.isCurrent()) return message.warning('Telegram için kullanım hakkı doğrulanamadı.');
-  telegramLoadingButton.value = true;
-  try {
-    const result = await saveTelegramChatId(requestedChatId);
-    if (!session.isCurrent()) return;
-    if (isTelegramBindSuccess(result)) {
-      localStorage.setItem("telegramChatId", requestedChatId);
-      telegramSession.value = session; telegramStatus.value = true;
-      message.success("Telegram bağlandı!");
-    } else {
-      telegramSession.value = session; telegramStatus.value = null;
-      message.warning(telegramUnverifiedMessage);
-    }
-  } finally { telegramLoadingButton.value = false; }
-});
-
-const removeTelegram = message.withLoading("Telegram bağlantısı kesiliyor...", async () => {
-  const session = captureWorkspaceSession();
-  if (!session.isCurrent() || telegramLoadingButton.value) return;
-  telegramLoadingButton.value = true;
-  try {
-    const result = await cancelTelegramChatId(getUser()?.id);
-    if (!session.isCurrent()) return;
-    if (isTelegramUnlinkSuccess(result)) {
-      localStorage.removeItem("telegramChatId");
-      telegramSession.value = session; telegramStatus.value = false; chatId.value = "";
-      message.success("Telegram bağlantısı kesildi");
-    } else {
-      telegramSession.value = session; telegramStatus.value = null;
-      message.warning(telegramUnverifiedMessage);
-    }
-  } finally { telegramLoadingButton.value = false; }
-});
-
-const telegramSavedControl = message.withLoading("Telegram bağlantısı kontrol ediliyor...", async () => {
-  const session = captureWorkspaceSession();
-  if (!session.isCurrent() || telegramLoadingDiv.value || (!canManageTelegram.value && !canTelegram.value)) return;
-  telegramLoadingDiv.value = true;
-  try {
-    const res = await telegramControl(getUser()?.id);
-    if (!session.isCurrent()) return;
-    telegramSession.value = session;
-    telegramStatus.value = isTelegramStatusSuccess(res) ? res.connected : null;
-  } catch {
-    if (!session.isCurrent()) return;
-    telegramSession.value = session; telegramStatus.value = null;
-    message.warning(telegramUnverifiedMessage);
-  } finally { telegramLoadingDiv.value = false; }
-});
+    if (!response) return;
+    const data = await response.json();
+    if (!current()) return;
+    if (!response.ok) { message.warning(data.error || 'Çalışma grubu işlemi tamamlanamadı.'); return; }
+    if (!session.saveWorkspace(action === 'join' ? data.workspace?.id : null)) return;
+    workspace.value = action === 'join' ? data.workspace : null; inviteCode.value = '';
+    message.success(action === 'join' ? 'Çalışma grubuna katıldınız.' : 'Çalışma grubundan ayrıldınız.');
+    disconnectSocket(); connectSocket();
+  } catch { if (current()) message.error('Çalışma grubu işlemi tamamlanamadı.'); }
+  finally { if (alive && operation === workspaceRequest) busy.value = false; }
+}
+const joinWorkspace = () => changeWorkspace('join');
+const leaveWorkspace = () => changeWorkspace('leave');
+watch([() => accountExperience.state.scopeVersion, () => accountExperience.currentData.value?.shared], () => {
+  if (accountExperience.canShared()) void fetchWorkspace().catch(() => {});
+}, { immediate: true, flush: 'post' });
 
 onMounted(async () => {
-  await accountExperience.refresh();
-  if (accountExperience.canShared()) fetchWorkspace();
-  if (canTelegram.value || canManageTelegram.value) telegramSavedControl();
+  await accountExperience.ensureFresh();
 });
 </script>
 
@@ -229,7 +129,7 @@ onMounted(async () => {
     </nav>
 
     <main class="mx-auto flex max-w-md flex-col gap-5 px-4 pt-6 pb-12 sm:px-6">
-      <AccountStatusCard :experience="accountExperience" :count="0" :ready="store.ready" @retry="accountExperience.refresh()" />
+      <AccountStatusCard details :experience="accountExperience" :count="0" :ready="store.ready" @retry="accountExperience.refresh()" />
       <!--Profil Bilgileri-->
       <div
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6"
@@ -295,7 +195,7 @@ onMounted(async () => {
         </div>
       </div>
       <!-- Workspace Durumu -->
-      <div v-if="accountExperience.canShared()"
+      <div v-if="accountExperience.currentData.value?.shared"
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6 flex flex-col gap-4"
       >
         <h2 class="text-base font-black tracking-tight">Çalışma grubum</h2>
@@ -323,7 +223,7 @@ onMounted(async () => {
           </div>
           <button
             @click="leaveWorkspace"
-            :disabled="leaveLoading"
+            :disabled="leaveLoading || !accountExperience.canShared()"
             class="w-full rounded-2xl border border-rose-300 px-4 py-3 text-sm font-bold text-rose-600 transition hover:bg-rose-500/5 active:scale-[0.99] disabled:opacity-40 dark:border-rose-800 dark:text-rose-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-500"
           >
             {{ leaveLoading ? "Ayrılıyor..." : "Gruptan ayrıl" }}
@@ -345,7 +245,7 @@ onMounted(async () => {
             />
             <button
               @click="joinWorkspace"
-              :disabled="!inviteCode || joinLoading"
+              :disabled="!inviteCode || joinLoading || !accountExperience.canShared()"
               class="shrink-0 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white transition hover:bg-indigo-700 active:scale-95 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
               {{ joinLoading ? "..." : "Katıl" }}
@@ -354,13 +254,19 @@ onMounted(async () => {
         </div>
       </div>
 
+      <div v-if="canManageTelegram" class="mb-3 text-sm text-[var(--color-text-secondary)]">
+        <p v-if="telegramBusy && telegramSaved === null">Telegram bağlantısı yükleniyor…</p>
+        <p v-if="telegramError" role="status">{{ telegramError }}</p>
+        <p v-if="telegramNotice" role="status">{{ telegramNotice }}</p>
+        <button type="button" :disabled="telegramBusy" @click="telegramSavedControl" class="min-h-11 rounded-xl border border-[var(--color-border)] px-3 focus-visible:outline-2 focus-visible:outline-indigo-500">Durumu yenile</button>
+      </div>
       <!-- Telegram bildirimi -->
-      <div v-if="canTelegram || canManageTelegram"
+      <div v-if="canManageTelegram"
         class="rounded-3xl border border-[var(--color-border)] bg-[var(--color-card)] p-5 shadow-sm sm:p-6 flex flex-col gap-4"
       >
         <h2 class="text-base font-black tracking-tight">Telegram bildirimi</h2>
-        <div v-if="!telegramLoadingDiv">
-          <div v-if="telegramSaved === false && canTelegram" class="flex flex-col gap-3">
+        <div :aria-busy="telegramBusy">
+          <div v-if="telegramSaved !== true" class="flex flex-col gap-3">
             <p
               class="text-xs leading-relaxed text-[var(--color-text-secondary)]"
             >
@@ -375,37 +281,26 @@ onMounted(async () => {
             />
             <button
               @click="saveTelegram"
-              :disabled="!chatId || telegramLoadingButton"
+              :disabled="!chatId || telegramBusy || !canTelegram || telegramSaved !== false"
               class="w-full rounded-2xl bg-indigo-600 px-4 py-3 text-sm font-extrabold text-white transition hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
-              {{ telegramLoadingButton ? "Kaydediliyor..." : "Kaydet" }}
+              {{ telegramBusy ? "Kaydediliyor..." : "Kaydet" }}
             </button>
           </div>
 
           <div v-else-if="telegramSaved === true" class="flex flex-wrap items-center justify-between gap-3">
             <span
               class="text-sm font-semibold text-emerald-600 dark:text-emerald-400"
-              >✓ Telegram bağlı</span
+              >{{ telegramConfirmed ? '✓ Telegram bağlı' : 'Son bilinen durum: Telegram bağlı' }}</span
             >
             <button
               @click="removeTelegram"
-              :disabled="telegramLoadingButton"
+              :disabled="telegramBusy"
               class="min-h-11 shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-[var(--color-text-secondary)] underline underline-offset-4 transition hover:bg-[var(--color-surface)] hover:text-[var(--color-text-primary)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
             >
               Bağlantıyı kes
             </button>
           </div>
-          <p v-else-if="telegramSaved === false" class="text-sm leading-6 text-[var(--color-text-secondary)]">Yeni Telegram bağlantısı için aktif, doğrulanmış abonelik gerekir.</p>
-          <div v-else class="flex flex-wrap items-center gap-3 text-sm text-[var(--color-text-secondary)]" role="status">
-            Bağlantı durumu doğrulanamadı.
-            <button type="button" @click="telegramSavedControl" class="min-h-11 rounded-xl border border-[var(--color-border)] px-3 focus-visible:outline-2 focus-visible:outline-indigo-500">Durumu yenile</button>
-          </div>
-        </div>
-        <div
-          v-else
-          class="rounded-2xl bg-[var(--color-surface)] py-5 text-center text-sm text-[var(--color-text-secondary)]"
-        >
-          Yükleniyor...
         </div>
       </div>
     </main>
