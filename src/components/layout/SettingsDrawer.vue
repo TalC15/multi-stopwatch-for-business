@@ -97,7 +97,6 @@ const themeStore = useThemeStore();
         </div>
 
         <div class="flex flex-col gap-3">
-          <RouterLink v-if="user?.role === 'superadmin' && Capacitor.getPlatform() === 'web' && !Capacitor.isNativePlatform()" to="/superadmin/agents" class="rounded-xl border border-indigo-400/30 bg-indigo-500/10 px-4 py-3 text-sm font-semibold text-indigo-700 dark:text-indigo-300" @click="$emit('close')">Vekil Yönetimi</RouterLink>
           <RouterLink
             to="/settings"
             class="flex items-center gap-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-400/30 rounded-xl px-4 py-2.5 text-indigo-300 text-sm font-medium transition-colors"
@@ -184,6 +183,35 @@ const themeStore = useThemeStore();
             </svg>
             Yönetici Paneli
           </RouterLink>
+
+          <RouterLink
+            v-if="
+              user?.role === 'superadmin' &&
+              Capacitor.getPlatform() === 'web' &&
+              !Capacitor.isNativePlatform()
+            "
+            to="/superadmin/agents"
+            class="flex items-center gap-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-400/30 rounded-xl px-4 py-2.5 text-indigo-300 text-sm font-medium transition-colors"
+            @click="$emit('close')"
+          >
+            <svg
+              width="22"
+              height="22"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.7"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="3" y="3" width="18" height="18" rx="3" />
+              <path d="M9 3v18M5.5 7h1M5.5 11h1" />
+              <circle cx="15" cy="9" r="2" />
+              <path d="M11.5 17v-1a3.5 3.5 0 0 1 7 0v1" />
+            </svg>
+            Vekil Yönetimi</RouterLink
+          >
         </div>
 
         <!-- Divider -->

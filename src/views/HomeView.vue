@@ -145,7 +145,7 @@ onMounted(() => {
             ? `${store.syncReview.name || 'Sayaç'} için sunucu sürümü ${store.syncReview.revision}: ${store.syncReview.kind === 'terminal' ? 'silinmiş veya arşivlenmiş' : store.syncReview.serverName}. Onaylarsanız yalnız bu sayacın cihazdaki bekleyen değişikliklerinden vazgeçilir ve bu sunucu kaydı kullanılır. Sunucu kaydı değiştirilmez.`
             : ''
         "
-        confirmText="Yerel değişikliklerden vazgeç"
+        confirmText="Cihazımdaki değişikliklerden vazgeç"
         cancelText="Koru ve vazgeç"
         :confirmDisabled="store.resolvingSync"
         @confirm="acceptPersonalSync()"

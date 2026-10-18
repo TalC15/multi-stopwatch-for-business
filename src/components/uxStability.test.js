@@ -4,7 +4,7 @@ import {build} from 'vite';
 import vue from '@vitejs/plugin-vue';
 import {createRenderer, h, reactive, nextTick} from 'vue';
 import {writeFile, unlink} from 'node:fs/promises';
-import {fileURLToPath} from 'node:url';
+import {fileURLToPath, pathToFileURL} from 'node:url';
 import {createAccountExperience} from '../services/accountExperience.js';
 import {captureWorkspaceSession} from '../services/workspaceSession.js';
 const root=fileURLToPath(new URL('../../',import.meta.url));
@@ -102,8 +102,8 @@ before(async()=>{
   child:`export default {render(){return null}};`,
  };
  for(const [name,entry] of Object.entries({AddModal:'components/stopwatch/AddModal.vue',Settings:'views/SettingsView.vue',Profile:'views/ProfileView.vue'})){
-  const output=await build({root,configFile:false,logLevel:'silent',resolve:{alias:{'@':root+'src'}},plugins:[{name:'ux-fixtures',enforce:'pre',resolveId(s){const key=s.includes('services/accountExperience')?'policy':s.includes('stores/stopwatchStore')?'store':s.includes('stores/themeStore')?'theme':s.includes('composables/message')?'message':s.includes('services/backendSync')?'auth':s.includes('workspaceSession')?'capture':s==='vue-router'?'router':s.includes('services/socket')?'socket':/\/(SoundSettings|NotificationSettings)\.vue$/.test(s)?'child':null;return key?'\0ux:'+key:null;},load(s){if(s.startsWith('\0ux:'))return mocks[s.slice(4)];}},vue({template:{compilerOptions:{hoistStatic:false}}})],build:{write:false,minify:false,lib:{entry:root+'src/'+entry,formats:['es']},rollupOptions:{external:['vue']}}});
-  const path=root+'.ux-'+name+'.mjs';await writeFile(path,(Array.isArray(output)?output[0]:output).output.find(x=>x.type==='chunk').code);views[name]=(await import(path)).default;
+  const output=await build({root,configFile:false,logLevel:'silent',resolve:{alias:{'@':root+'src'}},plugins:[{name:'ux-fixtures',enforce:'pre',resolveId(s){const key=s.includes('services/accountExperience')?'policy':s.includes('stores/stopwatchStore')?'store':s.includes('stores/themeStore')?'theme':(s.includes('composables/message') || s==='./message.js')?'message':s.includes('services/backendSync')?'auth':s.includes('workspaceSession')?'capture':s==='vue-router'?'router':s.includes('services/socket')?'socket':/\/(SoundSettings|NotificationSettings)\.vue$/.test(s)?'child':null;return key?'\0ux:'+key:null;},load(s){if(s.startsWith('\0ux:'))return mocks[s.slice(4)];}},vue({template:{compilerOptions:{hoistStatic:false}}})],build:{write:false,minify:false,lib:{entry:root+'src/'+entry,formats:['es']},rollupOptions:{external:['vue']}}});
+  const path=root+'.ux-'+name+'.mjs';await writeFile(path,(Array.isArray(output)?output[0]:output).output.find(x=>x.type==='chunk').code);views[name]=(await import(pathToFileURL(path).href)).default;
  }
 });
 after(async()=>{for(const name of Object.keys(views))await unlink(root+'.ux-'+name+'.mjs').catch(()=>{});delete globalThis.__ux;});
@@ -136,7 +136,7 @@ for(const view of ['Settings','Profile'])test(`UX ${view} Telegram preserves con
   f.telegram=async()=>({success:true,connected:true});await button(f,'Durumu yenile').props.onClick();await tick();assert.match(text(f.tree),/✓ Telegram bağlı/);
   const gate=deferred();f.telegram=()=>gate.promise;const count=f.actions.length;
   const pending=button(f,'Durumu yenile').props.onClick();await tick();await button(f,'Durumu yenile').props.onClick();assert.equal(f.actions.length,count+1);assert.match(text(f.tree),/Telegram bağlı/);
-  gate.resolve({error:'unavailable'});await pending;await tick();assert.match(text(f.tree),/Son bilinen durum: Telegram bağlı/);assert.match(text(f.tree),/tamamlanamadı/);
+  gate.resolve({error:'unavailable'});await pending;await tick();assert.match(text(f.tree),/Son bilinen durum: Telegram bağlı/);assert.ok(f.messages.some(x=>x.some(y=>y.includes('tamamlanamadı'))));
   f.telegram=async()=>({success:'telegram bağlantısı kesildi.'});await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.doesNotMatch(text(f.tree),/✓ Telegram bağlı/);
   const input=walk(f.tree).find(n=>n.tag==='input'&&n.props.placeholder?.includes('Chat ID'));f.input(input,'12345');
   f.telegram=async()=>({error:'failure'});await button(f,'Kaydet').props.onClick();await tick();assert.equal(input.value,'12345');assert.doesNotMatch(text(f.tree),/✓ Telegram bağlı/);
@@ -158,10 +158,10 @@ test('UX Telegram bind requires server success, failed unlink retains status, ex
  const f=await fixture('Settings');try{
   const input=walk(f.tree).find(n=>n.tag==='input'&&n.props.placeholder?.includes('Chat ID'));f.input(input,'76543');
   f.telegram=async action=>action==='bind'?{success:true}:{success:true,connected:true};
-  await button(f,'Kaydet').props.onClick();await tick();assert.match(text(f.tree),/✓ Telegram bağlı/);assert.match(text(f.tree),/Telegram bağlandı/);
+  await button(f,'Kaydet').props.onClick();await tick();assert.match(text(f.tree),/✓ Telegram bağlı/);assert.ok(f.messages.some(x=>x.includes('Telegram bağlandı.')));
   f.telegram=async()=>{throw Error('network');};await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.match(text(f.tree),/Son bilinen durum: Telegram bağlı/);assert.doesNotMatch(text(f.tree),/bağlantısı kaldırıldı/);
   f.policy.rejectAuthority();await tick();const before=f.requests;
-  f.telegram=async()=>({success:'telegram bağlantısı kesildi.'});await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.match(text(f.tree),/bağlantısı kaldırıldı/);assert.equal(f.requests,before);
+  f.telegram=async()=>({success:'telegram bağlantısı kesildi.'});await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.ok(f.messages.some(x=>x.includes('Telegram bağlantısı kaldırıldı.')));assert.equal(f.requests,before);
   const draft=walk(f.tree).find(n=>n.tag==='input'&&n.props.placeholder?.includes('Chat ID'));f.input(draft,'98765');await nextTick();assert.equal(button(f,'Kaydet').props.disabled,true);
  }finally{f.close();}
 });
@@ -191,8 +191,8 @@ for(const view of ['Settings','Profile']){
    assert.ok(walk(f.tree).includes(input),'background refresh retains the Telegram form');assert.equal(input.value,'654321');assert.equal(globalThis.document.activeElement,input);assert.equal(input.selectionStart,3);
    gate.resolve({ok:true,json:async()=>f.body()});await refresh;await tick();assert.ok(walk(f.tree).includes(input));assert.equal(f.actions.length,1,'refresh does not duplicate the Telegram query');
    f.telegram=async action=>action==='bind'?{success:true}:{success:'telegram bağlantısı kesildi.'};
-   await button(f,'Kaydet').props.onClick();await tick();assert.match(text(f.tree),/✓ Telegram bağlı/);assert.match(text(f.tree),/Telegram bağlandı/);
-   await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.match(text(f.tree),/Telegram bağlantısı kaldırıldı/);assert.deepEqual(f.actions,[['status'],['bind','654321'],['unlink']]);
+   await button(f,'Kaydet').props.onClick();await tick();assert.match(text(f.tree),/✓ Telegram bağlı/);assert.ok(f.messages.some(x=>x.includes('Telegram bağlandı.')));
+   await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.ok(f.messages.some(x=>x.includes('Telegram bağlantısı kaldırıldı.')));assert.deepEqual(f.actions,[['status'],['bind','654321'],['unlink']]);
   }finally{f.close();}
  });
 }
@@ -202,14 +202,14 @@ for(const view of ['Settings','Profile']){
   const f=await fixture(view,true,{workspaceId:null});try{
    const input=walk(f.tree).find(n=>n.props?.placeholder?.includes('Chat ID'));f.input(input,'654321');await nextTick();const save=button(f,'Kaydet');
    f.policy.rejectAuthority();f.reply=()=>({ok:false});await save.props.onClick();await tick();
-   assert.equal(f.policy.canFeature('telegram'),false);assert.deepEqual(f.actions,[['status']]);assert.ok(walk(f.tree).includes(input));assert.equal(input.value,'654321');assert.equal(button(f,'Kaydet').props.disabled,true);assert.match(text(f.tree),/Yeni bağlantı için/);
+   assert.equal(f.policy.canFeature('telegram'),false);assert.deepEqual(f.actions,[['status']]);assert.ok(walk(f.tree).includes(input));assert.equal(input.value,'654321');assert.equal(button(f,'Kaydet').props.disabled,true);assert.ok(f.messages.some(x=>x.some(y=>y.includes('Yeni bağlantı için'))));
   }finally{f.close();}
  });
  test(`UX R1 ${view}: expired Individual retains status and unlink but cannot bind`,async()=>{
   const f=await fixture(view,false,{expired:true});try{
    assert.equal(f.policy.currentData.value.personal.readable,true);assert.equal(f.policy.canFeature('telegram'),false);
    assert.deepEqual(f.actions,[['status']]);f.telegram=async()=>({success:true,connected:true});await button(f,'Durumu yenile').props.onClick();await tick();
-   f.telegram=async()=>({success:'telegram bağlantısı kesildi.'});await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.match(text(f.tree),/bağlantısı kaldırıldı/);
+   f.telegram=async()=>({success:'telegram bağlantısı kesildi.'});await button(f,'Bağlantıyı kes').props.onClick();await tick();assert.ok(f.messages.some(x=>x.includes('Telegram bağlantısı kaldırıldı.')));
    const input=walk(f.tree).find(n=>n.props?.placeholder?.includes('Chat ID'));f.input(input,'321');await nextTick();assert.equal(button(f,'Kaydet').props.disabled,true);await button(f,'Kaydet').props.onClick();await tick();assert.equal(f.actions.some(x=>x[0]==='bind'),false);assert.equal(input.value,'321');
   }finally{f.close();}
  });
@@ -227,7 +227,7 @@ for(const view of ['Settings','Profile']){
    const f=await fixture(view,true,{workspaceId:null});try{
     if(action==='unlink'){f.telegram=async()=>({success:true,connected:true});await button(f,'Durumu yenile').props.onClick();await tick();}
     if(action==='bind'){f.input(walk(f.tree).find(n=>n.props?.placeholder?.includes('Chat ID')),'999');await nextTick();}
-    const gate=deferred();f.telegram=()=>gate.promise;const pending=button(f,action==='status'?'Durumu yenile':action==='bind'?'Kaydet':'Bağlantıyı kes').props.onClick();await tick();
+    f.messages.length=0;const gate=deferred();f.telegram=()=>gate.promise;const pending=button(f,action==='status'?'Durumu yenile':action==='bind'?'Kaydet':'Bağlantıyı kes').props.onClick();await tick();
     if(action==='unlink')f.logout();else f.switch();await tick();
     gate.resolve(action==='status'?{success:true,connected:true}:action==='bind'?{success:true}:{success:'telegram bağlantısı kesildi.'});await pending;await tick();
     assert.equal(f.policy.currentData.value,null);assert.doesNotMatch(text(f.tree),/Telegram bağlandı|Telegram bağlantısı kaldırıldı|Telegram bağlı|999/);assert.deepEqual(f.messages,[]);
@@ -235,3 +235,50 @@ for(const view of ['Settings','Profile']){
   }
  });
 }
+
+for(const view of ['Settings','Profile']) {
+ test(`Telegram fix ${view}: numeric model is sent as a trimmed string and uses message feedback`,async()=>{
+  const f=await fixture(view,true,{workspaceId:null});try{
+   assert.deepEqual(f.messages,[],'automatic status checks remain silent');
+   const input=walk(f.tree).find(n=>n.props?.placeholder?.includes('Chat ID'));
+   assert.equal(input.props.type,'text');assert.equal(input.props.inputmode,'numeric');
+   f.input(input,1234567890);await nextTick();
+   f.telegram=async action=>action==='bind'&&typeof f.actions.at(-1)[1]==='string'?{success:true}:{};
+   await button(f,'Kaydet').props.onClick();await tick();
+   assert.deepEqual(f.actions.at(-1),['bind','1234567890']);
+   assert.ok(f.messages.some(x=>x.includes('Telegram bağlandı.')));
+   assert.doesNotMatch(text(f.tree),/Telegram bağlandı\./,'success is shown once through the app message system');
+  }finally{f.close();}
+ });
+ test(`Telegram fix ${view}: long and negative IDs retain exact string digits; invalid IDs never reach backend`,async()=>{
+  const f=await fixture(view,true,{workspaceId:null});try{
+   const input=walk(f.tree).find(n=>n.props?.placeholder?.includes('Chat ID'));
+   f.input(input,'not-an-id');await nextTick();const before=f.actions.length;
+   await button(f,'Kaydet').props.onClick();await tick();assert.equal(f.actions.length,before);
+   assert.ok(f.messages.some(x=>x.includes('Geçerli bir Telegram Chat ID girin.')));
+   f.input(input,'  -10012345678901234567  ');await nextTick();f.telegram=async()=>({success:true});
+   await button(f,'Kaydet').props.onClick();await tick();
+   assert.deepEqual(f.actions.at(-1),['bind','-10012345678901234567']);
+  }finally{f.close();}
+ });
+ test(`Telegram fix ${view}: refresh is an accessible SVG inside the Telegram card and manual status uses messages`,async()=>{
+  const f=await fixture(view,true,{workspaceId:null});try{
+   const refresh=button(f,'Durumu yenile');assert.ok(refresh);
+   assert.equal(refresh.props['aria-label'],'Telegram bağlantı durumunu yenile');
+   assert.ok(walk(refresh).some(n=>n.tag==='svg'));
+   assert.match(text(refresh.parent.parent),/Telegram [Bb]ildirimi/);
+   await refresh.props.onClick();await tick();assert.ok(f.messages.some(x=>x.includes('Telegram bağlantı durumu güncellendi.')));
+   f.telegram=async()=>{throw Error('network');};await refresh.props.onClick();await tick();
+   assert.ok(f.messages.some(x=>x.includes('Telegram işlemi tamamlanamadı. Bağlantı durumunu yeniden kontrol edin.')));
+  }finally{f.close();}
+ });
+}
+
+for(const view of ['Settings','Profile']) test(`Telegram fix ${view}: failed automatic status remains local and does not issue popup messages`,async()=>{
+ const f=await fixture(view,true,{workspaceId:null});try{
+  f.telegram=async()=>{throw Error('network');};f.switch();await f.policy.refresh();await tick();
+  assert.deepEqual(f.messages,[]);
+  assert.match(text(f.tree),/Telegram işlemi tamamlanamadı/);
+  assert.equal(button(f,'Kaydet').props.disabled,true);
+ }finally{f.close();}
+});

@@ -38,11 +38,11 @@ before(async()=>{
     const built=await build({root,configFile:false,logLevel:'silent',resolve:{alias:{'@':root+'src'}},plugins:[{
       name:'telegram-view-test-fixtures',enforce:'pre',
       resolveId(source){
-        const key=source.includes('backendSync')?'backend':source.includes('services/accountExperience')?'policy':source.includes('stores/stopwatchStore')?'store':source.includes('stores/themeStore')?'theme':source==='vue-router'?'router':source.includes('composables/message')?'message':source.includes('services/socket')?'socket':/components\/(AccountStatusCard|SoundSettings|NotificationSettings)/.test(source)?'component':null;
+        const key=source.includes('backendSync')?'backend':source.includes('services/accountExperience')?'policy':source.includes('stores/stopwatchStore')?'store':source.includes('stores/themeStore')?'theme':source==='vue-router'?'router':(source.includes('composables/message') || source==='./message.js')?'message':source.includes('services/socket')?'socket':/components\/(AccountStatusCard|SoundSettings|NotificationSettings)/.test(source)?'component':null;
         return key?'\0telegram-fixture:'+key:null;
       },
       load(id){if(id.startsWith('\0telegram-fixture:'))return mocks[id.split(':').at(-1)];},
-      transform(source,id){if(id.endsWith('/'+name+'.vue'))return source.replace('</script>',`globalThis.__telegramViewFixture.capture({saveTelegram,removeTelegram,telegramSavedControl,telegramSaved,chatId,telegramError,telegramNotice,telegramConfirmed});\n</script>`);},
+      transform(source,id){if(id.endsWith('/'+name+'.vue'))return source.replace('</script>',`globalThis.__telegramViewFixture.capture(telegramConnection);\n</script>`);},
     },vue()],build:{write:false,minify:false,lib:{entry:root+'src/views/'+name+'.vue',formats:['es']},rollupOptions:{external:['vue']}}});
     await writeFile(artifact,(Array.isArray(built)?built[0]:built).output.find(x=>x.type==='chunk').code);
     views[name]=(await import(artifact.href)).default;
@@ -74,13 +74,13 @@ async function fixture(name,mode='active'){
 for(const name of ['ProfileView','SettingsView']){
   for(const mode of ['active','company'])test(name+': '+mode+' can read, bind and unlink its own Telegram connection',async()=>{
     const f=await fixture(name,mode);f.read=async id=>{f.calls.push(['read',id]);return {success:true,connected:false};};
-    await f.bindings.telegramSavedControl();assert.match(await f.html(),/Chat ID \(örn:/);
+    await f.bindings.telegramSavedControl();f.messages.length=0;assert.match(await f.html(),/Chat ID \(örn:/);
     f.bindings.chatId.value='1234';await f.bindings.saveTelegram();assert.match(await f.html(),/Bağlantıyı kes/);
     await f.bindings.removeTelegram(other);assert.equal(f.bindings.telegramSaved.value,false);
     assert.deepEqual(f.calls,[['read',own],['save','1234'],['remove',own]]);
   });
   for(const mode of ['pending','expired','cancelled'])test(name+': '+mode+' can read/unlink but cannot bind or gain notification rights',async()=>{
-    const f=await fixture(name,mode);await f.bindings.telegramSavedControl();const html=await f.html();
+    const f=await fixture(name,mode);await f.bindings.telegramSavedControl();f.messages.length=0;const html=await f.html();
     assert.match(html,/Bağlantıyı kes/);assert.doesNotMatch(html,/Chat ID \(örn:/);
     await f.bindings.removeTelegram();assert.equal(f.bindings.telegramSaved.value,false);
     f.bindings.chatId.value='5678';await f.bindings.saveTelegram();assert.equal(f.policy.canFeature('telegram'),false);
@@ -88,12 +88,12 @@ for(const name of ['ProfileView','SettingsView']){
   });
   test(name+': malformed connection state cannot masquerade as linked; stable form stays disabled',async()=>{
     const f=await fixture(name);f.read=async()=>({success:true,connected:'true',telegram_chat_id:'must-not-display'});
-    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,null);
-    const html=await f.html();assert.match(html,/Telegram işlemi tamamlanamadı/);assert.match(html,/disabled/);assert.doesNotMatch(html,/Bağlantıyı kes|must-not-display/);
+    await f.bindings.telegramSavedControl();f.messages.length=0;assert.equal(f.bindings.telegramSaved.value,null);
+    const html=await f.html();assert.equal(f.bindings.telegramError.value,unverifiable);assert.match(html,/disabled/);assert.doesNotMatch(html,/Bağlantıyı kes|must-not-display/);
   });
   test(name+': unauthenticated session cannot query, bind or unlink',async()=>{
     const f=await fixture(name);f.authenticated=false;
-    await f.bindings.telegramSavedControl();f.bindings.chatId.value='1234';await f.bindings.saveTelegram();await f.bindings.removeTelegram();
+    await f.bindings.telegramSavedControl();f.messages.length=0;f.bindings.chatId.value='1234';await f.bindings.saveTelegram();await f.bindings.removeTelegram();
     assert.deepEqual(f.calls,[]);assert.equal(f.bindings.telegramSaved.value,null);
   });
   test(name+': late connection/unlink replies do not affect another session',async()=>{
@@ -120,12 +120,13 @@ for(const name of ['ProfileView','SettingsView']){
       {success:operation==='save'?'telegram bağlantısı kesildi.':true}]]){
       test(`${name}: ${operation} rejects ${label} without storage writes or success notice`,async()=>{
         const f=await fixture(name);f.storage.set('telegramChatId','existing');
-        await f.bindings.telegramSavedControl();f.bindings.chatId.value='1234';let mutations=0;
+        await f.bindings.telegramSavedControl();f.messages.length=0;f.bindings.chatId.value='1234';let mutations=0;
         f[operation]=async()=>{mutations++;return response;};
         await f.bindings[operation==='save'?'saveTelegram':'removeTelegram']();
         assert.deepEqual(f.writes,[]);assert.equal(f.storage.get('telegramChatId'),'existing');
         assert.equal(f.bindings.telegramSaved.value,true);assert.equal(f.bindings.telegramConfirmed.value,false);assert.equal(mutations,1);
-        assert.deepEqual(f.messages,[]);assert.equal(f.bindings.telegramNotice.value,'');assert.equal(f.bindings.telegramError.value,unverifiable);
+        assert.deepEqual(f.messages,[['error',unverifiable]]);
+        assert.equal(f.bindings.telegramNotice.value,'');assert.equal(f.bindings.telegramError.value,unverifiable);
         assert.match(await f.html(),/Durumu yenile/);
       });
     }
@@ -135,14 +136,14 @@ for(const name of ['ProfileView','SettingsView']){
     assert.equal(f.bindings.telegramNotice.value,'Telegram bağlandı.');assert.equal(f.bindings.telegramSaved.value,true);
     await f.bindings.removeTelegram();assert.equal(f.storage.has('telegramChatId'),false);
     assert.equal(f.bindings.telegramSaved.value,false);
-    assert.equal(f.bindings.telegramNotice.value,'Telegram bağlantısı kaldırıldı.');assert.deepEqual(f.messages,[]);
+    assert.equal(f.bindings.telegramNotice.value,'Telegram bağlantısı kaldırıldı.');assert.deepEqual(f.messages,[['success','Telegram bağlandı.'],['success','Telegram bağlantısı kaldırıldı.']]);
   });
   test(name+': rejected refresh retains last-known status, marks it unconfirmed and preserves storage',async()=>{
     const f=await fixture(name);f.storage.set('telegramChatId','existing');
-    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,true);
+    await f.bindings.telegramSavedControl();f.messages.length=0;assert.equal(f.bindings.telegramSaved.value,true);
     f.read=async()=>{throw new Error('synthetic rejected request');};
-    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,true);assert.equal(f.bindings.telegramConfirmed.value,false);
-    assert.deepEqual(f.writes,[]);assert.deepEqual(f.messages,[]);assert.equal(f.bindings.telegramNotice.value,'');assert.equal(f.bindings.telegramError.value,unverifiable);
+    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,true);assert.equal(f.bindings.telegramConfirmed.value,false);assert.deepEqual(f.messages,[['error',unverifiable]]);
+    assert.deepEqual(f.writes,[]);assert.equal(f.bindings.telegramNotice.value,'');assert.equal(f.bindings.telegramError.value,unverifiable);
     assert.match(await f.html(),/Durumu yenile/);
   });
   test(name+': late bind reply and rejected refresh do not affect the next session',async()=>{
@@ -157,6 +158,6 @@ for(const name of ['ProfileView','SettingsView']){
   });
   test(name+': array status response is unknown even with success and connected properties',async()=>{
     const f=await fixture(name);f.read=async()=>Object.assign([],{success:true,connected:true});
-    await f.bindings.telegramSavedControl();assert.equal(f.bindings.telegramSaved.value,null);
+    await f.bindings.telegramSavedControl();f.messages.length=0;assert.equal(f.bindings.telegramSaved.value,null);
   });
 }

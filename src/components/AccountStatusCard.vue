@@ -13,7 +13,6 @@ const syncNotice = computed(() => {
   if (props.syncStatus === 'auth-required') return 'Değişikliklerinizi eşitlemek için yeniden giriş yapın. Cihazdaki kayıtlarınız korunuyor.';
   if (props.syncStatus === 'forbidden') return 'Sunucu kişisel değişiklikleri kabul etmedi. Veriler bu cihazda korunuyor; henüz hesabınıza aktarılmış sayılmaz.';
   if (props.syncStatus === 'conflict') return 'Bazı kişisel değişiklikler sunucuyla çakışıyor. Kayıtlarınız korunuyor; aşağıdaki çakışmaları inceleyin.';
-  if (props.pendingCount > 0) return `${props.pendingCount} kişisel değişiklik bu cihazda kayıtlı; sunucuya aktarılmayı bekliyor.`;
   if (props.syncStatus === 'retry') return 'Eşitleme tamamlanamadı. Cihazdaki kayıtlarınız korunuyor; yeniden deneyebilirsiniz.';
   return null;
 });

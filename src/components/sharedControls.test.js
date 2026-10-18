@@ -494,7 +494,7 @@ test("Home identifies personal conflict and requires separate explicit acceptanc
 
     await nextTick();
 
-    await button(tree, "Yerel değişikliklerden vazgeç").props.onClick();
+    await button(tree, "Cihazımdaki değişikliklerden vazgeç").props.onClick();
 
     await nextTick();
 
@@ -1016,9 +1016,9 @@ test("Home hides personal notice and shows shared notice only in its own tab", a
     const statusPanels = () =>
       walk(tree).filter((node) => node.props?.role === "status");
 
-    // Critical pending changes remain visible in the personal tab.
+    // A real sync failure stays visible in the personal tab; normal queued edits stay silent.
     assert.equal(statusPanels().length, 1);
-    assert.match(text(statusPanels()[0]), /2 kişisel değişiklik/);
+    assert.match(text(statusPanels()[0]), /Eşitleme tamamlanamadı/);
 
     assert.equal(text(tree).includes("Kişisel sayaçlar"), false);
 
@@ -1043,7 +1043,7 @@ test("Home hides personal notice and shows shared notice only in its own tab", a
     await nextTick();
 
     assert.equal(statusPanels().length, 1);
-    assert.match(text(statusPanels()[0]), /2 kişisel değişiklik/);
+    assert.match(text(statusPanels()[0]), /Eşitleme tamamlanamadı/);
 
     assert.equal(text(tree).includes(store.sharedNotice.message), false);
   } finally {
