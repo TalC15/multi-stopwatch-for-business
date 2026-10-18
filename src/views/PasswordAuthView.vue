@@ -201,7 +201,7 @@ async function resend(){
       <input id="auth-password" ref="passwordInput" v-model="password" :type="show?'text':'password'" :autocomplete="kind==='login'?'current-password':'new-password'" required minlength="16" :disabled="loading || syncingMfa || paused" aria-describedby="password-help" class="auth-input min-w-0 flex-1" />
       <button type="button" :aria-pressed="show" aria-controls="auth-password" :aria-label="show?'Parolayı gizle':'Parolayı göster'" class="auth-secondary shrink-0" @click="show=!show">{{show?'Gizle':'Göster'}}</button>
      </div>
-     <p id="password-help" class="mt-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">En az 16 karakter, en fazla 72 UTF-8 byte. Türkçe karakterler birden fazla byte olabilir.</p>
+     <p id="password-help" class="mt-2 text-xs leading-relaxed text-[var(--color-text-secondary)]">en az 16 karakter</p>
     </div>
     <div v-if="passwordForm && kind!=='login'">
      <label for="auth-confirm" class="mb-1.5 block text-sm font-bold">Yeni parola tekrar</label>

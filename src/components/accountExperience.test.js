@@ -34,12 +34,19 @@ for (const subscription of ['active','pending','expired','cancelled']) test('UX 
 for(const syncStatus of ['forbidden','auth-required','conflict','retry'])test('UX critical sync status remains actionable: '+syncStatus,async()=>{
  const html=await render(policy('verified'),{syncStatus});assert.match(html,/role="status"/);assert.match(html,/Yeniden dene/);assert.match(html,/korunuyor/);
 });
-test('UX queued changes remain visible until a real acknowledgement clears them',async()=>{
- assert.match(await render(policy('verified'),{pendingCount:2}),/2 kişisel değişiklik/);
+test('UX ordinary queued changes stay silent while sync failures remain actionable',async()=>{
+ for(const syncStatus of ['idle','syncing','done']) {
+  assert.equal(await render(policy('verified'),{pendingCount:2,syncStatus}),'<!--v-if-->');
+ }
+ for(const syncStatus of ['retry','forbidden','auth-required','conflict']) {
+  const html=await render(policy('verified'),{pendingCount:2,syncStatus});
+  assert.match(html,/role="status"/);assert.match(html,/Yeniden dene/);
+  assert.doesNotMatch(html,/2 kişisel değişiklik/);
+ }
  assert.equal(await render(policy('verified'),{pendingCount:0,syncStatus:'done'}),'<!--v-if-->');
 });
 test('UX sync notice retains responsive theme and keyboard focus styles',async()=>{
- const html=await render(policy('verified'),{pendingCount:1});
+ const html=await render(policy('verified'),{pendingCount:1,syncStatus:'retry'});
  for(const token of ['rounded-card','border-border','bg-card','text-text-primary','break-words','min-w-0','min-h-11','w-full','sm:w-auto','dark:text-text-primary','focus-visible:outline'])assert.ok(html.includes(token),token);
  const source=await readFile(new URL('./AccountStatusCard.vue',import.meta.url),'utf8');assert.doesNotMatch(source,/<style|style=|linear-gradient/);
  assert.match(html,/aria-live="polite"/);
