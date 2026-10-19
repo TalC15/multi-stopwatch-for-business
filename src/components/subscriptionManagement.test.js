@@ -68,10 +68,11 @@ before(async () => {
       export const useRouter=()=>({push:path=>globalThis.__salesUi.navigation.push(path),replace:path=>globalThis.__salesUi.navigation.push(path)});
       export const onBeforeRouteLeave=fn=>{globalThis.__salesUi.mayLeave=fn;}; export const onBeforeRouteUpdate=fn=>{globalThis.__salesUi.mayUpdate=fn;};`,
     capacitor: `export const Capacitor={getPlatform:()=>globalThis.__salesUi.native?'android':'web',isNativePlatform:()=>globalThis.__salesUi.native};`,
+    security: 'export default {render:()=>null};',
     theme: 'export const useThemeStore=()=>({isDark:false,toggleTheme(){}});',
   };
   const result = await build({ configFile: false, root, logLevel: 'silent', plugins: [{ name: 'test-only-sales-contract', enforce: 'pre',
-    resolveId(source) { const key = source.includes('backendSync') ? 'backend' : source === 'vue-router' ? 'router' : source === '@capacitor/core' ? 'capacitor' : source.includes('themeStore') ? 'theme' : null; if (key) return '\0sales-fixture:' + key; },
+    resolveId(source) { const key = source.includes('AccountSecurityLink.vue') ? 'security' : source.includes('backendSync') ? 'backend' : source === 'vue-router' ? 'router' : source === '@capacitor/core' ? 'capacitor' : source.includes('themeStore') ? 'theme' : null; if (key) return '\0sales-fixture:' + key; },
     load(name) { if (name.startsWith('\0sales-fixture:')) return mocks[name.slice(15)]; },
   }, vue({ template: { compilerOptions: { hoistStatic: false } } })], build: { write: false, minify: false, lib: { entry: root + 'src/views/SubscriptionManagementView.vue', formats: ['es'] }, rollupOptions: { external: ['vue'] } } });
   const code = (Array.isArray(result) ? result[0] : result).output.find(o => o.type === 'chunk').code;

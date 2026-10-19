@@ -142,7 +142,7 @@ before(async () => {
     export const resendPasswordMfa=async(...args)=>{f().calls.push(['mfa/resend',...args]);return f().request('mfa/resend',...args)};
     export const getUser=()=>({role:'worker'});
     export const getAuthGeneration=()=>f().auth?.getAuthGeneration() ?? f().generation;
-    export const getSessionMarker=()=>f().auth?.getSessionMarker() ?? f().marker;
+    export const getSessionMarker=()=>f().auth ? f().auth.getSessionMarker() : f().marker;
     export const AUTH_SESSION_CHANGED_EVENT='keeptimer:auth-session-changed';
     export const AUTH_USER_CHANGED_EVENT='keeptimer:auth-user-changed';`,
     request: `export const passwordAuthRequest=async(...args)=>{globalThis.__passwordUi.calls.push(args);return globalThis.__passwordUi.request(...args)};`,
@@ -660,3 +660,66 @@ test('R3 status replaces an unknown delivery notice with definitive rejection gu
     assert.equal(f.navigation.length, 0);
   } finally { f.app.unmount(); }
 });
+
+for (const operation of ['revoke', 'change', 'activation', 'reset']) {
+  test(`Phase 8: confirmed ${operation} own-session clear still displays completion`, async () => {
+    const tab = browser().tab();
+    tab.setFetch(() => loggedIn());
+    await tab.auth.login('A', 'fixture-pin');
+    const isLink = ['activation', 'reset'].includes(operation);
+    const f = fixture(isLink ? operation : 'change', isLink ? {challengeId:'fixture', context:'fixture-context'} : null, tab);
+    f.request = installPasswordRequests(tab).passwordAuthRequest;
+    try {
+      await tick();
+      tab.setFetch(() => ({ok:true, status:200, json:async()=>({success:true, requiresLogin:true, userId:user.id})}));
+      if (operation === 'revoke') {
+        await walk(f.tree).find(n=>n.tag==='button' && text(n).includes('tüm oturumlardan çık')).props.onClick();
+      } else {
+        if (!isLink) {
+          await f.input('auth-email','owner@example.test');
+          await f.input('auth-current','old-test-password');
+        }
+        await f.input('auth-password','new-test-password');
+        await f.input('auth-confirm','new-test-password');
+        await f.submit();
+      }
+      await tick();
+      assert.equal(tab.auth.getSessionMarker(), null);
+      assert.equal(tab.messages.length,1);
+      assert.match(tab.messages[0].text, operation === 'revoke' ? /Tüm oturumlar iptal edildi/ : /Parolanız güncellendi/);
+      assert.doesNotMatch(text(f.tree), /Tüm oturumlar iptal edildi|Parolanız güncellendi/);
+      assert.equal(walk(f.tree).some(n=>n.tag==='form'), false);
+      assert.equal(f.navigation.length, 0);
+    } finally { f.app.unmount(); }
+  });
+}
+
+for (const interruption of ['account', 'route', 'unmount']) {
+  test(`Phase 8: own-session completion receipt cannot cross ${interruption} change`, async () => {
+    const tab = browser().tab();
+    tab.setFetch(() => loggedIn());
+    await tab.auth.login('A', 'fixture-pin');
+    const f = fixture('change', null, tab), api = installPasswordRequests(tab);
+    let unmounted = false;
+    try {
+      await tick();
+      tab.setFetch(() => ({ok:true,status:200,json:async()=>({success:true,requiresLogin:true})}));
+      f.request = async (...args) => {
+        const result = await api.passwordAuthRequest(...args);
+        assert.equal(result.clearedGeneration, tab.auth.getAuthGeneration());
+        if (interruption === 'account') {
+          tab.setFetch(() => loggedIn(sidB, {...user,id:'00000000-0000-4000-8000-000000000002'}));
+          await tab.auth.login('B','fixture-pin');
+        } else if (interruption === 'route') {
+          f.route.meta.authKind = 'reset';
+          await tick();
+        } else { f.app.unmount(); unmounted = true; }
+        return result;
+      };
+      await walk(f.tree).find(n=>n.tag==='button' && text(n).includes('tüm oturumlardan çık')).props.onClick();
+      await tick();
+      assert.doesNotMatch(text(f.tree), /Tüm oturumlar iptal edildi/);
+      assert.equal(f.navigation.length, 0);
+    } finally { if (!unmounted) f.app.unmount(); }
+  });
+}

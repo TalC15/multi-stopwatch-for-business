@@ -1366,3 +1366,145 @@ test("agent initialization does not load timer workspaces or synchronize persona
   assert.deepEqual(server.requests, []);
   assert.deepEqual(notifications, []);
 });
+
+for(const states of [['running','running'],['paused','paused'],['running','paused'],['idle','paused']]) {
+ test('bulk real store: '+states.join('/'),async()=>{
+  auth.state.user.workspace_id=null;
+  const c=makeController();await c.initialize();
+  const up=[await c.addTimer(input()),await c.addTimer(input())],down=await c.addTimer(input({type:'down'}));
+  for(let i=0;i<2;i++)if(states[i]!=='idle'){await c.startTimer(up[i]);if(states[i]==='paused')await c.pauseTimer(up[i]);}
+  const action=states.includes('running')?'pause':'start';
+  assert.equal(c.bulkState('up').action,action);
+  const before=await timerDb.timers.get(down),result=await c.runBulkTimers('up');
+  assert.equal(result.failed,0);
+  assert.equal(result.succeeded,action==='pause'?states.filter(x=>x==='running').length:2);
+  assert.deepEqual(await timerDb.timers.get(down),before);
+  for(const id of up)assert.equal((await timerDb.timers.get(id)).status,action==='pause'?'paused':'running');
+  assert.equal(c.bulkState('up').action,action==='pause'?'start':'pause');
+  if(action==='pause'){await c.startTimer(up[0]);assert.equal(c.bulkState('up').action,'pause');}
+  assert.equal(await timerDb.personalOutbox.count(),0);
+  assert.equal(c.bulkBusy.value,false);
+ });
+}
+test('bulk empty and terminal lists never emit commands or messages',async()=>{
+ auth.state.user.workspace_id=null;const c=makeController();await c.initialize();
+ assert.deepEqual(await c.runBulkTimers('up'),{succeeded:0,failed:0});
+ c.stopwatches.value=[timer({status:'completed'}),timer({id:ids.second,status:'expired'})];
+ assert.equal(c.bulkState('up').ids.length,0);await c.runBulkTimers('up');
+ assert.equal(errors.length,0);assert.equal(successes.length,0);assert.equal(legacy.length,0);
+});
+async function bulkSharedFixture(second={},overrides={}){
+ online=true;const rows=[serverTimer({id:ids.timer,is_shared:true}),serverTimer({id:ids.second,is_shared:true,...second})];
+ backend.dbGetSharedTimers=async()=>rows;
+ backend.dbUpdateTimer=async(id,update)=>{Object.assign(rows.find(r=>r.id===id),update);return {success:true};};
+ const c=makeController(undefined,{online:()=>online,...overrides});await c.initialize();await c.loadSharedTimers();
+ return {c,rows};
+}
+test('bulk shared snapshots targets, serializes commands, blocks double/manual clicks, skips later timers',async()=>{
+ const {c,rows}=await bulkSharedFixture();const entered=deferred(),release=deferred(),calls=[];
+ const update=backend.dbUpdateTimer;
+ backend.dbUpdateTimer=async(id,data)=>{calls.push(id);if(calls.length===1){entered.resolve();await release.promise;}return update(id,data);};
+ const run=c.runBulkTimers('shared');await entered.promise;
+ assert.equal(c.bulkBusy.value,true);assert.equal((await c.runBulkTimers('shared')).busy,true);
+ assert.equal(await c.startTimer(ids.second),false);assert.equal(calls.length,1);
+ assert.equal(errors.length,1);assert.match(errors[0],/toplu işlem sürüyor/);
+ const later=serverTimer({id:'00000000-0000-4000-8000-000000000099',is_shared:true});rows.push(later);
+ release.resolve();assert.deepEqual(await run,{succeeded:2,failed:0});
+ assert.deepEqual(calls,[ids.timer,ids.second]);assert.equal(later.status,'idle');
+ assert.equal(await timerDb.personalOutbox.count(),0);
+});
+for(const changed of ['account','workspace'])test('bulk shared stops after '+changed+' change during first command',async()=>{
+ const {c}=await bulkSharedFixture(),entered=deferred(),release=deferred();let calls=0;
+ backend.dbUpdateTimer=async()=>{calls++;entered.resolve();await release.promise;return {success:true};};
+ const run=c.runBulkTimers('shared');await entered.promise;
+ if(changed==='workspace')auth.state.user={...auth.state.user,workspace_id:ids.otherWorkspace};else{auth.state.generation++;auth.state.user={...auth.state.user,id:ids.other};}
+ release.resolve();assert.equal((await run).stale,true);assert.equal(calls,1);assert.equal(errors.length,0);assert.equal(successes.length,0);
+});
+test('bulk shared partial failure preserves confirmed first result and emits one summary',async()=>{
+ const {c,rows}=await bulkSharedFixture(),update=backend.dbUpdateTimer;let calls=0;
+ backend.dbUpdateTimer=async(...args)=>++calls===1?update(...args):{success:false};
+ const result=await c.runBulkTimers('shared');assert.deepEqual(result,{succeeded:1,failed:1});
+ assert.equal(rows[0].status,'running');assert.equal(rows[1].status,'idle');
+ assert.equal(errors.length,1);assert.match(errors[0],/1 sayaç.*1 işlem/);assert.equal(c.bulkState('shared').action,'pause');
+});
+test('bulk shared offline or read-only never calls command',async()=>{
+ const {c}=await bulkSharedFixture();let calls=0;backend.dbUpdateTimer=async()=>{calls++;return {success:true};};
+ online=false;assert.equal(c.bulkState('shared').ids.length,0);await c.runBulkTimers('shared');
+ online=true;c.sharedState.value='auth-required';await c.runBulkTimers('shared');assert.equal(calls,0);
+});
+test('bulk skips a second target completed by a server update while first command waits',async()=>{
+ const {c,rows}=await bulkSharedFixture({type:'down'}),entered=deferred(),release=deferred(),update=backend.dbUpdateTimer;let calls=0;
+ backend.dbUpdateTimer=async(...args)=>{calls++;entered.resolve();await release.promise;return update(...args);};
+ const run=c.runBulkTimers('shared');await entered.promise;
+ rows[1].status='completed';
+ socketCallback({event:'updated',data:{id:ids.second,status:'completed'}});
+ await c.loadSharedTimers();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(c.stopwatches.value.find(t=>t.id===ids.second).status,'expired');
+ release.resolve();await run;assert.equal(calls,1);
+});
+
+for(const tab of ['up','down'])test('scoped bulk: shared wait permits '+tab+' manual and bulk controls',async()=>{
+ const {c,rows}=await bulkSharedFixture(),entered=deferred(),release=deferred(),update=backend.dbUpdateTimer;const calls=[];
+ // Private rows retain the existing outbox path; new tab is never a shared target.
+ const id=await c.addTimer(input({type:tab}));await c.requestSync();
+ backend.dbUpdateTimer=async(id,data)=>{calls.push(id);if(calls.length===1){entered.resolve();await release.promise;}return update(id,data);};
+ const shared=c.runBulkTimers('shared');await entered.promise;
+ try{
+  assert.equal(await c.startTimer(id),true);assert.equal(await c.pauseTimer(id),true);
+  assert.equal(c.bulkState('shared').busy,true);assert.equal(c.bulkState(tab).busy,false);
+  const personal=await c.runBulkTimers(tab);assert.deepEqual(personal,{succeeded:1,failed:0});
+  assert.equal(c.bulkState(tab).busy,false);assert.equal(c.bulkState('shared').busy,true);
+  assert.equal(c.isTimerBusy(ids.second),true);assert.equal(c.isTimerBusy(id),false);
+ }finally{release.resolve();await shared;}
+ assert.deepEqual(calls,[ids.timer,ids.second]);assert.equal(rows.every(r=>r.status==='running'),true);
+ assert.equal(c.bulkBusy.value,false);assert.equal(errors.length,0);
+});
+for(const first of ['shared','personal'])test('scoped bulk independent completion order: '+first,async()=>{
+ const sharedEntered=deferred(),sharedRelease=deferred(),personalEntered=deferred(),personalRelease=deferred();
+ let holdPersonal=false;
+ const experience={currentData:{value:{account:{kind:'company'}}},ensureFresh:async()=>true,canShared:()=>true,canFeature:()=>false,canWritePersonal:()=>true,
+  requirePersonalWrite:async()=>{if(holdPersonal){personalEntered.resolve();await personalRelease.promise;}return true;}};
+ const {c}=await bulkSharedFixture({},{experience});
+ const id=await c.addTimer(input());await c.requestSync();
+ const update=backend.dbUpdateTimer;backend.dbUpdateTimer=async(...args)=>{sharedEntered.resolve();await sharedRelease.promise;return update(...args);};
+ const shared=c.runBulkTimers('shared');await sharedEntered.promise;
+ // Hold the existing entitlement checkpoint before the actual IndexedDB write.
+ holdPersonal=true;
+ const personal=c.runBulkTimers('up');await personalEntered.promise;
+ try{
+  assert.equal(c.bulkState('shared').busy,true);assert.equal(c.bulkState('up').busy,true);
+  assert.equal((await c.runBulkTimers('up')).busy,true);assert.equal(await c.startTimer(id),false);
+  if(first==='personal'){
+   personalRelease.resolve();await personal;assert.equal(c.bulkState('up').busy,false);assert.equal(c.bulkState('shared').busy,true);sharedRelease.resolve();
+  }else{
+   sharedRelease.resolve();await shared;
+   assert.equal(c.bulkState('shared').busy,false);assert.equal(c.bulkState('up').busy,true);personalRelease.resolve();
+  }
+  await Promise.all([shared,personal]);assert.equal(c.bulkBusy.value,false);
+ }finally{sharedRelease.resolve();personalRelease.resolve();await Promise.all([shared,personal]);}
+});
+test('scoped bulk dispose rejects late shared result and releases UI ownership',async()=>{
+ const {c}=await bulkSharedFixture(),entered=deferred(),release=deferred();let calls=0;
+ backend.dbUpdateTimer=async()=>{calls++;entered.resolve();await release.promise;return {success:true};};
+ const work=c.runBulkTimers('shared');await entered.promise;c.dispose();
+ assert.equal(c.bulkBusy.value,false);assert.equal(c.isTimerBusy(ids.timer),false);
+ release.resolve();assert.equal((await work).stale,true);assert.equal(calls,1);assert.equal(errors.length,0);assert.equal(successes.length,0);
+});
+
+test('scoped bulk old session completion cannot clear the new session operation',async()=>{
+ const oldEntered=deferred(),oldRelease=deferred(),newEntered=deferred(),newRelease=deferred();let hold=false;
+ const experience={currentData:{value:{account:{kind:'company'}}},ensureFresh:async()=>true,canShared:()=>true,canFeature:()=>false,canWritePersonal:()=>true,
+  requirePersonalWrite:async()=>{if(hold){newEntered.resolve();await newRelease.promise;}return true;}};
+ const {c}=await bulkSharedFixture({},{experience});const id=await c.addTimer(input());await c.requestSync();
+ backend.dbUpdateTimer=async()=>{oldEntered.resolve();await oldRelease.promise;return {success:true};};
+ const old=c.runBulkTimers('shared');await oldEntered.promise;
+ auth.state.generation++;auth.state.identity='new-session';auth.state.marker='new-marker';await c.initialize();
+ hold=true;const next=c.runBulkTimers('up');await newEntered.promise;
+ try{
+  oldRelease.resolve();assert.equal((await old).stale,true);
+  assert.equal(c.bulkState('up').busy,true);assert.equal(c.isTimerBusy(id),true);
+  assert.equal(errors.length,0);assert.equal(successes.length,0);
+ }finally{oldRelease.resolve();newRelease.resolve();await Promise.all([old,next]);}
+ assert.equal(c.bulkBusy.value,false);
+});

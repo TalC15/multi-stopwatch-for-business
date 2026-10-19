@@ -1,4 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { loadAccountSecurity } from '../services/accountSecurity.js';
+import { isSameAuthSession, getAuthGeneration, getSessionMarker } from '../services/backendSync.js';
 import { Capacitor } from "@capacitor/core";
 import { managementRedirect } from "../domain/subscriptionManagement.js";
 import {
@@ -8,6 +10,7 @@ import {
 } from "../services/backendSync";
 
 const routes = [
+  {path:'/account/security-unavailable',component:()=>import('../views/AccountSecurityUnavailableView.vue'),meta:{requiresAuth:true,managementBlocked:true}},
   { path:'/password-login',name:'PasswordLogin',component:()=>import('../views/PasswordAuthView.vue'),meta:{guest:true,authKind:'login'} },
   { path:'/account/activate',name:'AccountActivate',component:()=>import('../views/PasswordAuthView.vue'),meta:{authKind:'activation'} },
   { path:'/account/reset',name:'AccountReset',component:()=>import('../views/PasswordAuthView.vue'),meta:{authKind:'reset'} },
@@ -60,7 +63,14 @@ const router = createRouter({
 });
 
 // Auth guard
-router.beforeEach((to) => {
+router.beforeEach(async (to) => {
+  if(to.meta.authKind==='change' && isLoggedIn()) {
+    if(Capacitor.getPlatform()!=='web' || Capacitor.isNativePlatform())return '/account/security-unavailable';
+    const generation=getAuthGeneration(),marker=getSessionMarker();
+    const security=await loadAccountSecurity();
+    if(!isSameAuthSession(generation,marker))return false;
+    if(!security.ok || !security.supported)return '/account/security-unavailable';
+  }
   const redirect = managementRedirect(to, { loggedIn: isLoggedIn(), user: getUser(), native: Capacitor.getPlatform() !== 'web' || Capacitor.isNativePlatform() });
   if (redirect) return redirect;
   if (to.meta.requiresAuth && !isLoggedIn()) {
@@ -76,6 +86,9 @@ router.beforeEach((to) => {
 });
 
 if (typeof window !== "undefined") {
+  for(const event of ['keeptimer:auth-session-changed','keeptimer:auth-user-changed'])window.addEventListener(event, () => {
+    if(router.currentRoute.value.meta.authKind==='change' && isLoggedIn())void router.replace({path:'/account/security',force:true});
+  });
   window.addEventListener(AUTH_LOGIN_REQUIRED_EVENT, () => {
     router.replace("/login");
   });

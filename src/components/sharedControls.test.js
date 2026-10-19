@@ -1,3 +1,4 @@
+import { timerBulkState } from '../domain/timerBulk.js';
 import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
 import { build } from "vite";
@@ -179,6 +180,12 @@ function fixture() {
     },
 
     stopwatches: [],
+    bulkBusy: false,
+    bulkState(tab) { return {...timerBulkState(this.stopwatches,tab),busy:this.bulkTab===tab}; },
+    bulkTab: null,
+    isTimerBusy(id) { return this.busyIds?.includes(id) || false; },
+    busyIds: [],
+    async runBulkTimers() {},
     presetTimes: [],
     presetNames: [],
     name: "Work",
@@ -1189,4 +1196,45 @@ test("Home sorts shared timers in read-only mode", async () => {
   } finally {
     app.unmount();
   }
+});
+
+test('Home bulk button follows selected tab, manual state changes, disabled and busy state',async()=>{
+ const {store,calls}=fixture();store.sharedWritable=true;
+ store.stopwatches=[{id:'up',type:'up',status:'running',isShared:false},{id:'down',type:'down',status:'paused',isShared:false},{id:'shared',type:'up',status:'idle',isShared:true}];
+ store.runBulkTimers=async tab=>{calls.push(['bulk',tab]);};
+ const {tree,app}=mount('Home');
+ const bulk=()=>walk(tree).find(n=>n.tag==='button'&&/^Tümünü/.test(n.props.title||''));
+ try{
+  assert.equal(bulk().props['aria-label'],'Tümünü duraklat');
+  store.stopwatches[0].status='paused';await nextTick();assert.equal(bulk().props['aria-label'],'Tümünü başlat');
+  await bulk().props.onClick();assert.deepEqual(calls.at(-1),['bulk','up']);
+  await button(tree,'Sayaç').props.onClick();await nextTick();await bulk().props.onClick();assert.deepEqual(calls.at(-1),['bulk','down']);
+  await button(tree,'Ortak').props.onClick();await nextTick();await bulk().props.onClick();assert.deepEqual(calls.at(-1),['bulk','shared']);
+  store.bulkTab="shared";await nextTick();assert.equal(bulk().props.disabled,true);assert.equal(bulk().props['aria-busy'],true);
+  store.bulkTab=null;store.stopwatches=[];await nextTick();assert.equal(bulk().props.disabled,true);
+ }finally{app.unmount();}
+});
+
+for(const type of ['up','down'])test('card shows accessible bulk lock only for its own target: '+type,async()=>{
+ const {store,calls}=fixture();store.sharedWritable=true;
+ const timer=reactive({id:'target',name:'Target',type,status:'running',isShared:false,targetMinutes:5,elapsed:0,remaining:5000,isPay:false});
+ store.busyIds=['target'];const {tree,app}=mount('Card',{timer});
+ try{
+  const controls=()=>walk(tree).filter(n=>n.tag==='button'&&n.props['aria-busy']!==undefined);
+  assert.equal(controls().length,3);assert.match(text(tree),/toplu işlem sürüyor/);
+  for(const node of controls()){assert.equal(node.props.disabled,true);assert.equal(node.props['aria-disabled'],true);assert.match(node.props.title,/toplu işlem/);await node.props.onClick();}
+  assert.deepEqual(calls,[]);
+  store.busyIds=['different'];await nextTick();assert.doesNotMatch(text(tree),/toplu işlem sürüyor/);
+  for(const node of controls())assert.equal(node.props.disabled,false);
+  await button(tree,'Durdur').props.onClick();assert.ok(calls.includes('pause'));
+ }finally{app.unmount();}
+});
+test('Home selected-tab busy indicator does not follow an unrelated shared batch',async()=>{
+ const {store}=fixture();store.bulkTab='shared';store.stopwatches=[{id:'up',type:'up',status:'paused',isShared:false}];
+ const {tree,app}=mount('Home');const bulk=()=>walk(tree).find(n=>/^Tümünü/.test(n.props?.title||''));
+ try{
+  assert.equal(bulk().props.disabled,false);assert.equal(bulk().props['aria-busy'],false);
+  await button(tree,'Ortak').props.onClick();await nextTick();assert.equal(bulk().props.disabled,true);assert.equal(bulk().props['aria-busy'],true);
+  await button(tree,'Kronometre').props.onClick();await nextTick();assert.equal(bulk().props.disabled,false);assert.equal(bulk().props['aria-busy'],false);
+ }finally{app.unmount();}
 });

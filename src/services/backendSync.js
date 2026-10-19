@@ -66,12 +66,29 @@ export function isTabSessionCurrent() {
   const identity = getTabSessionIdentity();
   return Boolean(identity && identity === getSessionMarker());
 }
+function withoutTelegramId(user) {
+  if(!user || typeof user!=='object' || Array.isArray(user))return user;
+  const safe={...user};delete safe.telegram_chat_id;delete safe.telegramChatId;return safe;
+}
+export function cleanLegacyTelegramStorage() {
+  for(const storage of [globalThis.localStorage,globalThis.sessionStorage]) {
+    try {
+      storage?.removeItem('telegramChatId');
+      const raw=storage?.getItem('user');
+      if(!raw)continue;
+      const user=JSON.parse(raw);
+      if(user && typeof user==='object' && !Array.isArray(user) &&
+         (Object.hasOwn(user,'telegram_chat_id') || Object.hasOwn(user,'telegramChatId')))
+        storage.setItem('user',JSON.stringify(withoutTelegramId(user)));
+    } catch { /* Only known fields; preserve malformed/blocked storage as-is. */ }
+  }
+}
 function getCachedUser() {
   if (!isTabSessionCurrent()) return null;
   try {
     const user = JSON.parse(localStorage.getItem("user"));
     return user?.id && getSessionMarker()?.startsWith(`${user.id}:`)
-      ? user
+      ? withoutTelegramId(user)
       : null;
   } catch {
     return null;
@@ -88,7 +105,7 @@ export function getUser() {
   return isLocalAccountScopeReconciled() ? getCachedUser() : null;
 }
 export function saveUser(user) {
-  localStorage.setItem("user", JSON.stringify(user));
+  localStorage.setItem("user", JSON.stringify(withoutTelegramId(user)));
   emit(AUTH_USER_CHANGED_EVENT);
 }
 // Local UI/scope availability is independent of network/access-token readiness.
@@ -113,6 +130,7 @@ export function hasUsableAccessToken() {
   return Boolean(token && (!payload.exp || payload.exp * 1000 > Date.now()));
 }
 export function initializeAuthSession() {
+  cleanLegacyTelegramStorage();
   nativeNeedsReconciliation = true;
   nativeRequiresLogin = false;
   nativeLocalScopeIdentity = null;
@@ -165,8 +183,14 @@ function clearCurrentSession(generation, marker) {
   emit(AUTH_LOGIN_REQUIRED_EVENT);
   return true;
 }
-export function clearAuthSessionIfCurrent(generation, marker) {
-  return withAuthMutationLock(() => clearCurrentSession(generation, marker));
+export function clearAuthSessionIfCurrent(generation, marker, notification = {}) {
+  return withAuthMutationLock(() => {
+    let notify = false;
+    try { notify = notification.isCurrent?.() !== false; } catch { /* A broken view cannot prevent logout. */ }
+    const cleared = clearCurrentSession(generation, marker);
+    if (cleared && notify) { try { notification.onCleared?.(); } catch { /* Clearing succeeded independently of UI feedback. */ } }
+    return cleared;
+  });
 }
 const sessionIdFrom = (marker) => marker?.slice(marker.indexOf(":") + 1);
 const staleResult = (generation) => ({
@@ -283,7 +307,7 @@ export async function bootstrapNativeAuthSession() {
 function installNativeSession(data, identity, previousMarker) {
   try {
     // Prepare profile/tab first. The resumable shared marker is the final commit.
-    localStorage.setItem("user", JSON.stringify(data.user));
+    localStorage.setItem("user", JSON.stringify(withoutTelegramId(data.user)));
     sessionStorage.setItem(TAB_AUTH_SESSION_KEY, identity);
     localStorage.setItem(AUTH_SESSION_KEY, identity);
   } catch {

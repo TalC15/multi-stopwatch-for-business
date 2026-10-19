@@ -56,18 +56,18 @@ test('actual router enforces role and platform matrix; existing worker/manager r
   const route = path => routes.find(r => r.path === path);
   for (const role of ['worker', 'manager', 'individual', 'superadmin', 'agent']) {
     Object.assign(actor, { loggedIn: true, user: { role }, native: false });
-    assert.equal(guard(route('/superadmin/agents')), role === 'superadmin' ? undefined : role === 'agent' ? '/agent/customers' : '/');
-    for (const path of ['/agent/customers', '/agent/customers/:customerId']) assert.equal(guard(route(path)), role === 'agent' ? undefined : '/');
+    assert.equal(await guard(route('/superadmin/agents')), role === 'superadmin' ? undefined : role === 'agent' ? '/agent/customers' : '/');
+    for (const path of ['/agent/customers', '/agent/customers/:customerId']) assert.equal(await guard(route(path)), role === 'agent' ? undefined : '/');
     actor.native = true;
-    for (const path of ['/superadmin/agents', '/agent/customers']) assert.equal(guard(route(path)), '/management-unavailable');
+    for (const path of ['/superadmin/agents', '/agent/customers']) assert.equal(await guard(route(path)), '/management-unavailable');
   }
   Object.assign(actor, { loggedIn: true, user: { role: 'agent' }, native: false });
-  for (const path of ['/', '/settings', '/manager', '/superadmin', '/profile', '/login']) assert.equal(guard(route(path)), '/agent/customers');
-  actor.native = true; assert.equal(guard(route('/')), '/management-unavailable');
+  for (const path of ['/', '/settings', '/manager', '/superadmin', '/profile', '/login']) assert.equal(await guard(route(path)), '/agent/customers');
+  actor.native = true; assert.equal(await guard(route('/')), '/management-unavailable');
   actor.native = false; actor.loggedIn = false; actor.user = null;
-  assert.equal(guard(route('/agent/customers')), '/login'); assert.equal(guard(route('/')), undefined);
-  actor.loggedIn = true; actor.user = { role: 'manager' }; assert.equal(guard(route('/manager')), undefined);
-  actor.user = { role: 'worker' }; assert.equal(guard(route('/')), undefined); assert.equal(guard(route('/manager')), '/');
+  assert.equal(await guard(route('/agent/customers')), '/login'); assert.equal(await guard(route('/')), undefined);
+  actor.loggedIn = true; actor.user = { role: 'manager' }; assert.equal(await guard(route('/manager')), undefined);
+  actor.user = { role: 'worker' }; assert.equal(await guard(route('/')), undefined); assert.equal(await guard(route('/manager')), '/');
 });
 test('API rejects role/native/session access before any request', async () => {
   for (const changes of [{ native: true }, { loggedIn: false }, { identity: null }, { user: { role: 'worker' } }, { user: { role: 'individual' } }]) {
