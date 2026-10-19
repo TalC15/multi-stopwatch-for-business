@@ -33,7 +33,7 @@ export function managementRedirect(to, { loggedIn, user, native }) {
   if (to.meta.managementBlocked) return undefined;
   if (user?.role === 'agent' && loggedIn) {
     if (native) return '/management-unavailable';
-    if (to.meta.salesRole !== 'agent') return '/agent/customers';
+    if (to.meta.salesRole !== 'agent' && to.meta.authKind !== 'change') return '/agent/customers';
   }
   if (!to.meta.salesRole) return undefined;
   if (native) return '/management-unavailable';

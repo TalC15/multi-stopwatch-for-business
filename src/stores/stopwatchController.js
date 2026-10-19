@@ -1,3 +1,4 @@
+import { bulkEligible, timerBulkState } from '../domain/timerBulk.js';
 import {
   createSharedApi,
   validateSharedEnvelope,
@@ -61,6 +62,19 @@ export function createStopwatchController({
     user = ref(null),
     syncStatus = ref("idle"),
     pendingCount = ref(0);
+  const bulkOperations = shallowRef([]);
+  const bulkBusy = computed(() => bulkOperations.value.some(operation => current(operation.ctx)));
+  function isBulkBusy(tab) {
+    return bulkOperations.value.some(operation => operation.tab === tab && current(operation.ctx));
+  }
+  function isTimerBusy(id) {
+    return bulkOperations.value.some(operation => operation.ids.has(id) && current(operation.ctx));
+  }
+  function rejectBulkConflict(id) {
+    if (!isTimerBusy(id)) return false;
+    message.warning("Bu sayaç için toplu işlem sürüyor; tamamlanmasını bekleyin.");
+    return true;
+  }
   const syncIssues = ref([]),
     syncReview = shallowRef(null),
     resolvingSync = ref(false);
@@ -240,6 +254,7 @@ export function createStopwatchController({
     manager: { text: "text-violet-600 dark:text-violet-300" },
     superadmin: { text: "text-amber-600 dark:text-amber-300" },
   };
+  let localViewRevision = 0;
   let epoch = 0,
     disposed = false,
     suspended = false,
@@ -363,9 +378,9 @@ export function createStopwatchController({
     { flush: "sync" },
   );
 
-  function requireSharedWrite() {
+  function requireSharedWrite(silent = false) {
     if (experience && !experience.canShared()) {
-      message.warning("Ortak sayaçlar yalnız doğrulanmış şirket hesaplarında kullanılabilir.");
+      if (!silent) message.warning("Ortak sayaçlar yalnız doğrulanmış şirket hesaplarında kullanılabilir.");
       return false;
     }
     if (!online()) {
@@ -376,7 +391,7 @@ export function createStopwatchController({
       return true;
     }
 
-    if (now() - lastWarning >= 2000) {
+    if (!silent && now() - lastWarning >= 2000) {
       lastWarning = now();
 
       const notice = sharedNotice.value;
@@ -452,6 +467,7 @@ export function createStopwatchController({
     );
   }
   async function readVisible(ctx) {
+    const revision = localViewRevision;
     const local = await repository.listStandaloneTimers();
     const personal = ctx.scope
       ? await repository.listWorkspacePersonalTimers(ctx.scope)
@@ -460,10 +476,15 @@ export function createStopwatchController({
       && (!experience || experience.currentData.value?.account.kind !== 'individual')
       ? await repository.listSharedTimerCache(ctx.scope)
       : [];
-    return [...local, ...personal, ...shared];
+    return {rows:[...local, ...personal, ...shared],revision};
   }
-  function applyRows(rows, ctx) {
+  function applyRows({rows,revision}, ctx) {
     if (!current(ctx)) return;
+    // A read started before our committed write cannot replace its visible result.
+    if (revision !== localViewRevision) {
+      void reloadLocal(ctx).catch(() => {});
+      return;
+    }
     if (!sharedClock) {
       const cachedClock = rows.find(
         (t) =>
@@ -505,6 +526,7 @@ export function createStopwatchController({
     applyRows(rows, ctx);
   }
   function clearView() {
+    bulkOperations.value = [];
     closeSharedLoadingMessage();
     sharedAccess.value = "loading";
     cancelRetry();
@@ -602,6 +624,7 @@ export function createStopwatchController({
   }
   function publish(record, ctx) {
     assertCurrent(ctx);
+    localViewRevision++;
     const item = displayTimer(record, now());
     const index = stopwatches.value.findIndex((t) => t.id === item.id);
     if (index < 0) stopwatches.value.push(item);
@@ -701,7 +724,7 @@ export function createStopwatchController({
           return { record: old, previous: old };
         }
         const next = transform({ ...old });
-        if (!next) return { record: old, previous: old };
+        if (!next) return { record: old, previous: old, unchanged: true };
         personalStateFromLocal(next); // Same canonical time rules for both local modes.
         const saved =
           mode === MODE.STANDALONE
@@ -719,10 +742,13 @@ export function createStopwatchController({
     deleting = false,
     label = "sayacı",
     automatic = false,
+    batch = null,
   ) {
+    if (!batch && !automatic && rejectBulkConflict(id)) return false;
+    if (batch && !current(batch.ctx)) return false;
     const selected = stopwatches.value.find((t) => t.id === id);
     if (selected?.dataMode === MODE.SHARED)
-      return sharedMutation(id, sharedCommand, label);
+      return sharedMutation(id, sharedCommand, label, {silent:!!batch, batch});
     const ctx = capture();
     return serial(id, async () => {
       try {
@@ -735,7 +761,10 @@ export function createStopwatchController({
           if (!await experience.requirePersonalWrite(ctx.scope)) throw new Error("Abonelik hakkı doğrulanamadı. Kayıtlarınız korundu; bağlantınızı ve aboneliğinizi kontrol edin.");
           assertCurrent(ctx);
         }
-        const { record, previous } = await localChange(id, ctx, transform, deleting);
+        const guardedTransform=batch ? old=>bulkEligible(old,batch.tab) &&
+          (batch.action==='pause'?old.status==='running':['paused','idle'].includes(old.status)) ? transform(old) : null : transform;
+        const { record, previous, unchanged } = await localChange(id, ctx, guardedTransform, deleting);
+        if (batch && unchanged) return false;
         // Claim the alarm from the state read inside the IndexedDB transaction,
         // not a possibly stale view in another tab.
         const newAlarm = !deleting && previous.dataMode !== MODE.SHARED && (
@@ -744,6 +773,7 @@ export function createStopwatchController({
         );
         assertCurrent(ctx);
         if (deleting) {
+          localViewRevision++;
           stopwatches.value = stopwatches.value.filter((t) => t.id !== id);
           cancelSound(id);
           void haptic();
@@ -762,7 +792,7 @@ export function createStopwatchController({
         if (old.dataMode === MODE.WORKSPACE_PERSONAL) void requestSync();
         return true;
       } catch (error) {
-        if (current(ctx))
+        if (current(ctx) && !batch)
           message.error(
             error.message || "Sayaç kaydedilemedi; işlem uygulanmadı",
           );
@@ -850,7 +880,7 @@ export function createStopwatchController({
       return null;
     }
   }
-  const startTimer = (id) =>
+  const startTimer = (id, batch = null) =>
     action(
       id,
       (old) => {
@@ -861,9 +891,9 @@ export function createStopwatchController({
           return null;
         return { ...old, status: "running", startTime: now() };
       },
-      { command: "start" },
+      { command: "start" }, false, "sayacı", false, batch,
     );
-  const pauseTimer = (id) =>
+  const pauseTimer = (id, batch = null) =>
     action(
       id,
       (old) => {
@@ -878,7 +908,7 @@ export function createStopwatchController({
           pausedCount: old.pausedCount + 1,
         };
       },
-      { command: "pause" },
+      { command: "pause" }, false, "sayacı", false, batch,
     );
   const updateIsPay = (id, value) =>
     action(
@@ -892,6 +922,39 @@ export function createStopwatchController({
     );
   const deleteTimer = (timer, label) =>
     action(timer.id, null, { command: "delete" }, true, label);
+
+  function bulkState(tab) {
+    const writable=ready.value && (tab!=='shared' ||
+      sharedWritable.value && (!experience || experience.canShared()) && online());
+    // Match single-timer policy: Standalone remains local; offline private edits
+    // stay in the existing outbox and must pass server checks when synchronized.
+    const personalAllowed=!experience || !online() || experience.canWritePersonal();
+    const rows=tab==='shared' || personalAllowed ? stopwatches.value :
+      stopwatches.value.filter(timer=>timer.dataMode===MODE.STANDALONE);
+    const selection=timerBulkState(rows,tab,writable);
+    return {...selection,busy:isBulkBusy(tab) || selection.ids.some(isTimerBusy)};
+  }
+  async function runBulkTimers(tab) {
+    const selection=bulkState(tab),ctx=capture();
+    if(selection.busy)return {busy:true};
+    if(!selection.ids.length)return {succeeded:0,failed:0};
+    const batch={ctx,tab,action:selection.action,ids:new Set(selection.ids)};
+    bulkOperations.value=[...bulkOperations.value,batch];
+    let succeeded=0,failed=0;
+    try {
+      // One command at a time. Freeze IDs/tab/scope, re-read each timer before writing.
+      for(const id of selection.ids) {
+        if(!current(ctx))return {stale:true,succeeded,failed};
+        const row=stopwatches.value.find(t=>t.id===id);
+        if(!bulkEligible(row,tab) || (batch.action==='pause'?row.status!=='running':!['paused','idle'].includes(row.status)))continue;
+        const result=await (batch.action==='pause'?pauseTimer(id,batch):startTimer(id,batch));
+        if(!current(ctx))return {stale:true,succeeded,failed};
+        if(result===true)succeeded++;else failed++;
+      }
+      if(failed)message.warning(`${succeeded} sayaç güncellendi; ${failed} işlem doğrulanamadı. Güncel durumları kontrol edin.`);
+      return {succeeded,failed};
+    } finally {bulkOperations.value=bulkOperations.value.filter(operation=>operation!==batch);}
+  }
 
   async function tick() {
     if (disposed) return;
@@ -1202,9 +1265,11 @@ export function createStopwatchController({
     id,
     command,
     label = "sayacı",
-    { autoStart = false } = {},
+    { autoStart = false, silent = false, batch = null } = {},
   ) {
-    if (!requireSharedWrite()) return false;
+    if (!batch && rejectBulkConflict(id)) return false;
+    if (batch && !current(batch.ctx)) return false;
+    if (!requireSharedWrite(silent)) return false;
     const ctx = capture();
     const old = stopwatches.value.find((t) => t.id === id);
     if (
@@ -1282,9 +1347,9 @@ export function createStopwatchController({
                   ? "Ortak sayaç değişti. Güncel durum alınıyor."
                   : "İşlemin sonucu henüz doğrulanamadı. Güncel durum alınıyor.";
 
-        const loadingId = isLoading ? message.loading(text) : null;
+        const loadingId = isLoading && !silent ? message.loading(text) : null;
 
-        if (!isLoading) {
+        if (!isLoading && !silent) {
           message.warning(text);
         }
 
@@ -1424,6 +1489,7 @@ export function createStopwatchController({
     stopSharedLoadingMessage();
     closeSharedLoadingMessage();
     disposed = true;
+    bulkOperations.value = [];
     epoch++;
     subscription?.unsubscribe();
     stopTick();
@@ -1433,6 +1499,7 @@ export function createStopwatchController({
     removers.forEach((remove) => remove());
   }
   return {
+    bulkBusy, bulkState, runBulkTimers, isBulkBusy, isTimerBusy,
     sharedNotice,
     sharedState,
     sharedPending,

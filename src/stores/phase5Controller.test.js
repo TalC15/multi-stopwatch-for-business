@@ -97,3 +97,20 @@ test('Phase 5 real sync API/engine: unknown or array-valued 403 remains forbidde
     await timerDb.personalOutbox.clear(); await timerDb.timers.clear();
   }
 });
+
+test('bulk offline private changes remain queued; online expired scope leaves only Standalone eligible',async()=>{
+ const f=fixture();await enqueuePersonalPut(timer(),scope,{isNew:true});await f.controller.initialize();await f.controller.requestSync();
+ f.net.online=false;f.events.dispatchEvent(new Event('offline'));
+ assert.deepEqual(await f.controller.runBulkTimers('up'),{succeeded:1,failed:0});
+ assert.equal((await listWorkspacePersonalTimers(scope))[0].status,'running');
+ assert.equal((await listPersonalOutbox(scope)).length,1);assert.equal(f.io.shared,0);
+ f.net.online=true;f.net.status='expired';f.net.code='SUBSCRIPTION_EXPIRED';await f.experience.refresh();
+ assert.equal(f.controller.bulkState('up').ids.length,0);
+ const standalone={...timer({id:ids.second}),dataMode:'standalone',userId:null,workspaceId:null};
+ await saveTimer(standalone);f.controller.dispose();
+ const next=fixture();next.net.status='expired';next.net.code='SUBSCRIPTION_EXPIRED';await next.controller.initialize();
+ assert.deepEqual(next.controller.bulkState('up').ids,[ids.second]);
+ assert.deepEqual(await next.controller.runBulkTimers('up'),{succeeded:1,failed:0});
+ assert.equal((await listStandaloneTimers())[0].status,'running');
+ assert.equal((await listPersonalOutbox(scope)).length,1);
+});

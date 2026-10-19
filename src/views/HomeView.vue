@@ -24,7 +24,7 @@ const themeStore = useThemeStore();
 const activeTab = ref("up");
 const isDrawerOpen = ref(false);
 const isModalOpen = ref(false);
-const isPausedAll = ref(false);
+const bulk = computed(() => store.bulkState(activeTab.value));
 const sortDirection = ref(TIMER_SORT.NEAREST);
 const standaloneCount = computed(() => store.stopwatches.filter(t => t.dataMode === 'standalone').length);
 const individual = computed(() => accountExperience.currentData.value?.account.kind === 'individual');
@@ -66,14 +66,7 @@ const noticeStyles = {
 };
 
 async function allTimersPause() {
-  const results = await Promise.all(
-    filteredTimers.value.map((timer) =>
-      isPausedAll.value
-        ? store.startTimer(timer.id)
-        : store.pauseTimer(timer.id),
-    ),
-  );
-  if (results.every(Boolean)) isPausedAll.value = !isPausedAll.value;
+  await store.runBulkTimers(activeTab.value);
 }
 
 const reviewPersonalSync = message.withLoading(
@@ -237,10 +230,16 @@ onMounted(() => {
         <div class="ml-auto flex items-center gap-4">
           <button
             class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
+            :disabled="bulk.busy || !bulk.ids.length"
+            :aria-busy="bulk.busy"
+            :aria-label="bulk.busy ? 'Toplu işlem sürüyor' : bulk.label"
+            :title="bulk.label"
+            :class="{'opacity-50 cursor-wait':bulk.busy, 'opacity-50':!bulk.ids.length}"
             @click="allTimersPause"
           >
+            <span v-if="bulk.busy" class="size-4 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true"></span>
             <svg
-              v-if="isPausedAll"
+              v-if="bulk.action === 'start'"
               xmlns="http://www.w3.org/2000/svg"
               width="45"
               height="45"

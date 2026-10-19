@@ -94,6 +94,13 @@ async function successfulLogin(result){
  if(!['agent','superadmin'].includes(result.user.role))connectSocket();
  await router.replace(result.user.role==='agent'?'/agent/customers':result.user.role==='superadmin'?'/superadmin':'/');
 }
+// A successful password/revoke operation deliberately clears its own session.
+// Accept only that exact, still-current clear; unrelated auth/route changes stay stale.
+function acceptsCompletion(epoch,formKind,result){
+ if(!alive || kind.value!==formKind)return false;
+ if(epoch===uiEpoch)return true;
+ return result.ok===true && uiEpoch===epoch+1 && result.clearedGeneration===getAuthGeneration() && getSessionMarker()===null;
+}
 async function submit(){
  syncAuthContext();
  if(loading.value || syncingMfa.value || finished.value || paused.value)return;
@@ -118,28 +125,29 @@ async function submit(){
    return;
   }
   const path=kind.value==='activation'?'activation':kind.value==='reset'?'reset':null;
-  const result=path?await passwordAuthRequest(path+(useLink.value?'/complete':'/request'),useLink.value?
-   {challengeId:link.value.challengeId,context:link.value.context,password:password.value}:{email:email.value}):
-   await passwordAuthRequest('password/change',{email:email.value,currentPassword:currentPassword.value,password:password.value});
+  const formKind=kind.value,completingLink=useLink.value;
+  const result=path?await passwordAuthRequest(path+(completingLink?'/complete':'/request'),completingLink?
+   {challengeId:link.value.challengeId,context:link.value.context,password:password.value}:{email:email.value},{isCurrent:()=>alive && epoch===uiEpoch && kind.value===formKind}):
+   await passwordAuthRequest('password/change',{email:email.value,currentPassword:currentPassword.value,password:password.value},{isCurrent:()=>alive && epoch===uiEpoch && kind.value===formKind});
   syncAuthContext();
-  if(!alive || epoch!==uiEpoch)return;
+  if(!acceptsCompletion(epoch,formKind,result))return;
   if(!result.ok){error.value=result.error;return;}
-  if(path && !useLink.value){notice.value=result.data?.message || 'İstek alındı; e-posta teslimatı garanti edilmez.';countdown();return;}
+  if(path && !completingLink){notice.value=result.data?.message || 'İstek alındı; e-posta teslimatı garanti edilmez.';countdown();return;}
   if(result.data?.success!==true){error.value='Sunucu sonucu doğrulanamadı.';return;}
   finished.value=true;link.value=null;password.value='';confirmation.value='';currentPassword.value='';
-  notice.value='Parolanız güncellendi. Yeniden giriş yapın. Yönetim hesaplarında giriş doğrulama kodu ayrıca gerekir.';
+  notice.value=result.completionNotified?'':'Parolanız güncellendi. Yeniden giriş yapın. Yönetim hesaplarında giriş doğrulama kodu ayrıca gerekir.';
  } catch {if(alive && epoch===uiEpoch)error.value='İşlem doğrulanamadı. Yeniden deneyin.';}
  finally {if(alive && epoch===uiEpoch)loading.value=false;}
 }
 async function manageSessions(revoke=false){
  syncAuthContext();
  if(loading.value)return;loading.value=true;error.value='';notice.value='';
- const epoch=uiEpoch;
- const result=await passwordAuthRequest(revoke?'sessions/revoke-all':'sessions/list',{});
+ const epoch=uiEpoch,formKind=kind.value;
+ const result=await passwordAuthRequest(revoke?'sessions/revoke-all':'sessions/list',{},{isCurrent:()=>alive && epoch===uiEpoch && kind.value===formKind});
  syncAuthContext();
- if(!alive || epoch!==uiEpoch)return;loading.value=false;
+ if(!acceptsCompletion(epoch,formKind,result))return;loading.value=false;
  if(!result.ok){error.value=result.error;return;}
- if(revoke){sessions.value=[];finished.value=true;notice.value='Tüm oturumlar iptal edildi. Yeniden giriş yapın.';}
+ if(revoke){sessions.value=[];finished.value=true;notice.value=result.completionNotified?'':'Tüm oturumlar iptal edildi. Yeniden giriş yapın.';}
  else sessions.value=result.data.sessions;
 }
 async function resend(){

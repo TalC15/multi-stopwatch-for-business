@@ -547,7 +547,7 @@ async function removePresetName(bIndex) {
                 @click="telegramSavedControl"
                 aria-label="Telegram bağlantı durumunu yenile"
                 title="Durumu yenile"
-                class="grid size-10 shrink-0 place-items-center rounded-xl border border-[var(--color-border)] text-indigo-500 transition hover:bg-indigo-500/10 disabled:cursor-wait disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+                class="grid size-9 shrink-0 place-items-center rounded-xl border border-[var(--color-border)] text-indigo-500 transition hover:bg-indigo-500/10 disabled:cursor-wait disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
               >
                 <svg
                   :class="{

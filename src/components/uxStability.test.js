@@ -75,6 +75,8 @@ async function fixture(view='AddModal', company=false, options={}){
  f.store=reactive({user:{id:id(1),workspace_id:options.workspaceId===null?null:id(2),role:options.role||'worker',disabled_at:options.disabledAt||null},presetNames:['Odak','Toplantı'],presetTimes:[5,25],name:'Taslağım',duration:17,ready:true,roleStyles:{worker:{text:""}},stopwatches:[],sharedWritable:false,addTimer:async()=>null,requireSharedWrite:()=>false});
  f.body=()=>company?{...active(f.store.user),account:{kind:'company',userId:f.store.user.id,workspaceId:f.store.user.workspace_id},subscription:{planCode:null,status:null,startsAt:null,endsAt:null,isEntitled:false},code:'SUBSCRIPTION_REQUIRED',shared:true,personal:{readable:!!f.store.user.workspace_id,writable:!!f.store.user.workspace_id}}:options.expired?{...active(f.store.user),subscription:{...active(f.store.user).subscription,status:'expired',endsAt:'2026-10-16T00:00:00Z',isEntitled:false},code:'SUBSCRIPTION_EXPIRED',features:{tts:false,telegram:false,presets:false},personal:{readable:true,writable:false}}:active(f.store.user);
  f.reply=()=>({ok:true,json:async()=>f.body()});
+ f.native=!!options.native;
+ f.securityRequest=async()=>({ok:true,json:async()=>({userId:f.store.user?.id,passwordSecurity:options.password===true})});
  f.workspaceRequest=async()=>({ok:true,json:async()=>({workspace:null})});
  f.telegram=async action=>action==='status'?{success:true,connected:false}:{};
  f.capture=()=>captureWorkspaceSession(f.auth);
@@ -95,14 +97,15 @@ before(async()=>{
   store:`export const useStopwatchStore=()=>globalThis.__ux.store;`,
   theme:`export const useThemeStore=()=>({isDark:false,toggleTheme(){}});`,
   message:`const out=(...x)=>globalThis.__ux.messages.push(x);export const message={withLoading:(_m,fn)=>fn,warning:out,success:out,error:out};`,
-  auth:`const f=()=>globalThis.__ux;export const getUser=()=>f().store.user;export const getAuthGeneration=()=>f().generation;export const getAccessToken=()=> 'synthetic';export const apiFetch=(...args)=>f().workspaceRequest(...args);export const saveTelegramChatId=(value)=>{f().actions.push(['bind',value]);return f().telegram('bind');};export const telegramControl=()=>{f().actions.push(['status']);return f().telegram('status');};export const cancelTelegramChatId=()=>{f().actions.push(['unlink']);return f().telegram('unlink');};`,
+  auth:`const f=()=>globalThis.__ux;export const getUser=()=>f().store.user;export const getAuthGeneration=()=>f().generation;export const getAccessToken=()=> 'synthetic';export const BASE_URL='https://mock.invalid';export const AUTH_SESSION_CHANGED_EVENT='session';export const AUTH_USER_CHANGED_EVENT='user';export const apiFetch=(...args)=>String(args[0]).endsWith('/account/security')?f().securityRequest(...args):f().workspaceRequest(...args);export const saveTelegramChatId=(value)=>{f().actions.push(['bind',value]);return f().telegram('bind');};export const telegramControl=()=>{f().actions.push(['status']);return f().telegram('status');};export const cancelTelegramChatId=()=>{f().actions.push(['unlink']);return f().telegram('unlink');};`,
   capture:`export const captureWorkspaceSession=()=>globalThis.__ux.capture();`,
   router:`export const useRouter=()=>({push(){}});`,
   socket:`export const connectSocket=()=>{};export const disconnectSocket=()=>{};`,
+  native:`export const isAndroidAuthPlatform=()=>globalThis.__ux.native;`,
   child:`export default {render(){return null}};`,
  };
  for(const [name,entry] of Object.entries({AddModal:'components/stopwatch/AddModal.vue',Settings:'views/SettingsView.vue',Profile:'views/ProfileView.vue'})){
-  const output=await build({root,configFile:false,logLevel:'silent',resolve:{alias:{'@':root+'src'}},plugins:[{name:'ux-fixtures',enforce:'pre',resolveId(s){const key=s.includes('services/accountExperience')?'policy':s.includes('stores/stopwatchStore')?'store':s.includes('stores/themeStore')?'theme':(s.includes('composables/message') || s==='./message.js')?'message':s.includes('services/backendSync')?'auth':s.includes('workspaceSession')?'capture':s==='vue-router'?'router':s.includes('services/socket')?'socket':/\/(SoundSettings|NotificationSettings)\.vue$/.test(s)?'child':null;return key?'\0ux:'+key:null;},load(s){if(s.startsWith('\0ux:'))return mocks[s.slice(4)];}},vue({template:{compilerOptions:{hoistStatic:false}}})],build:{write:false,minify:false,lib:{entry:root+'src/'+entry,formats:['es']},rollupOptions:{external:['vue']}}});
+  const output=await build({root,configFile:false,logLevel:'silent',resolve:{alias:{'@':root+'src'}},plugins:[{name:'ux-fixtures',enforce:'pre',resolveId(s){const key=s.includes('keepTimerAuth')?'native':s.includes('services/accountExperience')?'policy':s.includes('stores/stopwatchStore')?'store':s.includes('stores/themeStore')?'theme':(s.includes('composables/message') || s==='./message.js')?'message':s.includes('backendSync')?'auth':s.includes('workspaceSession')?'capture':s==='vue-router'?'router':s.includes('services/socket')?'socket':/\/(SoundSettings|NotificationSettings)\.vue$/.test(s)?'child':null;return key?'\0ux:'+key:null;},load(s){if(s.startsWith('\0ux:'))return mocks[s.slice(4)];}},vue({template:{compilerOptions:{hoistStatic:false}}})],build:{write:false,minify:false,lib:{entry:root+'src/'+entry,formats:['es']},rollupOptions:{external:['vue']}}});
   const path=root+'.ux-'+name+'.mjs';await writeFile(path,(Array.isArray(output)?output[0]:output).output.find(x=>x.type==='chunk').code);views[name]=(await import(pathToFileURL(path).href)).default;
  }
 });
@@ -280,5 +283,35 @@ for(const view of ['Settings','Profile']) test(`Telegram fix ${view}: failed aut
   assert.deepEqual(f.messages,[]);
   assert.match(text(f.tree),/Telegram işlemi tamamlanamadı/);
   assert.equal(button(f,'Kaydet').props.disabled,true);
+ }finally{f.close();}
+});
+
+for(const options of [
+ {label:'Company Manager PIN',role:'manager',company:true,password:false},
+ {label:'Company Worker PIN',company:true,password:false},
+ {label:'Individual active',password:true},
+ {label:'Individual expired',password:true,expired:true},
+ {label:'Superadmin web',role:'superadmin',password:true},
+ {label:'password native web guidance',password:true,native:true},
+])test('profile security link: '+options.label,async()=>{
+ const f=await fixture('Profile',!!options.company,options);
+ try{
+  const links=walk(f.tree).filter(n=>n.tag==='a'&&n.props.href==='/account/security');
+  assert.equal(links.length,options.password?1:0);
+  if(options.password)assert.match(text(links[0].parent.parent),/Parola güvenliği/);
+  if(options.native)assert.match(text(f.tree),/güvenli web hesabınızdan/);
+ }finally{f.close();}
+});
+test('profile security link clears on account change and ignores late capability JSON',async()=>{
+ const f=await fixture('Profile',false,{password:true});
+ try{
+  assert.match(text(f.tree),/Parola güvenliği/);
+  const body=deferred();f.securityRequest=async()=>({ok:true,json:()=>body.promise});
+  f.events.dispatchEvent(new Event('user'));await tick();
+  assert.doesNotMatch(text(f.tree),/Parola güvenliği/);
+  f.switch();f.securityRequest=async()=>({ok:true,json:async()=>({userId:f.store.user.id,passwordSecurity:false})});
+  body.resolve({userId:id(1),passwordSecurity:true});await tick();await tick();
+  assert.doesNotMatch(text(f.tree),/Parola güvenliği/);
+  f.logout();await tick();assert.doesNotMatch(text(f.tree),/Parola güvenliği/);
  }finally{f.close();}
 });

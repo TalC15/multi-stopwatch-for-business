@@ -1,4 +1,5 @@
 <script setup>
+import AccountSecurityLink from "../components/AccountSecurityLink.vue";
 import { computed, reactive, ref, watch, onBeforeUnmount } from 'vue';
 import { useRoute, useRouter, onBeforeRouteLeave, onBeforeRouteUpdate } from 'vue-router';
 import { Capacitor } from '@capacitor/core';
@@ -82,6 +83,7 @@ async function signOut() {
     <header class="sales-header">
       <div><span class="brand">KeepTimer</span><span class="eyebrow">WEB YÖNETİMİ</span></div>
       <div class="header-actions">
+        <AccountSecurityLink />
         <button type="button" @click="theme.toggleTheme()" :aria-pressed="theme.isDark">{{ theme.isDark ? 'Açık tema' : 'Koyu tema' }}</button>
         <button type="button" :disabled="controller.blocked()" @click="signOut">Çıkış yap</button>
       </div>

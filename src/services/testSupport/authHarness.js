@@ -226,7 +226,12 @@ export function installSocket(tab) {
   return { api, sockets };
 }
 
-export function installPasswordRequests(tab) {
+export function installPasswordRequests(tab, noticeMessage) {
+  tab.messages=[];
+  tab.context.authMessage=noticeMessage || {
+    success(text){const id={};tab.messages.push({id,text});return id;},
+    dismiss(id){tab.messages=tab.messages.filter(x=>x.id!==id);},
+  };
   const source = readFileSync(
     new URL("../passwordAuth.js", import.meta.url),
     "utf8",
@@ -239,5 +244,5 @@ export function installPasswordRequests(tab) {
       "import { isAndroidAuthPlatform } from './keepTimerAuth.js';",
       "const {isAndroidAuthPlatform} = globalThis.authTransport;",
     );
-  return evaluate(source, tab.context, "passwordRequests");
+  return evaluate(source.replace("import { message } from '../composables/message.js';", "const message=globalThis.authMessage;"), tab.context, "passwordRequests");
 }

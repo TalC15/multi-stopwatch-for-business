@@ -8,6 +8,7 @@
       cardStyle.border,
     ]"
   >
+    <p v-if="bulkBlocked" role="status" class="text-xs text-[var(--color-text-secondary)]">Bu sayaç için toplu işlem sürüyor; kontroller tamamlandığında açılacak.</p>
     <div class="flex items-start gap-2 justify-between mb-1">
       <div class="flex-1 min-w-0">
         <h3
@@ -61,8 +62,11 @@
     <div class="flex items-center justify-between">
       <button
         @click="togglePayment"
-        :aria-disabled="sharedBlocked"
-        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
+        :aria-disabled="sharedBlocked || bulkBlocked"
+        :disabled="bulkBlocked"
+        :aria-busy="bulkBlocked"
+        :title="bulkBlocked ? 'Bu sayaç için toplu işlem sürüyor' : undefined"
+        :style="sharedBlocked || bulkBlocked ? { opacity: 0.45 } : undefined"
         class="flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -114,8 +118,11 @@
     <div class="flex items-center gap-3">
       <button
         @click="toggleTimer"
-        :aria-disabled="sharedBlocked"
-        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
+        :aria-disabled="sharedBlocked || bulkBlocked"
+        :disabled="bulkBlocked"
+        :aria-busy="bulkBlocked"
+        :title="bulkBlocked ? 'Bu sayaç için toplu işlem sürüyor' : undefined"
+        :style="sharedBlocked || bulkBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-95 flex items-center justify-center gap-2',
           cardStyle.primaryBtn,
@@ -137,8 +144,11 @@
       <button
         @click="requestDelete(timer, 'kronometresi')"
         :aria-label="'Sil: ' + timer.name"
-        :aria-disabled="sharedBlocked"
-        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
+        :aria-disabled="sharedBlocked || bulkBlocked"
+        :disabled="bulkBlocked"
+        :aria-busy="bulkBlocked"
+        :title="bulkBlocked ? 'Bu sayaç için toplu işlem sürüyor' : undefined"
+        :style="sharedBlocked || bulkBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'w-12 h-12 rounded-2xl flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -171,6 +181,7 @@
       timer.status === 'expired' ? 'card-shadow-finished' : 'card-shadow',
     ]"
   >
+    <p v-if="bulkBlocked" role="status" class="text-xs text-[var(--color-text-secondary)]">Bu sayaç için toplu işlem sürüyor; kontroller tamamlandığında açılacak.</p>
     <div class="flex justify-between items-start mb-4">
       <div>
         <h3 :class="['text-lg font-bold leading-tight', cardStyle.title]">
@@ -207,8 +218,11 @@
     <div class="flex items-center justify-between">
       <button
         @click="togglePayment"
-        :aria-disabled="sharedBlocked"
-        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
+        :aria-disabled="sharedBlocked || bulkBlocked"
+        :disabled="bulkBlocked"
+        :aria-busy="bulkBlocked"
+        :title="bulkBlocked ? 'Bu sayaç için toplu işlem sürüyor' : undefined"
+        :style="sharedBlocked || bulkBlocked ? { opacity: 0.45 } : undefined"
         class="flex items-center gap-2 rounded-lg px-3 py-2 -mt-3 text-sm text-white font-medium transition bg-[#314158] hover:opacity-80"
         :class="props.timer.isPay ? 'bg-green-700' : 'bg-red-700'"
       >
@@ -258,8 +272,11 @@
       <button
         v-if="timer.status !== 'expired'"
         @click="toggleTimer"
-        :aria-disabled="sharedBlocked"
-        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
+        :aria-disabled="sharedBlocked || bulkBlocked"
+        :disabled="bulkBlocked"
+        :aria-busy="bulkBlocked"
+        :title="bulkBlocked ? 'Bu sayaç için toplu işlem sürüyor' : undefined"
+        :style="sharedBlocked || bulkBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'flex-1 py-3.5 rounded-2xl font-bold text-base transition-all active:scale-95 flex items-center justify-center gap-2',
           cardStyle.primaryBtn,
@@ -282,8 +299,11 @@
       <button
         @click="requestDelete(timer, 'sayacı')"
         :aria-label="'Sil: ' + timer.name"
-        :aria-disabled="sharedBlocked"
-        :style="sharedBlocked ? { opacity: 0.45 } : undefined"
+        :aria-disabled="sharedBlocked || bulkBlocked"
+        :disabled="bulkBlocked"
+        :aria-busy="bulkBlocked"
+        :title="bulkBlocked ? 'Bu sayaç için toplu işlem sürüyor' : undefined"
+        :style="sharedBlocked || bulkBlocked ? { opacity: 0.45 } : undefined"
         :class="[
           'w-10 h-10 flex items-center justify-center transition-colors',
           cardStyle.deleteBtn,
@@ -417,10 +437,12 @@ const statusLabel = computed(() => {
   return "IDLE";
 });
 
+const bulkBlocked = computed(() => store.isTimerBusy(props.timer.id));
 const sharedBlocked = computed(
   () => props.timer.isShared && !store.sharedWritable,
 );
 function canChange() {
+  if (bulkBlocked.value) return false;
   return !props.timer.isShared || store.requireSharedWrite();
 }
 function togglePayment() {
