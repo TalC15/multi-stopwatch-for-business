@@ -1,4 +1,5 @@
 import { bulkEligible, timerBulkState } from '../domain/timerBulk.js';
+import { validateTimerDraft } from '../domain/timerDraft.js';
 import {
   createSharedApi,
   validateSharedEnvelope,
@@ -800,9 +801,10 @@ export function createStopwatchController({
       }
     });
   }
-  async function addTimer(input) {
+  async function addTimer(input, { onError } = {}) {
     const ctx = capture();
     try {
+      input = { ...input, ...validateTimerDraft(input) };
       if (!ready.value) throw new Error("Yerel kayıtların açılmasını bekleyin");
       if (experience && !ctx.user && backend.isTabSessionCurrent()) throw new Error("Oturum kapsamı doğrulanıyor. Mevcut kayıtlarınız korunuyor; yeni kayıt için doğrulamayı bekleyin.");
       if (experience && ctx.scope && !await experience.requirePersonalWrite(ctx.scope)) {
@@ -876,7 +878,11 @@ export function createStopwatchController({
       if (record.dataMode === MODE.WORKSPACE_PERSONAL) void requestSync();
       return record.id;
     } catch (error) {
-      if (current(ctx)) message.error(error.message || "Sayaç oluşturulamadı");
+      if (current(ctx)) {
+        const text = error.message || "Sayaç oluşturulamadı";
+        message.error(text);
+        onError?.(text);
+      }
       return null;
     }
   }

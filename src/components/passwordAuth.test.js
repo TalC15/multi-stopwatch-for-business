@@ -15,7 +15,10 @@ import {
 } from "../services/testSupport/authHarness.js";
 const root = fileURLToPath(new URL("../../", import.meta.url)),
   compiled = new URL("../../.phase7-password-ui.mjs", import.meta.url);
-const mfaFixture=(extra={})=>({phase:'challenge',serverNow:new Date().toISOString(),expiresAt:new Date(Date.now()+120000).toISOString(),resendAvailableAt:new Date(Date.now()).toISOString(),sendLimitAvailableAt:null,lockedUntil:null,riskUntil:null,attemptsRemaining:6,delivery:'accepted',challengeId:'fixture',context:'fixture-context',...extra});
+const mfaFixture=(extra={})=>{
+ const now=Date.now();
+ return {phase:'challenge',serverNow:new Date(now).toISOString(),expiresAt:new Date(now+120000).toISOString(),resendAvailableAt:new Date(now).toISOString(),sendLimitAvailableAt:null,lockedUntil:null,riskUntil:null,attemptsRemaining:6,delivery:'accepted',challengeId:'fixture',context:'fixture-context',...extra};
+};
 let View;
 const walk = (n) => [n, ...(n.children || []).flatMap(walk)],
   text = (n) => (n.text || "") + (n.children || []).map(text).join("");

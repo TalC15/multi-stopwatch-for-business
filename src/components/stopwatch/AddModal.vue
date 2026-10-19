@@ -3,6 +3,7 @@ import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { message } from "../../composables/message";
 import { accountExperience } from '../../services/accountExperience.js';
+import { validateTimerDraft } from '../../domain/timerDraft.js';
 import {
   apiFetch,
   getAccessToken,
@@ -15,6 +16,13 @@ const emit = defineEmits(["close"]);
 const store = useStopwatchStore();
 const user = computed(() => store.user);
 const saving = ref(false), presetError = ref('');
+const validationError = ref(''), invalidField = ref('');
+function clearValidation() { validationError.value = ''; invalidField.value = ''; }
+function rejectDraft(field, text) {
+  invalidField.value = field; validationError.value = text;
+  message.warning(text);
+}
+watch(() => [store.name, store.duration], clearValidation, { flush: 'sync' });
 const showPresets = computed(() => !!accountExperience.currentData.value);
 let alive = true;
 onBeforeUnmount(() => { alive = false; sharedModeCheckId++; });
@@ -50,36 +58,40 @@ const increment = () => {
 };
 
 const save = message.withLoading("zamanlayıcı oluşturuluyor...", async () => {
+  if (saving.value || !store.ready) return;
+  clearValidation();
   if ((props.forceShared || isShared.value) && !store.requireSharedWrite())
     return;
-  if (!store.name) return message.warning("isim eklemek zorunludur");
-  if (store.name.length > 35) return message.warning("çok uzun isim");
-  if (!store.duration) return message.warning("süre belirtmek zorunludur");
-  if (store.duration < 0) return message.warning("süre negatif olamaz");
-  if (store.duration > 1440)
-    return message.warning("çok uzun süre(en fazla 1440)");
+  let draft;
+  try { draft = validateTimerDraft({ name: store.name, duration: store.duration }); }
+  catch (error) { return rejectDraft(error.field, error.message); }
   if (props.forceShared && !user.value?.workspace_id)
     return message.warning(
       "ortak kronometre oluşturmak için bir workspace'e katılmalısınız",
     );
   if (props.forceShared && !sharedModeAvailable.value)
     return message.warning("yönetici izni yok");
-  const isStopwatchNames = store?.stopwatches.map((a) => a.name);
-  if (isStopwatchNames?.includes(store.name))
-    return message.warning("bu isim önceden kullanılmış");
-  if (saving.value || !store.ready) return;
+  if (store.stopwatches.some(timer => timer.name?.trim() === draft.name))
+    return rejectDraft('name', "bu isim önceden kullanılmış");
   saving.value = true;
+  const generation = getAuthGeneration();
   try {
     const shared = props.forceShared === true || isShared.value;
     const result = await store.addTimer({
-      name: store.name,
-      duration: store.duration,
+      name: draft.name,
+      duration: draft.duration,
       type: props.defaultType,
       isShared: shared,
       autoStart: shared,
-    });
+    }, { onError: text => {
+      if (alive && props.isOpen && getAuthGeneration() === generation) validationError.value = text;
+    } });
     const createdTimerId = typeof result === "string" ? result : result?.id;
-    if (!createdTimerId) return;
+    if (!createdTimerId) {
+      if (alive && props.isOpen && getAuthGeneration() === generation && !validationError.value)
+        validationError.value = "Sayaç oluşturulamadı. Bilgilerinizi ve bağlantınızı kontrol edip yeniden deneyin.";
+      return;
+    }
     // Shared create-and-start is one user action with two canonical server ACKs;
     // do not issue another START after the controller has already handled it.
     const started =
@@ -87,7 +99,7 @@ const save = message.withLoading("zamanlayıcı oluşturuluyor...", async () => 
         ? await store.startTimer(createdTimerId)
         : result.started === true;
     emit("close");
-    if (started) message.success(`${store.name} oluşturuldu`);
+    if (started) message.success(`${draft.name} oluşturuldu`);
     else message.warning("Sayaç kaydedildi; başlatma tamamlanamadı.");
     const presetsAllowed = accountExperience.canFeature('presets');
     store.name = presetsAllowed ? JSON.parse(localStorage.getItem("defaultName")) || "kronometre" : "kronometre";
@@ -151,6 +163,7 @@ watch(
 watch(
   () => props.isOpen,
   (newVal) => {
+    clearValidation();
     if (newVal) {
       void checkSharedMode().catch(() => {});
       isShared.value = props.forceShared || false;
@@ -234,6 +247,8 @@ watch(() => accountExperience.state.scopeVersion, () => {
             type="text"
             placeholder="Örn. Sunum hazırlığı"
             maxlength="35"
+            :aria-invalid="invalidField === 'name'"
+            :aria-describedby="invalidField === 'name' ? 'new-timer-error' : undefined"
             class="w-full min-w-0 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-base font-medium text-slate-900 outline-none transition-colors placeholder:text-slate-400 focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-500/10 dark:border-slate-700 dark:bg-slate-800 dark:text-white dark:placeholder:text-slate-500 dark:focus:border-indigo-500 dark:focus:bg-slate-800"
           />
         </div>
@@ -297,6 +312,9 @@ watch(() => accountExperience.state.scopeVersion, () => {
                 type="number"
                 inputmode="numeric"
                 min="1"
+                max="1440"
+                :aria-invalid="invalidField === 'duration'"
+                :aria-describedby="invalidField === 'duration' ? 'new-timer-error' : undefined"
                 class="no-spinner block w-full min-w-0 rounded-lg bg-transparent py-2 text-center text-3xl font-black tabular-nums tracking-tight text-slate-900 outline-none focus-visible:ring-2 focus-visible:ring-indigo-400 dark:text-white sm:text-4xl"
               />
             </div>
@@ -437,6 +455,7 @@ watch(() => accountExperience.state.scopeVersion, () => {
       </div>
 
       <p v-if="presetError" role="status" class="mt-3 text-sm text-amber-700 dark:text-amber-300">{{ presetError }}</p>
+      <p v-if="validationError" id="new-timer-error" role="alert" class="mt-3 text-sm font-semibold text-rose-700 dark:text-rose-300">{{ validationError }}</p>
       <!-- Create Button -->
       <button
         type="button"

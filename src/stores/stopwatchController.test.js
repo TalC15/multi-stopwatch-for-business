@@ -683,6 +683,18 @@ test("all new modes enforce name limit and positive target before publishing", a
   assert.equal(await timerDb.personalOutbox.count(), 0);
 });
 
+test('new local creation rejects durations beyond the PRD maximum before persistence',async()=>{
+ auth.state.user.workspace_id=null;
+ const c=makeController();await c.initialize();
+ const rejected=[];
+ assert.equal(await c.addTimer(input({duration:1441}),{onError:text=>rejected.push(text)}),null);
+ assert.match(rejected[0],/1440/);
+ assert.equal(await timerDb.timers.count(),0);
+ assert.equal(await timerDb.personalOutbox.count(),0);
+ const id=await c.addTimer(input({duration:1440}));
+ assert.ok(id);assert.equal((await timerDb.timers.get(id)).targetMinutes,1440);
+});
+
 test("pause just after deadline persists and notifies both timer types before the next tick", async () => {
   auth.state.user.workspace_id = null;
   const c = makeController();

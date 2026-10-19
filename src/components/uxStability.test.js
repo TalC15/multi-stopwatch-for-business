@@ -91,6 +91,75 @@ async function fixture(view='AddModal', company=false, options={}){
  return f;
 }
 const button=(f,label)=>walk(f.tree).find(n=>n.tag==='button'&&text(n).trim()===label);
+for (const draft of [
+ {name:'   ',duration:5,field:'name',expected:/isim/},
+ {name:'x'.repeat(36),duration:5,field:'name',expected:/uzun isim/},
+ {name:'Geçerli',duration:'abc',field:'duration',expected:/geçerli.*süre/},
+ {name:'Geçerli',duration:Infinity,field:'duration',expected:/geçerli.*süre/},
+ {name:'Geçerli',duration:0,field:'duration',expected:/süre/},
+ {name:'Geçerli',duration:1441,field:'duration',expected:/1440/},
+]) test(`timer validation rejects ${JSON.stringify(draft)} before IO and retains inline feedback`,async()=>{
+ const f=await fixture();try{
+  let creates=0;f.store.addTimer=async()=>{creates++;return null;};
+  f.store.name=draft.name;f.store.duration=draft.duration;await tick();
+  await button(f,'kronometre oluştur').props.onClick();await tick();
+  assert.equal(creates,0);
+  f.messages.length=0;await tick();
+  const error=walk(f.tree).find(n=>n.props?.role==='alert');
+  assert.ok(error,'validation remains visible after the transient message is gone');
+  assert.match(text(error),draft.expected);
+  const input=walk(f.tree).find(n=>n.props?.id===`new-timer-${draft.field}`);
+  assert.equal(input.props['aria-invalid'],true);
+  assert.equal(input.props['aria-describedby'],'new-timer-error');
+  assert.equal(f.store.name,draft.name,'failed validation keeps the draft');
+ }finally{f.close();}
+});
+test('timer duplicate detection uses the persisted trimmed name and clears feedback on edit',async()=>{
+ const f=await fixture();try{
+  f.store.stopwatches=[{name:'Odak'}];f.store.name=' Odak ';
+  let creates=0;f.store.addTimer=async()=>{creates++;return null;};
+  await button(f,'kronometre oluştur').props.onClick();await tick();
+  assert.equal(creates,0);
+  assert.match(text(f.tree),/bu isim önceden kullanılmış/);
+  f.store.name='Başka';await tick();
+  assert.equal(walk(f.tree).some(n=>n.props?.role==='alert'),false);
+ }finally{f.close();}
+});
+test('timer creation rejection keeps quota feedback and the draft after transient messages disappear',async()=>{
+ const f=await fixture();try{
+  const reason='Ücretsiz kullanımda en fazla 10 süreölçer oluşturabilirsiniz.';
+  f.store.addTimer=async(_draft,{onError})=>{onError(reason);return null;};
+  f.store.name='On birinci';f.store.duration=5;
+  await button(f,'kronometre oluştur').props.onClick();f.messages.length=0;await tick();
+  const error=walk(f.tree).find(n=>n.props?.role==='alert');assert.ok(error);assert.equal(text(error),reason);
+  assert.equal(f.store.name,'On birinci');assert.equal(f.store.duration,5);
+  f.store.name='Düzeltilen';await tick();assert.equal(walk(f.tree).some(n=>n.props?.role==='alert'),false);
+ }finally{f.close();}
+});
+test('timer rejection after account change cannot write an old error into the new form',async()=>{
+ const f=await fixture();try{
+  const gate=deferred();let reject;
+  f.store.addTimer=async(_draft,{onError})=>{reject=onError;return gate.promise;};
+  const pending=button(f,'kronometre oluştur').props.onClick();await tick();
+  f.switch();reject('Old account quota');gate.resolve(null);await pending;await tick();
+  assert.doesNotMatch(text(f.tree),/Old account quota|Sayaç oluşturulamadı/);
+ }finally{f.close();}
+});
+test('timer accepts the upper duration boundary, normalizes the name, and gates duplicate submit',async()=>{
+ const f=await fixture();const previous=globalThis.localStorage;
+ try{
+  globalThis.localStorage={getItem:()=>null};
+  const gate=deferred(),created=[];f.store.name=' Sınır ';f.store.duration=1440;
+  f.store.addTimer=async draft=>{created.push(draft);return gate.promise;};
+  f.store.startTimer=async()=>true;
+  const first=button(f,'kronometre oluştur').props.onClick();
+  const second=button(f,'kronometre oluştur').props.onClick();await tick();
+  assert.equal(created.length,1);assert.equal(created[0].name,'Sınır');
+  assert.equal(created[0].duration,1440);
+  gate.resolve('new-timer');await Promise.all([first,second]);await tick();
+  assert.equal(walk(f.tree).some(n=>n.props?.role==='alert'),false);
+ }finally{f.close();globalThis.localStorage=previous;}
+});
 before(async()=>{
  const mocks={
   policy:`export const accountExperience=new Proxy({},{get:(_,k)=>globalThis.__ux.policy[k]});`,
