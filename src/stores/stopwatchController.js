@@ -1409,7 +1409,9 @@ export function createStopwatchController({
             sharedRequested = true;
             continue;
           }
-          sharedState.value = online() ? "ready" : "offline-readonly";
+          // A pre-outage GET may finish after the renewed authority was denied.
+          sharedState.value = !online() ? "offline-readonly"
+            : experience && !experience.canShared() ? "unavailable" : "ready";
           sharedLastVerified.value = now();
           loaded = true;
         } catch (error) {
@@ -1445,6 +1447,13 @@ export function createStopwatchController({
   const offConnected = socket.onSocketConnected(() => {
     void loadSharedTimers();
   });
+  // Online/socket callbacks can precede the asynchronous authority renewal.
+  // Resume the scoped canonical GET when proof arrives; never replay commands
+  // or grant shared writes from the browser's online hint alone.
+  const stopSharedAuthorityWatch = watch(
+    () => experience?.state?.status,
+    () => { if (experience.canShared()) void loadSharedTimers(); },
+  );
   function listen(target, type, callback) {
     target?.addEventListener(type, callback);
     removers.push(() => target?.removeEventListener(type, callback));
@@ -1492,6 +1501,7 @@ export function createStopwatchController({
     else cancelRetry();
   });
   function dispose() {
+    stopSharedAuthorityWatch();
     stopSharedLoadingMessage();
     closeSharedLoadingMessage();
     disposed = true;

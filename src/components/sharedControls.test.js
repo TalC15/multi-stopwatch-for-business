@@ -3,7 +3,7 @@ import test, { before, after } from "node:test";
 import assert from "node:assert/strict";
 import { build } from "vite";
 import vue from "@vitejs/plugin-vue";
-import { createRenderer, reactive, nextTick } from "vue";
+import { createRenderer, reactive, nextTick, toRaw } from "vue";
 import { writeFile, unlink } from "node:fs/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import path from "node:path";
@@ -70,7 +70,9 @@ const renderer = createRenderer({
       remove() {},
     },
 
-    focus() {},
+    focus() { globalThis.document.activeElement = this; },
+    showModal() { this.opener = globalThis.document.activeElement; this.open = true; },
+    close() { this.open = false; this.opener?.focus(); },
 
     contains(node) {
       return walk(this).includes(node);
@@ -91,6 +93,7 @@ const renderer = createRenderer({
   }),
 
   createText: (text) => ({ text }),
+  setScopeId: (node, id) => { node.props[id] = ''; },
 
   createComment: (_text) => ({
     text: "",
@@ -257,6 +260,7 @@ before(async () => {
     Card: "src/components/stopwatch/StopwatchCard.vue",
     Add: "src/components/stopwatch/AddModal.vue",
     Home: "src/views/HomeView.vue",
+    Confirm: "src/components/ui/ConfirmModal.vue",
   };
 
   for (const [name, entry] of Object.entries(entries)) {
@@ -490,6 +494,14 @@ test("Home identifies personal conflict and requires separate explicit acceptanc
     assert.match(text(tree), /bekleyen değişikliklerinden vazgeçilir/);
 
     assert.equal(calls.includes("accept"), false);
+    const reviewDialog=walk(tree).find(n=>n.tag==='dialog');
+    assert.equal(reviewDialog.props['aria-modal'],'true');
+    assert.equal(toRaw(globalThis.document.activeElement),toRaw(button(tree,'Koru ve vazgeç')));
+    store.resolvingSync=true;await nextTick();
+    assert.equal(button(tree,'Cihazımdaki değişikliklerden vazgeç').props.disabled,true);
+    await button(tree,'Cihazımdaki değişikliklerden vazgeç').props.onClick();
+    assert.equal(calls.includes('accept'),false);
+    store.resolvingSync=false;await nextTick();
 
     await button(tree, "Koru ve vazgeç").props.onClick();
 
@@ -511,6 +523,21 @@ test("Home identifies personal conflict and requires separate explicit acceptanc
   } finally {
     app.unmount();
   }
+});
+
+test('ConfirmModal labels its native dialog, focuses cancel, blocks disabled confirmation and restores focus',async()=>{
+ const emitted=[];const opener={focus(){globalThis.document.activeElement=this;}};opener.focus();
+ const {tree,app}=mount('Confirm',{isOpen:true,title:'Confirm fixture',message:'Fixture details',confirmDisabled:true,onConfirm:()=>emitted.push('confirm'),onCancel:()=>emitted.push('cancel')});
+ try{
+  await nextTick();await nextTick();const dialog=walk(tree).find(n=>n.tag==='dialog');
+  assert.equal(dialog.open,true);assert.equal(dialog.props.role,'dialog');assert.equal(dialog.props['aria-modal'],'true');
+  assert.equal(text(walk(tree).find(n=>n.props?.id===dialog.props['aria-labelledby'])),'Confirm fixture');
+  assert.equal(text(walk(tree).find(n=>n.props?.id===dialog.props['aria-describedby'])),'Fixture details');
+  assert.equal(toRaw(globalThis.document.activeElement),toRaw(button(tree,'Vazgeç')));
+  await button(tree,'Sil').props.onClick();assert.deepEqual(emitted,[]);
+  let prevented=false;await dialog.props.onCancel({preventDefault(){prevented=true;}});assert.equal(prevented,true);assert.deepEqual(emitted,['cancel']);
+ }finally{app.unmount();}
+ assert.equal(toRaw(globalThis.document.activeElement),opener);
 });
 
 // ======================================================
@@ -1198,7 +1225,7 @@ test("Home sorts shared timers in read-only mode", async () => {
   }
 });
 
-test('Home bulk button follows selected tab, manual state changes, disabled and busy state',async()=>{
+test('Home exposes bulk controls only for personal tabs and rejects a stale handler on shared',async()=>{
  const {store,calls}=fixture();store.sharedWritable=true;
  store.stopwatches=[{id:'up',type:'up',status:'running',isShared:false},{id:'down',type:'down',status:'paused',isShared:false},{id:'shared',type:'up',status:'idle',isShared:true}];
  store.runBulkTimers=async tab=>{calls.push(['bulk',tab]);};
@@ -1209,9 +1236,11 @@ test('Home bulk button follows selected tab, manual state changes, disabled and 
   store.stopwatches[0].status='paused';await nextTick();assert.equal(bulk().props['aria-label'],'Tümünü başlat');
   await bulk().props.onClick();assert.deepEqual(calls.at(-1),['bulk','up']);
   await button(tree,'Sayaç').props.onClick();await nextTick();await bulk().props.onClick();assert.deepEqual(calls.at(-1),['bulk','down']);
-  await button(tree,'Ortak').props.onClick();await nextTick();await bulk().props.onClick();assert.deepEqual(calls.at(-1),['bulk','shared']);
-  store.bulkTab="shared";await nextTick();assert.equal(bulk().props.disabled,true);assert.equal(bulk().props['aria-busy'],true);
-  store.bulkTab=null;store.stopwatches=[];await nextTick();assert.equal(bulk().props.disabled,true);
+  const stalePersonalHandler=bulk().props.onClick;
+  await button(tree,'Ortak').props.onClick();await nextTick();assert.equal(bulk(),undefined);
+  const before=calls.length;await stalePersonalHandler();assert.equal(calls.length,before);
+  store.bulkTab="shared";await nextTick();assert.equal(bulk(),undefined);
+  store.bulkTab=null;store.stopwatches=[];await button(tree,'Sayaç').props.onClick();await nextTick();assert.equal(bulk().props.disabled,true);
  }finally{app.unmount();}
 });
 
@@ -1234,7 +1263,7 @@ test('Home selected-tab busy indicator does not follow an unrelated shared batch
  const {tree,app}=mount('Home');const bulk=()=>walk(tree).find(n=>/^Tümünü/.test(n.props?.title||''));
  try{
   assert.equal(bulk().props.disabled,false);assert.equal(bulk().props['aria-busy'],false);
-  await button(tree,'Ortak').props.onClick();await nextTick();assert.equal(bulk().props.disabled,true);assert.equal(bulk().props['aria-busy'],true);
+  await button(tree,'Ortak').props.onClick();await nextTick();assert.equal(bulk(),undefined);
   await button(tree,'Kronometre').props.onClick();await nextTick();assert.equal(bulk().props.disabled,false);assert.equal(bulk().props['aria-busy'],false);
  }finally{app.unmount();}
 });

@@ -4,7 +4,8 @@ import { accountExperience } from "../services/accountExperience.js";
 import AccountStatusCard from "../components/AccountStatusCard.vue";
 import SoundSettings from "../components/SoundSettings.vue";
 import NotificationSettings from "../components/NotificationSettings.vue";
-import { ref, computed, onMounted, watch } from "vue";
+import { ref, computed, onMounted, watch, useId } from "vue";
+import { useNativeDialog } from "../composables/useNativeDialog.js";
 import { useThemeStore } from "@/stores/themeStore";
 import { useStopwatchStore } from "../stores/stopwatchStore";
 import { useRouter } from "vue-router";
@@ -46,6 +47,10 @@ const {
   removeTelegram,
 } = telegramConnection;
 const showTelegramHelp = ref(false);
+const telegramDialog = ref(null);
+const telegramCloseButton = ref(null);
+const telegramTitleId = useId();
+useNativeDialog(telegramDialog, () => showTelegramHelp.value, telegramCloseButton);
 const currentTelegramStep = ref(0);
 
 const telegramSteps = [
@@ -739,9 +744,14 @@ async function removePresetName(bIndex) {
     </main>
     <!-- Telegram Help Modal -->
     <Transition name="telegram-modal">
-      <div
+      <dialog
         v-if="showTelegramHelp"
-        class="fixed inset-0 z-[100] flex items-center justify-center p-4"
+        ref="telegramDialog"
+        role="dialog"
+        aria-modal="true"
+        :aria-labelledby="telegramTitleId"
+        @cancel.prevent="closeTelegramHelp"
+        class="telegram-help-dialog fixed inset-0 z-[100] m-0 h-full w-full max-h-none max-w-none border-0 bg-transparent text-inherit flex items-center justify-center p-4"
       >
         <!-- Backdrop -->
         <div
@@ -765,6 +775,7 @@ async function removePresetName(bIndex) {
               </p>
 
               <h2
+                :id="telegramTitleId"
                 class="mt-1 text-lg font-bold text-[var(--color-text-primary)]"
               >
                 Bildirimleri nasıl bağlarım?
@@ -772,6 +783,9 @@ async function removePresetName(bIndex) {
             </div>
 
             <button
+              ref="telegramCloseButton"
+              type="button"
+              autofocus
               @click="closeTelegramHelp"
               class="grid size-9 shrink-0 place-items-center rounded-xl border border-[var(--color-border)] text-[var(--color-text-secondary)] transition hover:bg-[var(--color-surface)] active:scale-95 focus-visible:outline-2 focus-visible:outline-indigo-500"
               aria-label="Kapat"
@@ -912,11 +926,15 @@ async function removePresetName(bIndex) {
             </button>
           </div>
         </div>
-      </div>
+      </dialog>
     </Transition>
   </div>
 </template>
 <style>
+.telegram-help-dialog::backdrop {
+  background: transparent;
+}
+
 .telegram-modal-enter-active,
 .telegram-modal-leave-active {
   transition: opacity 0.25s ease;
