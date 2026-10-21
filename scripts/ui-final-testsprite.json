@@ -1,0 +1,134 @@
+{
+  "requirementChange": "Shared bulk UI removed; keep all historical IDs/runs. Never report an obsolete or unexecuted operation PASS.",
+  "obsoleteCodes": [
+    "KTSH-13",
+    "KTSH-14",
+    "KTSH-15",
+    "KTSH-16",
+    "KTSH-17",
+    "KTSH-18",
+    "KTSH-19",
+    "KTSH-20",
+    "KTSH-21",
+    "KTSH-22",
+    "SHR02"
+  ],
+  "obsoleteMetadataPrefix": "[OUT OF SCOPE: requirement changed]",
+  "updatedPlans": {
+    "BULK01": {
+      "planSteps": [
+        {
+          "type": "action",
+          "description": "Run in the public anonymous environment. Never log in, enter credentials, mutate existing records, or alter auth/storage. Use only unique current-run Standalone timers. Current standard production build and unchanged CSP are required."
+        },
+        {
+          "type": "action",
+          "description": "Create two own Count Up and two Count Down timers. Manually pause one in each tab, bulk pause running records in that tab, then bulk start both including the manually paused one. Verify the other tab retains its independent state. Never invoke shared bulk."
+        },
+        {
+          "type": "assertion",
+          "description": "Up/down controls work independently; manually paused timers resume in their selected tab; unrelated tab state is unchanged."
+        }
+      ]
+    },
+    "PWA01": {
+      "planSteps": [
+        {
+          "type": "action",
+          "description": "Run in the public anonymous environment. Never log in, enter credentials, mutate existing records, or alter auth/storage. Use only unique current-run Standalone timers. Current standard production build and unchanged CSP are required."
+        },
+        {
+          "type": "action",
+          "description": "Allow genuine service-worker installation. Await activated registration AND serviceWorker.ready. Open a genuine subsequent same-origin document and verify navigator.serviceWorker.controller; the initial installation page need not already be controlled. Use standard build only."
+        },
+        {
+          "type": "action",
+          "description": "Create and pause one own Standalone timer, go offline using supported real browser controls, reload, close the page and reopen same origin offline. Then test /password-login, /account/activate, /account/reset, /account/security and /api/auth/refresh navigation without an app-shell fallback. Inspect CacheStorage: static assets only, no auth/token/personal API responses. Restore network and verify the same paused timer."
+        },
+        {
+          "type": "assertion",
+          "description": "Actual offline reload/reopen preserve the local record; sensitive routes fail network rather than authenticated cached success. No helper build/CSP relaxation. If offline/lifecycle/cache inspection is unavailable, BLOCKED, not PASS. Genuine new-release update is separately BLOCKED without a release; do not fabricate one."
+        }
+      ]
+    },
+    "TG02": {
+      "planSteps": [
+        {
+          "type": "action",
+          "description": "Use an existing authorized runtime session without recording credentials. Never alter Telegram registration. If that session cannot be provided safely, cloud BLOCKED; independent browser evidence is separate."
+        },
+        {
+          "type": "action",
+          "description": "Settings Telegram help: test all steps, labelled dialog with aria-modal, safe close-button initial focus, Tab/Shift+Tab containment, inert background, Escape/close/final Tamam and return focus to opener. Repeat mobile/desktop light/dark."
+        },
+        {
+          "type": "assertion",
+          "description": "Every modal state remains keyboard reachable and correctly labelled; closing restores the opener; Telegram binding is unchanged."
+        }
+      ]
+    },
+    "KTSH40": {
+      "planSteps": [
+        {
+          "type": "action",
+          "description": "Use authorized real Manager/Worker runtime sessions without captured credentials; otherwise cloud BLOCKED. Verify same workspace/permission and use only own current-run timer."
+        },
+        {
+          "type": "action",
+          "description": "Open shared delete confirmation at mobile/desktop light/dark. Native dialog is labelled and aria-modal. Initial focus is Vazgeç, never destructive Sil. Verify focus containment, inert background, Escape/cancel and focus restoration; only explicit own confirmation may delete."
+        },
+        {
+          "type": "assertion",
+          "description": "Native dialog semantics/focus work with unchanged Sil/Vazgeç meaning. No shared bulk trigger exists. Shared ConfirmModal personal conflict use retains explicit separate acceptance and disabled confirmation."
+        }
+      ]
+    }
+  },
+  "replacementPlans": [
+    {
+      "type": "frontend",
+      "name": "UI-FINAL-NO-SHARED-BULK",
+      "description": "Product decision delta; preserve all old shared bulk history. Never count unexecuted/manual/independent results as TestSprite cloud PASS.",
+      "priority": "High",
+      "planSteps": [
+        {
+          "type": "action",
+          "description": "Run in the public anonymous environment. Never log in, enter credentials, mutate existing records, or alter auth/storage. Use only unique current-run Standalone timers. Current standard production build and unchanged CSP are required."
+        },
+        {
+          "type": "action",
+          "description": "Open anonymous home, select Ortak. Inspect DOM, accessible controls, tooltips, header spacing, focus order and loading indicators. There must be no shared Tümünü başlat/duraklat trigger, hidden icon, keyboard path or leftover gap. Switch to Count Up and Count Down and confirm their bulk buttons still exist."
+        },
+        {
+          "type": "assertion",
+          "description": "Shared has no bulk UI/tooltip/loading/keyboard trigger; personal tabs retain their existing controls."
+        }
+      ]
+    },
+    {
+      "type": "frontend",
+      "name": "UI-FINAL-COMPANY-SINGLE",
+      "description": "Product decision delta; preserve all old shared bulk history. Never count unexecuted/manual/independent results as TestSprite cloud PASS.",
+      "priority": "High",
+      "planSteps": [
+        {
+          "type": "action",
+          "description": "Two distinct real MANAGER and WORKER contexts. First verify same workspace and shared permission; never turn it on. Credentials are runtime only; if the cloud recorder would log them, mark cloud BLOCKED and use separately labelled independent-browser evidence."
+        },
+        {
+          "type": "action",
+          "description": "Only unique own timers: both users create; automatic start; Manager start and Worker pause; payment; delete cancel then own confirmed deletion; peer convergence; private scope separation; offline readonly and reconnect. Shared bulk is absent throughout."
+        },
+        {
+          "type": "assertion",
+          "description": "Own shared single operations and two-user synchronization work; permission, revision/idempotency, reconnect and private scope guards remain intact; there is no shared bulk UI. Missing fixtures are BLOCKED."
+        }
+      ]
+    }
+  ],
+  "runtimeRules": [
+    "Supply project/test-ID mapping at execution time; no account data belongs in this manifest.",
+    "Anonymous cloud runs require a separate public environment; do not modify the existing Manager environment.",
+    "Real two-user/modal runs require runtime-only credentials in separate contexts; independent browser evidence is not cloud PASS."
+  ]
+}

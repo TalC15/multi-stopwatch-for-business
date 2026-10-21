@@ -66,7 +66,9 @@ const noticeStyles = {
 };
 
 async function allTimersPause() {
-  await store.runBulkTimers(activeTab.value);
+  const tab = activeTab.value;
+  if (tab !== 'up' && tab !== 'down') return;
+  await store.runBulkTimers(tab);
 }
 
 const reviewPersonalSync = message.withLoading(
@@ -229,6 +231,7 @@ onMounted(() => {
         </h2>
         <div class="ml-auto flex items-center gap-4">
           <button
+            v-if="activeTab !== 'shared'"
             class="flex items-center gap-1.5 text-sm font-semibold text-indigo-600 dark:text-indigo-400"
             :disabled="bulk.busy || !bulk.ids.length"
             :aria-busy="bulk.busy"

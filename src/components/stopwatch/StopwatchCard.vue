@@ -8,7 +8,9 @@
       cardStyle.border,
     ]"
   >
-    <p v-if="bulkBlocked" role="status" class="text-xs text-[var(--color-text-secondary)]">Bu sayaç için toplu işlem sürüyor; kontroller tamamlandığında açılacak.</p>
+    <p v-if="bulkBlocked" role="status" class="sr-only">
+      Bu sayaç için toplu işlem sürüyor; kontroller tamamlandığında açılacak.
+    </p>
     <div class="flex items-start gap-2 justify-between mb-1">
       <div class="flex-1 min-w-0">
         <h3
@@ -181,7 +183,13 @@
       timer.status === 'expired' ? 'card-shadow-finished' : 'card-shadow',
     ]"
   >
-    <p v-if="bulkBlocked" role="status" class="text-xs text-[var(--color-text-secondary)]">Bu sayaç için toplu işlem sürüyor; kontroller tamamlandığında açılacak.</p>
+    <p
+      v-if="bulkBlocked"
+      role="status"
+      class="text-xs text-[var(--color-text-secondary)]"
+    >
+      Bu sayaç için toplu işlem sürüyor; kontroller tamamlandığında açılacak.
+    </p>
     <div class="flex justify-between items-start mb-4">
       <div>
         <h3 :class="['text-lg font-bold leading-tight', cardStyle.title]">
