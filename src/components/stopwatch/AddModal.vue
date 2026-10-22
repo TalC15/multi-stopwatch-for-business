@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch } from "vue";
 import { useStopwatchStore } from "@/stores/stopwatchStore";
 import { message } from "../../composables/message";
+import { useNativeDialog } from "../../composables/useNativeDialog.js";
 import { accountExperience } from '../../services/accountExperience.js';
 import { validateTimerDraft } from '../../domain/timerDraft.js';
 import {
@@ -13,6 +14,8 @@ import {
 
 const props = defineProps(["isOpen", "defaultType", "forceShared"]);
 const emit = defineEmits(["close"]);
+const dialog = ref(null), nameInput = ref(null);
+useNativeDialog(dialog, () => props.isOpen, nameInput);
 const store = useStopwatchStore();
 const user = computed(() => store.user);
 const saving = ref(false), presetError = ref('');
@@ -179,9 +182,14 @@ watch(() => accountExperience.state.scopeVersion, () => {
 </script>
 
 <template>
-  <div
+  <dialog
     v-if="isOpen"
-    class="fixed inset-0 z-60 flex items-end justify-center sm:items-center sm:p-4"
+    ref="dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="add-timer-title"
+    @cancel.prevent="emit('close')"
+    class="fixed inset-0 z-60 m-0 h-full w-full max-h-none max-w-none border-0 bg-transparent p-0 text-inherit flex items-end justify-center sm:items-center sm:p-4"
   >
     <!-- Backdrop -->
     <div
@@ -191,9 +199,6 @@ watch(() => accountExperience.state.scopeVersion, () => {
 
     <!-- Modal Panel -->
     <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="add-timer-title"
       class="custom-scroll-y relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-3xl relative max-h-[calc(100dvh-1rem)] w-full max-w-md overflow-y-auto overscroll-contain rounded-t-3xl border border-slate-200/80 bg-white p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))] shadow-2xl dark:border-slate-800 dark:bg-slate-900 sm:rounded-3xl sm:p-7"
     >
       <!-- Header -->
@@ -243,6 +248,7 @@ watch(() => accountExperience.state.scopeVersion, () => {
 
           <input
             id="new-timer-name"
+            ref="nameInput"
             v-model="store.name"
             type="text"
             placeholder="Örn. Sunum hazırlığı"
@@ -507,7 +513,7 @@ watch(() => accountExperience.state.scopeVersion, () => {
         </span>
       </button>
     </div>
-  </div>
+  </dialog>
 </template>
 <style>
 /* ---------- Renk değişkenleri ---------- */
